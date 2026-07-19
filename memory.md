@@ -208,3 +208,19 @@ variants. Existing generated worksheet, Web, and print bytes retain their
 versioned identities. A source whose projected answer-key prose exceeds the Web
 DTO bound now fails closed instead of returning an invalid object; the source
 and target text-bound reconciliation remains explicit follow-up work.
+
+## 2026-07-19 - Version instance-bound presentation beside V1
+
+**Context**: V1 commits generated practice and content references but not the
+exact lesson explanation or worked example shown by Web and print.
+
+**Decision**: Add a parallel V2 content/instance/delivery/Web/Print lane. Policy
+v3 pins the exact content identity, selected node IDs, and ordered
+`[left, right, result]` tuple; `WorksheetInstanceV2` embeds the renderer-neutral
+selected presentation before hashing. Preserve the complete V1 execution path
+for history and rollback.
+
+**Impact**: Lesson, worksheet, and print can prove semantic parity without
+renderer-time content lookup. Disable policy v3 to roll new work back to V1;
+never reinterpret or overwrite historical V1/V2 artifacts. See
+[ADR-0003](docs/decisions/0003-instance-bound-presentation.md).
