@@ -17,10 +17,16 @@ Authors edit a deliberately small language:
 - a restricted TeX-style math surface;
 - immutable asset IDs rather than filesystem paths or arbitrary URLs.
 
-Markdown is the authoring surface, not the published source of truth. The
-compiler creates a versioned `Content AST`; daily planning creates a fully
-concrete, immutable `Worksheet Instance AST`. Web and PDF render that same
-instance.
+Markdown is the authoring surface, not a publication approval. The compiler
+creates a versioned draft `Content AST`; daily planning creates a fully
+concrete, immutable `Worksheet Instance AST`. Web and print projections render
+that same instance. A future trusted release manifest will be the publication
+authority; source frontmatter can never self-attest that review happened.
+
+The implemented Phase-1 boundary is local compilation, deterministic
+materialization, Web rendering, `PrintDocumentV1`, and printable A4 HTML. No
+hosted application, Browser Run PDF service, or LuaLaTeX backend is claimed by
+this document.
 
 The print/runtime design is described in
 [printing and Cloudflare architecture](research/printing-cloudflare.md).
@@ -29,55 +35,45 @@ The print/runtime design is described in
 
 ```markdown
 ---
-schema: exercisebook.content/v1
+schema: exercisebook.content-source/v1
 id: math.fractions.add-unlike-denominators
-revision: 4
+revision: 1
 title: Add fractions with unlike denominators
 locale: en
-gradeBands: [upper-primary, lower-secondary]
 skills:
-  - math.fractions.common-denominator
+  - math.fractions.add-unlike
 prerequisites:
-  - math.fractions.meaning
+  - math.fractions.equivalent
 authors:
-  - id: exercise-book-core
+  - name: Exercise Book contributors
+    role: author
 license:
-  expression: CC-BY-4.0
-  attribution: "Exercise Book contributors"
-estimatedMinutes: 12
+  licenseId: LicenseRef-ExerciseBook-Draft
+  sourceUrl: https://exercisebook.app/content/math/fractions/add-unlike-denominators
+  attributionText: Draft original lesson by Exercise Book contributors. Not yet licensed for publication.
+  copyrightHolder: Exercise Book contributors
+publication:
+  status: draft
+estimatedMinutes: 15
 ---
 
 # Add fractions with unlike denominators
 
 To add fractions, first describe both quantities using equal-sized parts.
 
-:::worked-example{model="rational.add" version="2"}
-question: 1/3 + 1/4
-show:
-  - choose-common-denominator
-  - rename-fractions
-  - add-numerators
-  - reduce
+:::worked-example{id="worked-example-01" title="One third plus one fourth"}
+Rewrite $\frac{1}{3}$ as $\frac{4}{12}$ and $\frac{1}{4}$ as
+$\frac{3}{12}$. Then add: $\frac{4}{12} + \frac{3}{12} = \frac{7}{12}$.
 :::
 
-:::exercise{generator="fractions.add" generatorVersion="3" id="guided-1"}
-difficulty: 0.42
-denominatorMax: 12
-requireReduction: true
-support: guided
-print:
-  workingSpaceMm: 28
-  keepTogether: true
+:::exercise{id="practice-01" generator="fractions.add" version="1" count="8" difficulty="2" instruction="Add each pair of fractions. Give every answer in lowest terms."}
 :::
 
-:::interactive{kind="fraction-bars" version="1"}
-model: guided-1
-printFallback: fraction-bars-static
-assessmentFallback: fractions.add-static
-alt: "Two fraction bars divided into equal-sized parts"
+:::interactive{id="fraction-bars-01" kind="fraction-bars" prompt="Build both fractions with equal-sized pieces." printFallback="Draw two equal bars, divide both into the common number of pieces, and shade each addend."}
+Use the fraction bars to find an equivalent form for each addend.
 :::
 
-:::reflection
+:::reflection{id="reflection-01"}
 Why must the parts be the same size before the numerators can be added?
 :::
 ```
@@ -104,6 +100,7 @@ Required fields:
 | `prerequisites` | author assertion, validated against the reviewed graph |
 | `authors` | stable contributor records |
 | `license` | SPDX-like expression plus attribution/provenance data |
+| `publication.status` | `draft` only in Phase 1; not a release approval |
 
 Optional fields must be declared by the schema. Unknown fields fail closed.
 YAML parsing has limits for bytes, nesting depth, aliases, and collection size.
@@ -132,6 +129,22 @@ Rejected in general curriculum:
 
 External links can be allowed by a link policy, but the render pipeline never
 fetches them while producing a worksheet.
+
+#### Phase-1 inline math
+
+Phase 1 parses a deliberately tiny math grammar. It is not a TeX sanitizer and
+does not accept general TeX.
+
+Allowed terminals are ASCII digits, whitespace, `+`, `-`, `=`, `(`, `)`, `.`,
+and `,`. Fractions use `\frac` followed by exactly two braced groups; each
+group is parsed recursively with the same grammar, so nested fractions are
+possible. The parser must consume the entire source.
+
+Everything else fails closed: unknown backslash commands, hexadecimal,
+Unicode, or other encoded control-sequence forms, `%` comments, ASCII control
+characters, bare or unbalanced braces, scripts, identifiers, and package or
+document commands. Renderers receive a validated math data node, never
+executable author-supplied TeX.
 
 ### Directives
 
@@ -162,6 +175,15 @@ Initial allowlist:
 | `figure` | reviewed image/diagram | asset ID, alt, caption, provenance |
 | `callout` | note, warning, definition | semantic role, not color alone |
 
+Phase-1 directive headers use one canonical syntax before Markdown parsing:
+an exact `:::` opening fence for container directives (all entries above
+except `figure`), or an exact `::` opening fence for the leaf `figure`
+directive, followed immediately by the ASCII allowlisted directive name.
+Attributes stay on that line and are whitespace-separated ASCII
+`key="value"` pairs. Attribute shorthand (`#id` or `.class`), valueless
+attributes, single-quoted/unquoted values, optional directive labels, and
+backslash quote escaping are not accepted.
+
 Unknown directives, attributes, generator versions, or fallback kinds are
 compile errors. Directive implementations are trusted product code reviewed in
 the repository; directive bodies are untrusted data.
@@ -180,41 +202,54 @@ type ContentDocumentV1 = {
   id: string;
   revision: number;
   locale: string;
-  title: InlineNode[];
-  skills: SkillRef[];
-  prerequisites: SkillRef[];
-  body: ContentNode[];
-  license: LicenseRecord;
-  source: {
-    sourceHash: string;
-    compilerVersion: string;
+  title: string;
+  skills: string[];
+  prerequisites: string[];
+  authors: Array<{
+    name: string;
+    role: "author" | "reviewer";
+  }>;
+  license: {
+    licenseId: string;
+    sourceUrl: string;
+    attributionText: string;
+    copyrightHolder: string;
   };
+  publication: {
+    status: "draft" | "published";
+  };
+  estimatedMinutes: number;
+  nodes: ContentBlockV1[];
+  sourceHash: string;
+  compilerVersion: "exercisebook-content-compiler/1";
 };
 
-type ExerciseTemplateNode = {
-  kind: "exercise-template";
+type ExerciseNodeV1 = {
+  type: "exercise";
   id: string;
-  skills: SkillRef[];
   generator: {
     id: string;
     version: string;
-    parameters: JsonValue;
+    parameters: Record<string, string | number | boolean>;
   };
-  scorer: {
-    id: string;
-    version: string;
-  };
-  support: "worked" | "guided" | "independent" | "probe";
-  print: {
-    workingSpaceMm?: number;
-    keepTogether?: boolean;
-    pageBreakBefore?: boolean;
-  };
+  count: number;
+  instruction: string;
 };
 ```
 
-The schema is published as JSON Schema and is shared by CI, the browser editor,
-the API, persistence adapters, and renderer tests.
+The checked-in JSON Schema is shared by CI, the future browser editor, APIs,
+persistence adapters, and renderer tests as a structural interoperability
+projection. The exported runtime validation entrypoint is normative for
+acceptance: it first checks the original bounded plain-data graph and then
+applies the versioned Zod schema. A bare Zod parse is not the complete trust
+boundary. Cross-field and semantic constraints that JSON Schema generation
+cannot express are listed in `x-exercisebook-runtime-invariants` and enforced
+by the runtime validator. Phase-1 examples include unique content/slot IDs,
+taught-skill/prerequisite list uniqueness and separation, per-slot semantic ID
+uniqueness, real calendar dates, IANA time zones, canonical reduced rationals
+with positive denominators, HTTP(S) source URLs without credentials, the
+128-decimal-digit integer bound, duration totals, and
+answer/scoring/final-solution equality.
 
 ### Worksheet Instance AST
 
@@ -224,26 +259,37 @@ Planning and generation resolve every variable before a worksheet is shown:
 type WorksheetInstanceV1 = {
   schema: "exercisebook.worksheet-instance/v1";
   assignmentId: string;
+  title: string;
   localStudyDate: string;
   timeZone: string;
   locale: string;
-  variantPolicy: string;
+  expectedMinutes: number;
   plan: {
-    planId: string;
-    goalRevision: string;
-    skillGraphRevision: string;
-    masteryPolicyVersion: string;
-    selectionPolicyVersion: string;
+    id: string;
+    version: number;
   };
-  generation: {
+  policy: {
+    id: string;
+    version: number;
+  };
+  skillGraph: {
+    id: string;
+    revision: number;
+  };
+  rng: {
+    algorithm: "xoshiro128ss-v1";
     seedSecretVersion: string;
     baseSeed: string;
-    rng: string;
-    contentRevisions: string[];
-    generatorVersions: string[];
   };
+  content: Array<{
+    id: string;
+    revision: number;
+    sourceHash: string;
+    contentHash: string;
+    compilerVersion: "exercisebook-content-compiler/1";
+  }>;
   slots: ConcreteWorksheetSlot[];
-  attribution: AttributionEntry[];
+  attributions: AttributionEntry[];
 };
 
 type WorksheetInstanceRecord = {
@@ -254,22 +300,29 @@ type WorksheetInstanceRecord = {
 };
 
 type ConcreteWorksheetSlot = {
-  slotId: string;
+  id: string;
   skillIds: string[];
-  seed: string;
-  selection: {
-    reasonCodes: string[];
-    expectedMinutes: number;
-  };
-  prompt: ContentNode[];
-  answer: AnswerSpec;
-  scoring: ScoringRule;
+  slotSeed: string;
+  selectionReasons: string[];
+  expectedMinutes: number;
+  prompt: FractionAdditionPromptV1;
+  canonicalAnswer: AnswerSpec;
+  scoringRule: ScoringRule;
   hints: HintNode[];
-  solution: SolutionStep[];
+  solutionTrace: SolutionStep[];
   misconceptions: MisconceptionRoute[];
   accessibility: AccessibilityProjection;
-  printFallback?: ContentNode[];
-  provenance: ProvenanceRef[];
+  printFallback: PrintFallbackV1;
+  provenance: {
+    contentId: string;
+    contentRevision: number;
+    sourceHash: string;
+    contentHash: string;
+    compilerVersion: "exercisebook-content-compiler/1";
+    generatorId: string;
+    generatorVersion: string;
+    generationAttempt: number; // inclusive range 0..127 in Phase 1
+  };
 };
 ```
 
@@ -295,6 +348,14 @@ Each concrete exercise slot contains:
 `timeZone` is an IANA time-zone ID. `baseSeed` is secret-derived replay data,
 not the HMAC key itself; the canonical instance stays in the private artifact
 boundary and the student delivery projection omits both base and slot seeds.
+`seedSecretVersion` is required caller input. The materializer never infers or
+defaults it.
+
+Every slot provenance record must exactly match one top-level content reference
+across content ID, revision, normalized source hash, compiled content hash, and
+compiler version. The compiled hash binds the historical worksheet to the
+exact Content Document bytes even if a later compiler interprets the same
+source differently.
 
 The learner is never presented a template that has not yet been instantiated
 and persisted. Updating a generator later cannot change a historical instance.
@@ -361,10 +422,21 @@ floating-point display strings.
 
 Generation rules:
 
-- stable HMAC-derived base and per-slot seeds;
+- explicit caller-supplied `seedSecretVersion`;
+- per-slot seed derivation exactly as
+  `lowercaseHex(HMAC-SHA256(hexDecode(baseSeed), UTF8(RFC8785(tuple))))`,
+  where `baseSeed` decodes to a 32-byte binary HMAC key and `tuple` is
+  `["exercisebook/slot-seed/v1", generatorId, generatorVersion,
+  stableSlotDerivationId]`;
+- no delimiter-concatenated seed messages;
 - versioned RNG algorithm;
 - constructive generation where possible;
 - bounded rejection sampling;
+- generator-defined semantic duplicate detection; fraction addition compares
+  a sorted pair of canonical operands so operand order cannot evade
+  deduplication;
+- bounded deterministic duplicate retries that preserve the presentation slot
+  ID and record `generationAttempt` provenance;
 - deterministic fallback or typed failure;
 - no current time, ambient locale, random global state, or network input;
 - fixed test vectors for every generator version;
@@ -419,18 +491,23 @@ Stages:
 1. Parse with byte, depth, alias, and node-count limits.
 2. Reject raw HTML/MDX and unknown syntax.
 3. Normalize IDs, locale, numbers, whitespace, and math.
-4. Validate JSON Schema.
+4. Validate the structural JSON Schema projection and the normative runtime
+   Zod contract, including semantic and cross-field invariants.
 5. Resolve skills, prerequisites, generator/scorer versions, and asset IDs.
 6. Validate answer/solution, interactive fallbacks, accessibility, and license
    metadata.
 7. Produce canonical JSON and a source/content hash.
 8. Run automated fixtures and renderer previews.
-9. Require correctness, pedagogy, accessibility, and license review according
-   to the content risk.
-10. Publish an immutable revision and attribution manifest.
+9. Keep Phase-1 output in `draft` status.
+10. In a future release pipeline, require correctness, pedagogy,
+    accessibility, and license approval according to the content risk.
+11. Have that trusted pipeline publish an immutable revision and signed or
+    otherwise trusted release manifest.
 
 Compilation has no network access. Link and asset import happen in a separate
-controlled process before compilation.
+controlled process before compilation. `publication.status: published` in
+frontmatter is rejected by the Phase-1 compiler, and the Phase-1 materializer
+also refuses a self-constructed published `ContentDocument`.
 
 ## Security model
 
@@ -530,10 +607,11 @@ Each diagnostic includes:
 - concise remediation;
 - documentation link.
 
-The preview tool shows:
+The Phase-1 sample command writes Web and printable-HTML artifacts. A future
+review UI should show:
 
 - semantic Web view;
-- A4 student PDF;
+- A4 student printable HTML, and PDF only after a backend exists;
 - answer key;
 - accessibility tree/outline;
 - license and attribution;
@@ -558,19 +636,34 @@ The preview tool shows:
 - fixed seed test vectors;
 - thousands of valid seed/property cases;
 - bounded runtime and rejection count;
+- exact binary-key HMAC/RFC 8785 slot-seed vectors, including delimiter-like
+  and non-ASCII tuple values;
 - answer/solution equivalence;
 - distractor not equal to answer;
-- duplicate and distribution checks;
+- commutative duplicate suppression, bounded deterministic retry, and
+  `generationAttempt` provenance checks;
 - difficulty monotonicity where the generator claims it;
 - serialization/replay across supported runtimes.
 
 ### Renderer parity
 
+Phase-1 gates:
+
 - Web and print originate from the same instance hash;
 - prompt, order, answer semantics, and attribution match;
-- student variant has no hidden answer;
-- Japanese, math, tables, figures, page breaks, and working-space snapshots;
+- student variant has no answer fields and passes layered leak-marker checks;
+- English fraction math, page breaks, and working-space HTML fixtures.
+
+Future locale/content/PDF-backend gates:
+
+- Japanese, tables, figures, and broader page-break snapshots;
 - text extraction, font/glyph, page count, and PDF structure checks.
+
+Leak-marker scanning is defense in depth, not a proof that arbitrary prose
+cannot obfuscate an answer. The primary boundary is an allowlisted typed
+student projection that makes answer, scoring, solution, seed, and diagnostic
+fields unrepresentable; serialization and rendered-output scans then catch
+regressions around that boundary.
 
 ### Human review
 
@@ -589,6 +682,9 @@ draft
 Review requirements may vary by content type, but “AI generated” never bypasses
 them. An LLM can draft or suggest a translation; it is not the authority for a
 canonical answer, prerequisite, scoring rule, license, or publication status.
+These states describe the future trusted release workflow. Phase 1 implements
+only `draft`; no author-controlled frontmatter transition can enter
+`published`.
 
 ## Versioning, migration, and rollback
 
@@ -621,16 +717,18 @@ version, directive implementation, locale, and print backend.
 
 Build one narrow vertical slice before a general editor:
 
-1. `exercisebook.content/v1` frontmatter and five directives;
-2. Content AST and Worksheet Instance JSON Schemas;
+1. `exercisebook.content-source/v1` frontmatter and seven directives;
+2. normative Content AST and Worksheet Instance Zod contracts plus structural
+   JSON Schema interoperability projections;
 3. exact integer and rational answer types;
 4. one reviewed fraction generator with fixed seed vectors;
 5. one explanation, one worked example, one interactive with print fallback;
 6. semantic Web renderer;
 7. student and answer-key Print IR;
-8. Browser Run PDF plus local reference PDF;
-9. compiler, property, parity, and visual tests;
-10. immutable publish and rollback path.
+8. printable A4 HTML for local browser printing, without a PDF backend;
+9. compiler, property, parity, accessibility, and HTML tests;
+10. draft-only content flow plus a specified boundary for a future trusted
+    release manifest.
 
 This slice tests the architecture’s hardest invariant—one verified semantic
 instance across instruction, assessment, Web, and print—without first building

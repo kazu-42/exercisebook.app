@@ -9,6 +9,11 @@ Read [the architecture](docs/architecture.md) and
 [ADR-0001](docs/decisions/0001-core-architecture.md) before changing a core
 contract.
 
+The compiler baseline is [TypeScript 7](docs/decisions/0002-typescript-7-toolchain.md).
+Use the pinned workspace `tsc`; do not add `@typescript/native-preview`, a
+TypeScript 5/6 fallback, non-erasable syntax, or a tool that requires the legacy
+in-process compiler API without an explicit compatibility decision.
+
 ## Product boundary
 
 Exercise Book is not an AI chat that invents worksheets on demand. It uses

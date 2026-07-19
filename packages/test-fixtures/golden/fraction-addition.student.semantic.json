@@ -1,0 +1,28 @@
+{
+  "sourceInstanceHash": "5252ef64b127638b785a94b3a2c7d1859cd7299e7032bed10aa41e07b2c4d12b",
+  "variant": "student",
+  "problemIds": [
+    "practice-01",
+    "practice-02",
+    "practice-03",
+    "practice-04",
+    "practice-05",
+    "practice-06",
+    "practice-07",
+    "practice-08"
+  ],
+  "promptText": [
+    "Add each pair of fractions. Give every answer in lowest terms. Add 6 over 7 and 5 over 6. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 7 and 1 over 4. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 3 and 5 over 7. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 3 over 8 and 1 over 5. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 6 and 1 over 4. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 3 over 5 and 1 over 3. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 4 over 5 and 1 over 8. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 2 and 3 over 8. Give the answer in lowest terms."
+  ],
+  "attributionText": [
+    "Draft original lesson by Exercise Book contributors. Not yet licensed for publication. — LicenseRef-ExerciseBook-Draft — https://exercisebook.app/content/math/fractions/add-unlike-denominators"
+  ],
+  "keyEntries": []
+}

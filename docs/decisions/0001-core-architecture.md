@@ -4,6 +4,11 @@
 - Date: 2026-07-19
 - Owners: Exercise Book maintainers
 
+This ADR records the target architecture. It does not assert that the
+Cloudflare services, domain routing, production application, Browser Run PDF
+service, or LuaLaTeX backend described below are deployed. Phase 1 stops at a
+local Web/PrintDocument/printable-HTML walking skeleton.
+
 ## Context
 
 Exercise Book is intended to provide free learning across ages and subjects,
@@ -53,14 +58,17 @@ The durable domain contracts are:
 - a versioned skill graph;
 - reviewed content and generator revisions;
 - an explainable planner-policy revision;
-- deterministic RNG identity and stable slot seeds;
+- deterministic RNG identity and stable slot seeds derived with binary-key
+  HMAC-SHA256 over an RFC 8785 canonical tuple;
 - a concrete immutable `WorksheetInstance`;
 - append-only attempt/evidence events;
 - content-addressed artifact and render manifests.
 
 Markdown + YAML + allowlisted directives is an authoring format. A versioned
-Content AST is the published content contract. The materialized
-`WorksheetInstance` is the assignment contract.
+Content AST is the releasable content contract; a future trusted release
+manifest, not author-controlled frontmatter, makes a revision published. The
+materialized `WorksheetInstance` is the assignment contract. Phase 1 accepts
+draft content only.
 
 Web and PDF render the same instance. A renderer cannot generate, select, or
 reinterpret problems.
@@ -100,11 +108,12 @@ split-brain.
 
 ### 5. Rendering strategy
 
-- local reference: Pandoc + LuaLaTeX;
-- hosted MVP: Browser Run;
-- experiment: Typst WASM if memory, performance, CJK, and accessibility
+- implemented Phase-1 reference: renderer-neutral PrintDocument plus printable
+  A4 HTML;
+- future hosted MVP candidate: Browser Run;
+- future experiment: Typst WASM if memory, performance, CJK, and accessibility
   benchmarks pass;
-- high-quality backend: restricted LuaLaTeX Container.
+- future high-quality candidate: restricted LuaLaTeX Container.
 
 All backends implement one renderer port. Backend, image, font, template, and
 renderer revisions are recorded in the artifact manifest.

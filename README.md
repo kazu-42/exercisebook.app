@@ -13,17 +13,54 @@ before the content catalog expands.
 
 ## Project status
 
-This repository is currently an architecture and research bootstrap. It does
-not yet contain a production application or a working worksheet generator.
+The first local walking skeleton is implemented. It compiles one draft English
+fraction lesson with author/reviewer metadata, materializes eight deterministic
+exact-rational problems, and projects the same immutable worksheet instance to:
 
-The first executable milestone is:
+- a Hono/React learning experience;
+- separate student and answer-key Web views;
+- renderer-neutral `PrintDocumentV1` data;
+- self-contained, print-ready A4 HTML for both variants.
 
-1. author one small content vertical in Markdown and YAML;
-2. compile it into a versioned Content AST;
-3. instantiate deterministic exercises into a Worksheet Instance AST;
-4. render the exact same instance to semantic HTML and an A4 PDF;
-5. generate separate student and answer-key variants;
-6. verify answers, reproducibility, accessibility, and Web/PDF parity in CI.
+The project is not deployed, connected to either purchased domain, or ready for
+learner data. Hosted PDF rendering, persistence, accounts, daily planning, and
+curriculum breadth remain later roadmap phases.
+
+The executable slice already verifies deterministic seeds and hashes, exact
+answers and solution traces, student answer isolation, hostile content
+rejection, keyboard access, Web/print semantic parity, and production builds.
+
+## Local development
+
+Requirements:
+
+- Node.js 24 or newer;
+- pnpm 11.8.0, as pinned by `packageManager`.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check
+pnpm dev
+```
+
+The local Cloudflare/Vite runtime serves the application at the URL printed by
+Vite. Useful routes include:
+
+- `/`
+- `/new`
+- `/lessons/fractions/add-unlike-denominators`
+- `/worksheet/sample`
+- `/worksheet/sample/answers`
+- `/worksheet/sample/print?variant=student`
+
+Generate deterministic local worksheet, Web, and print artifacts with:
+
+```bash
+pnpm worksheet:sample
+```
+
+Generated artifacts are ignored by Git. The canonical worksheet JSON is
+written byte-for-byte: its SHA-256 is the worksheet instance hash.
 
 ## Product model
 
@@ -70,7 +107,10 @@ generator version, RNG version, seed, renderer version, template, and fonts.
 
 ## Proposed platform
 
+- **Language/toolchain:** TypeScript 7, pnpm, Vite
 - **Application:** Cloudflare Workers with Static Assets
+- **HTTP adapter:** Hono
+- **Web UI:** React with semantic HTML and progressive enhancement
 - **Relational state:** D1
 - **Immutable content and PDF artifacts:** R2
 - **Asynchronous rendering:** Queues
@@ -94,6 +134,7 @@ engines are replaceable adapters behind one artifact contract.
 - [Naming and domains](docs/naming-and-domains.md)
 - [Delivery roadmap](docs/roadmap.md)
 - [Architecture decision record](docs/decisions/0001-core-architecture.md)
+- [TypeScript 7 toolchain decision](docs/decisions/0002-typescript-7-toolchain.md)
 - [Engineering guardrails](AGENTS.md)
 
 ## Domains

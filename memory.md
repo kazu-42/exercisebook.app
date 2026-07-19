@@ -1,5 +1,15 @@
 # Project decision log
 
+## 2026-07-19 - TypeScript 7 baseline
+
+**Decision**: Use the stable `typescript@7.0.2` native toolchain as the
+build-authoritative compiler. Pin it exactly, use erasable syntax, and keep
+domain/application packages independent of the legacy compiler API.
+
+**Impact**: CI must verify TypeScript major 7. Vite owns Web bundling. Do not
+install `@typescript/native-preview` or silently fall back to TypeScript 5/6.
+See [ADR-0002](docs/decisions/0002-typescript-7-toolchain.md).
+
 ## 2026-07-19 - Product identity
 
 **Context**: The project needs a stable public identity for its purchased

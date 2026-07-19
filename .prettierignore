@@ -1,0 +1,7 @@
+**/*.md
+pnpm-lock.yaml
+content/compiled/*.json
+
+**/coverage
+**/dist
+artifacts
