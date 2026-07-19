@@ -2,18 +2,53 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   answerKeyWorksheetFixture,
   studentWorksheetFixture,
 } from "@exercisebook/web-renderer/fixtures";
 
-import { App } from "./App.js";
+import { App, createBrowserPlanPreviewDefaults } from "./App.js";
+import { createDailyPlanPreviewResponseFixture } from "./daily-plan-preview.test-fixture.js";
+import {
+  DAILY_PLAN_PREVIEW_TIMEOUT_MS,
+  type DailyPlanPreviewLoader,
+} from "./daily-plan-preview-loader.js";
 
-afterEach(cleanup);
+const planPreviewDefaults = {
+  localStudyDate: "2026-07-19",
+  timeZone: "Asia/Tokyo",
+  locale: "en" as const,
+};
+
+afterEach(() => {
+  cleanup();
+  globalThis.history.replaceState(null, "", "/");
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
 
 describe("Exercise Book app", () => {
   it("presents a focused English landing page with direct sample actions", () => {
@@ -118,5 +153,320 @@ describe("Exercise Book app", () => {
 
     const result = await axe(container);
     expect(result.violations).toEqual([]);
+  });
+
+  it("presents an honest, accessible, unsaved daily-plan preview form", async () => {
+    const { container } = render(
+      <App initialLocation="/new" planPreviewDefaults={planPreviewDefaults} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Build a practice preview" }),
+    ).toBeVisible();
+    expect(screen.getByText(/not saved/i)).toBeVisible();
+    expect(screen.getByText(/does not use your learning history/i)).toBeVisible();
+    expect(screen.getByRole("group", { name: "Practice time" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: "12 minutes" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Create my preview" })).toBeEnabled();
+
+    const result = await axe(container);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("derives the explicit local date in the selected IANA time zone", () => {
+    expect(
+      createBrowserPlanPreviewDefaults(
+        new Date("2026-07-19T16:30:00.000Z"),
+        "Asia/Tokyo",
+      ),
+    ).toEqual({
+      localStudyDate: "2026-07-20",
+      timeZone: "Asia/Tokyo",
+      locale: "en",
+    });
+  });
+
+  it("submits explicit context, announces success, and renders the validated worksheet", async () => {
+    globalThis.history.replaceState(null, "", "/new");
+    const user = userEvent.setup();
+    const pending =
+      deferred<ReturnType<typeof createDailyPlanPreviewResponseFixture>>();
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () => pending.promise);
+    const { container } = render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "8 minutes" }));
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith(
+      {
+        schema: "exercisebook.daily-plan-preview-request/v1",
+        goalId: "math.fractions.add-unlike",
+        practiceMinutes: 8,
+        localStudyDate: "2026-07-19",
+        timeZone: "Asia/Tokyo",
+        locale: "en",
+      },
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByRole("button", { name: "Creating preview…" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Preparing your fixed practice set",
+    );
+
+    pending.resolve(createDailyPlanPreviewResponseFixture(8));
+
+    expect(
+      await screen.findByRole("heading", { name: "Your daily preview" }),
+    ).toBeVisible();
+    const requestedTime = screen.getByText("Requested practice time").closest("div");
+    const plannedTime = screen.getByText("Planned practice time").closest("div");
+    expect(requestedTime).not.toBeNull();
+    expect(plannedTime).not.toBeNull();
+    expect(within(requestedTime!).getByText("8 minutes")).toBeVisible();
+    expect(within(plannedTime!).getByText("8 minutes")).toBeVisible();
+    expect(screen.getByText("4 problems", { selector: "dd" })).toBeVisible();
+    expect(screen.getByText(/not a saved or mastery-based plan/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Review the fraction lesson" }),
+    ).toHaveAttribute("href", "/lessons/fractions/add-unlike-denominators");
+    expect(
+      screen.getByRole("heading", {
+        name: "Add fractions with unlike denominators",
+      }),
+    ).toBeVisible();
+    expect(container.innerHTML).not.toMatch(
+      /canonicalAnswer|scoringRule|baseSeed|slotSeed|solutionTrace/u,
+    );
+    expect(globalThis.location.pathname).toBe("/new");
+
+    const result = await axe(container);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("keeps the chosen time and exposes an accessible retry after failure", async () => {
+    const user = userEvent.setup();
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () => {
+      throw new Error("offline details that must not be shown");
+    });
+    const { container } = render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "20 minutes" }));
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not prepare this preview. Check your connection and try again.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("offline details");
+    expect(screen.getByRole("radio", { name: "20 minutes" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+
+    const result = await axe(container);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("turns a bounded network timeout into an accessible retry state", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        const signal = init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        });
+      }),
+    );
+    render(<App initialLocation="/new" planPreviewDefaults={planPreviewDefaults} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create my preview" }));
+    expect(screen.getByRole("button", { name: "Creating preview…" })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DAILY_PLAN_PREVIEW_TIMEOUT_MS);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We could not prepare this preview. Check your connection and try again.",
+    );
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
+  it("turns a schema-invalid successful loader value into the sanitized error state", async () => {
+    const user = userEvent.setup();
+    const invalid = structuredClone(
+      createDailyPlanPreviewResponseFixture(12),
+    ) as unknown as Record<string, unknown>;
+    (invalid.plan as Record<string, unknown>).baseSeed = "a".repeat(64);
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () => invalid as never);
+    const { container } = render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We could not prepare this preview.",
+    );
+    expect(container.innerHTML).not.toContain("baseSeed");
+    expect(
+      screen.queryByRole("heading", { name: "Your daily preview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("aborts stale work and never lets an older response overwrite a new choice", async () => {
+    const user = userEvent.setup();
+    const first = deferred<ReturnType<typeof createDailyPlanPreviewResponseFixture>>();
+    const second = deferred<ReturnType<typeof createDailyPlanPreviewResponseFixture>>();
+    const signals: AbortSignal[] = [];
+    const loader = vi.fn<DailyPlanPreviewLoader>(async (_request, signal) => {
+      signals.push(signal);
+      return signals.length === 1 ? first.promise : second.promise;
+    });
+    render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "8 minutes" }));
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+    await user.click(screen.getByRole("radio", { name: "20 minutes" }));
+    expect(signals[0]?.aborted).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+
+    second.resolve(createDailyPlanPreviewResponseFixture(20));
+    const plannedTimeLabel = await screen.findByText("Planned practice time");
+    expect(
+      within(plannedTimeLabel.closest("div")!).getByText("16 minutes"),
+    ).toBeVisible();
+    expect(screen.getByText("8 problems", { selector: "dd" })).toBeVisible();
+
+    first.resolve(createDailyPlanPreviewResponseFixture(8));
+    await Promise.resolve();
+    expect(
+      screen.queryByText("4 problems", { selector: "dd" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("8 problems", { selector: "dd" })).toBeVisible();
+  });
+
+  it("aborts an active request on unmount", async () => {
+    const user = userEvent.setup();
+    const pending =
+      deferred<ReturnType<typeof createDailyPlanPreviewResponseFixture>>();
+    let signal: AbortSignal | undefined;
+    const loader = vi.fn<DailyPlanPreviewLoader>(async (_request, nextSignal) => {
+      signal = nextSignal;
+      return pending.promise;
+    });
+    const { unmount } = render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+    unmount();
+
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("prints the already-loaded worksheet without another request", async () => {
+    const user = userEvent.setup();
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () =>
+      createDailyPlanPreviewResponseFixture(12),
+    );
+    render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+    await user.click(await screen.findByRole("button", { name: "Print this set" }));
+
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a loaded set when its selected budget changes", async () => {
+    globalThis.history.replaceState(null, "", "/new");
+    const user = userEvent.setup();
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () =>
+      createDailyPlanPreviewResponseFixture(12),
+    );
+    render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+    expect(
+      await screen.findByRole("heading", { name: "Your daily preview" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("radio", { name: "20 minutes" }));
+
+    expect(
+      screen.queryByRole("heading", { name: "Your daily preview" }),
+    ).not.toBeInTheDocument();
+    expect(globalThis.location.pathname).toBe("/new");
+  });
+
+  it("keeps an unsaved preview on the create route without mutating history", async () => {
+    globalThis.history.replaceState(null, "", "/new");
+    const user = userEvent.setup();
+    const pushState = vi.spyOn(globalThis.history, "pushState");
+    const replaceState = vi.spyOn(globalThis.history, "replaceState");
+    const loader = vi.fn<DailyPlanPreviewLoader>(async () =>
+      createDailyPlanPreviewResponseFixture(12),
+    );
+    render(
+      <App
+        initialLocation="/new"
+        loadPlanPreview={loader}
+        planPreviewDefaults={planPreviewDefaults}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create my preview" }));
+    expect(
+      await screen.findByRole("heading", { name: "Your daily preview" }),
+    ).toBeVisible();
+
+    expect(pushState).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(globalThis.location.pathname).toBe("/new");
   });
 });

@@ -5,6 +5,7 @@ import { canonicalizeJson, sha256Hex } from "@exercisebook/domain";
 import {
   FRACTION_ADDITION_SAMPLE_INPUT,
   materializeFractionAdditionWorksheetFromContent,
+  type FractionAdditionAssignmentInput,
 } from "@exercisebook/generators";
 import type { CompiledContentV1 } from "@exercisebook/content-compiler";
 import type { MaterializedWorksheetInstanceV1 } from "@exercisebook/schemas";
@@ -295,14 +296,7 @@ function readGolden(filename: string): unknown {
   );
 }
 
-function sampleAssignmentMetadata(): {
-  readonly assignmentId: string;
-  readonly localStudyDate: string;
-  readonly timeZone: string;
-  readonly locale: string;
-  readonly seed: string;
-  readonly seedSecretVersion: string;
-} {
+function sampleAssignmentMetadata(): FractionAdditionAssignmentInput {
   return {
     assignmentId: FRACTION_ADDITION_SAMPLE_INPUT.assignmentId,
     localStudyDate: FRACTION_ADDITION_SAMPLE_INPUT.localStudyDate,
@@ -310,5 +304,10 @@ function sampleAssignmentMetadata(): {
     locale: FRACTION_ADDITION_SAMPLE_INPUT.locale,
     seed: FRACTION_ADDITION_SAMPLE_INPUT.seed,
     seedSecretVersion: FRACTION_ADDITION_SAMPLE_INPUT.seedSecretVersion,
+    requestedItemCount: FRACTION_ADDITION_SAMPLE_INPUT.itemCount,
+    plan: FRACTION_ADDITION_SAMPLE_INPUT.plan,
+    policy: FRACTION_ADDITION_SAMPLE_INPUT.policy,
+    skillGraph: FRACTION_ADDITION_SAMPLE_INPUT.skillGraph,
+    selectionReasons: FRACTION_ADDITION_SAMPLE_INPUT.selectionReasons,
   };
 }

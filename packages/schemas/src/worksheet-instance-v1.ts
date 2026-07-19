@@ -333,6 +333,7 @@ export function validateStudentWorksheetDeliveryV1(
 export async function projectWorksheetForStudent(
   materialized: MaterializedWorksheetInstanceV1,
 ): Promise<StudentWorksheetDeliveryV1> {
+  assertSafeDataObjectGraph(materialized);
   const validatedInstance = validateWorksheetInstanceV1(materialized.instance);
   const canonicalJson = canonicalizeJson(validatedInstance);
   if (canonicalJson !== materialized.canonicalJson) {
@@ -400,9 +401,20 @@ function assertNoRecognizedCanonicalAnswer(
   }
 }
 
-interface CanonicalRationalValue {
+export interface CanonicalRationalValue {
   readonly numerator: string;
   readonly denominator: string;
+}
+
+export function assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+  visibleData: unknown,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  assertSafeDataObjectGraph(visibleData);
+  assertStringsDoNotContainCanonicalAnswers(
+    collectStringLeaves(visibleData),
+    canonicalAnswers,
+  );
 }
 
 function assertStringsDoNotContainCanonicalAnswers(

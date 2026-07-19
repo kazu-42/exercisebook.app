@@ -27,6 +27,11 @@ async function main(): Promise<void> {
       locale: sample.locale,
       seed: sample.seed,
       seedSecretVersion: sample.seedSecretVersion,
+      requestedItemCount: sample.itemCount,
+      plan: sample.plan,
+      policy: sample.policy,
+      skillGraph: sample.skillGraph,
+      selectionReasons: sample.selectionReasons,
     },
   );
   const studentDocument = await print.projectPrintDocumentV1(materialized, {

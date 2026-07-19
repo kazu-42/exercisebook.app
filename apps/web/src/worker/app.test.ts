@@ -6,6 +6,7 @@ import {
 } from "@exercisebook/web-renderer/fixtures";
 
 import { createApp } from "./app.js";
+import type { DailyPlanPreviewService } from "./daily-plan-preview-service.js";
 import type { SampleWorksheetService } from "./sample-worksheet-service.js";
 
 const service: SampleWorksheetService = {
@@ -14,8 +15,17 @@ const service: SampleWorksheetService = {
   },
 };
 
+const dailyPlanPreviewService: DailyPlanPreviewService = {
+  async createPreview() {
+    return { status: "unavailable", code: "goal-unavailable" };
+  },
+};
+
 describe("Exercise Book Worker", () => {
-  const app = createApp(service);
+  const app = createApp({
+    sampleWorksheetService: service,
+    dailyPlanPreviewService,
+  });
 
   it("reports a stable health response without ambient timestamps", async () => {
     const response = await app.request("https://exercisebook.app/api/health");
