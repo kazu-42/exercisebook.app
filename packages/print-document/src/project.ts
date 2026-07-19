@@ -1,12 +1,22 @@
-import { canonicalizeJson, sha256Hex, type RationalJson } from "@exercisebook/domain";
 import {
-  projectWorksheetForStudent,
+  canonicalizeJson,
+  equalRationals,
+  sha256Hex,
+  type RationalJson,
+} from "@exercisebook/domain";
+import {
+  assertSafeDataObjectGraph,
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
+  deriveFractionAdditionPromptAccessibleText,
   validateWorksheetInstanceV1,
   type AttributionV1,
+  type CanonicalRationalValue,
   type MaterializedWorksheetInstanceV1,
+  type StudentWorksheetDeliveryV1,
   type WorksheetInstanceV1,
   type WorksheetSlotV1,
 } from "@exercisebook/schemas";
+import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
 
 import {
   PRINT_DOCUMENT_SCHEMA,
@@ -58,6 +68,12 @@ export interface ProjectPrintDocumentV1Options {
   readonly paper?: PrintPaper;
 }
 
+type StudentPrintProjectionSource = Pick<
+  StudentWorksheetDeliveryV1,
+  "title" | "localStudyDate" | "expectedMinutes" | "locale" | "slots"
+>;
+type StudentPrintProjectionSlot = StudentWorksheetDeliveryV1["slots"][number];
+
 /**
  * Projects a verified WorksheetInstance into a renderer-neutral document.
  *
@@ -83,38 +99,45 @@ export async function projectPrintDocumentV1(
 ): Promise<PrintDocumentV1> {
   const variant = readVariant(options);
   const paper = readPaper(options);
-  const instance = await verifyMaterializedWorksheetInstanceV1(materialized);
+  const verifiedMaterialized =
+    await verifyMaterializedWorksheetSnapshotV1(materialized);
   if (variant === "student") {
-    await projectWorksheetForStudent(materialized);
-  }
-  const studentBlocks = projectStudentBlocks(instance);
-  const attributions = instance.attributions.map(projectAttribution);
-
-  if (variant === "student") {
+    const { canonicalAnswers, delivery } =
+      await projectWorksheetForStudentWithCanonicalAnswers(verifiedMaterialized);
+    const studentBlocks = projectStudentBlocks(delivery);
+    const attributions = delivery.attributions.map(projectAttribution);
     const studentDocument = validatePrintDocumentV1({
       schema: PRINT_DOCUMENT_SCHEMA,
-      sourceInstanceHash: materialized.instanceHash,
+      sourceInstanceHash: delivery.instanceHash,
       projectorVersion: PRINT_PROJECTOR_VERSION,
       paper,
-      locale: instance.locale,
+      locale: delivery.locale,
       variant,
-      title: instance.title,
+      title: delivery.title,
       blocks: studentBlocks,
       attributions,
     });
-    assertStudentDocumentHasNoAnswerData(
-      studentDocument,
-      collectProtectedSourceText(instance),
-    );
     if (studentDocument.variant !== "student") {
       throw new PrintDocumentProjectionError(
         "invalid-instance",
         "Student projection unexpectedly produced a non-student document.",
       );
     }
+    assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
+      studentDocument,
+      delivery,
+      canonicalAnswers,
+    );
+    assertStudentDocumentHasNoAnswerData(
+      studentDocument,
+      collectProtectedSourceText(verifiedMaterialized.instance),
+    );
     return studentDocument;
   }
 
+  const instance = verifiedMaterialized.instance;
+  const studentBlocks = projectStudentBlocks(instance, "preserve-source");
+  const attributions = instance.attributions.map(projectAttribution);
   const answerKeyBlocks: AnswerKeyPrintBlockV1[] = [
     ...studentBlocks,
     {
@@ -132,7 +155,7 @@ export async function projectPrintDocumentV1(
 
   return validatePrintDocumentV1({
     schema: PRINT_DOCUMENT_SCHEMA,
-    sourceInstanceHash: materialized.instanceHash,
+    sourceInstanceHash: verifiedMaterialized.instanceHash,
     projectorVersion: PRINT_PROJECTOR_VERSION,
     paper,
     locale: instance.locale,
@@ -143,24 +166,232 @@ export async function projectPrintDocumentV1(
   });
 }
 
+export function assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
+  document: StudentPrintDocumentV1,
+  delivery: StudentWorksheetDeliveryV1,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  if (
+    delivery.slots.length !== canonicalAnswers.length ||
+    document.sourceInstanceHash !== delivery.instanceHash ||
+    document.locale !== delivery.locale
+  ) {
+    throw new Error("Student PrintDocument source mapping is inconsistent");
+  }
+
+  const { blocks, ...globalDocument } = document;
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+    globalDocument,
+    canonicalAnswers,
+  );
+
+  const seenProblems = new Set<number>();
+  const seenFallbacks = new Set<number>();
+  for (const block of blocks) {
+    if (block.type === "problem-group") {
+      const { problems, ...groupMetadata } = block;
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+        groupMetadata,
+        canonicalAnswers,
+      );
+      for (const problem of problems) {
+        const index = problem.ordinal - 1;
+        const slot = delivery.slots[index];
+        const answer = canonicalAnswers[index];
+        if (
+          slot === undefined ||
+          answer === undefined ||
+          problem.id !== slot.id ||
+          seenProblems.has(index)
+        ) {
+          throw new Error("Student PrintDocument problem mapping is inconsistent");
+        }
+        seenProblems.add(index);
+        assertProjectedProblemMatchesPrompt(problem, slot, answer, document.locale);
+
+        const { prompt, promptAccessibleText, ...nonPromptProblem } = problem;
+        void prompt;
+        void promptAccessibleText;
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          nonPromptProblem,
+          canonicalAnswers,
+        );
+      }
+      continue;
+    }
+
+    if (block.type === "fraction-bar") {
+      const index = expectedBlockIndex(
+        block.id,
+        "fraction-bars",
+        delivery.slots.length,
+      );
+      const slot = index === undefined ? undefined : delivery.slots[index];
+      const answer = index === undefined ? undefined : canonicalAnswers[index];
+      if (index === undefined || slot === undefined || answer === undefined) {
+        throw new Error("Student PrintDocument fraction-bar mapping is inconsistent");
+      }
+      if (seenFallbacks.has(index)) {
+        throw new Error("Student PrintDocument fallback mapping is inconsistent");
+      }
+      seenFallbacks.add(index);
+      assertProjectedFractionBarMatchesPrompt(block, slot, answer);
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+        { type: block.type, id: block.id, caption: block.caption },
+        canonicalAnswers,
+      );
+      continue;
+    }
+
+    if (block.type === "paragraph") {
+      const index = expectedBlockIndex(
+        block.id,
+        "print-fallback",
+        delivery.slots.length,
+      );
+      if (index !== undefined) {
+        const slot = delivery.slots[index];
+        if (
+          slot === undefined ||
+          (toFractionBar(slot.prompt.left) !== undefined &&
+            toFractionBar(slot.prompt.right) !== undefined) ||
+          seenFallbacks.has(index)
+        ) {
+          throw new Error("Student PrintDocument fallback mapping is inconsistent");
+        }
+        seenFallbacks.add(index);
+      }
+    }
+
+    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(block, canonicalAnswers);
+  }
+
+  if (
+    seenProblems.size !== delivery.slots.length ||
+    seenFallbacks.size !== delivery.slots.length
+  ) {
+    throw new Error("Student PrintDocument slot coverage is inconsistent");
+  }
+}
+
+function assertProjectedProblemMatchesPrompt(
+  problem: PrintProblemV1,
+  slot: StudentPrintProjectionSlot,
+  ownAnswer: CanonicalRationalValue,
+  locale: string,
+): void {
+  if (
+    equalRationals(slot.prompt.left, ownAnswer) ||
+    equalRationals(slot.prompt.right, ownAnswer)
+  ) {
+    throw new Error(
+      "Student PrintDocument contains its own canonical-answer value as a prompt operand",
+    );
+  }
+  if (
+    problem.promptAccessibleText !==
+    deriveFractionAdditionPromptAccessibleText(slot.prompt.left, slot.prompt.right)
+  ) {
+    throw new Error("Student PrintDocument prompt accessibleText is not deterministic");
+  }
+
+  const [left, operator, right, ...extra] = problem.prompt;
+  if (
+    extra.length !== 0 ||
+    left?.type !== "fraction" ||
+    left.numerator !== slot.prompt.left.numerator ||
+    left.denominator !== slot.prompt.left.denominator ||
+    left.accessibleText !== fractionText(slot.prompt.left, locale) ||
+    operator?.type !== "operator" ||
+    operator.symbol !== "+" ||
+    operator.accessibleText !== operatorText(locale) ||
+    right?.type !== "fraction" ||
+    right.numerator !== slot.prompt.right.numerator ||
+    right.denominator !== slot.prompt.right.denominator ||
+    right.accessibleText !== fractionText(slot.prompt.right, locale)
+  ) {
+    throw new Error("Student PrintDocument prompt operands are inconsistent");
+  }
+}
+
+function assertProjectedFractionBarMatchesPrompt(
+  block: PrintFractionBarBlockV1,
+  slot: StudentPrintProjectionSlot,
+  ownAnswer: CanonicalRationalValue,
+): void {
+  const left = toFractionBar(slot.prompt.left);
+  const right = toFractionBar(slot.prompt.right);
+  if (
+    left === undefined ||
+    right === undefined ||
+    equalRationals(slot.prompt.left, ownAnswer) ||
+    equalRationals(slot.prompt.right, ownAnswer) ||
+    block.label !==
+      deriveFractionAdditionPromptAccessibleText(slot.prompt.left, slot.prompt.right) ||
+    block.bars.length !== 2 ||
+    block.bars[0]?.numerator !== left.numerator ||
+    block.bars[0]?.denominator !== left.denominator ||
+    block.bars[0]?.label !== rationalText(slot.prompt.left) ||
+    block.bars[1]?.numerator !== right.numerator ||
+    block.bars[1]?.denominator !== right.denominator ||
+    block.bars[1]?.label !== rationalText(slot.prompt.right)
+  ) {
+    throw new Error("Student PrintDocument fraction-bar operands are inconsistent");
+  }
+}
+
+function expectedBlockIndex(
+  blockId: string,
+  prefix: "fraction-bars" | "print-fallback",
+  slotCount: number,
+): number | undefined {
+  for (let index = 0; index < slotCount; index += 1) {
+    if (blockId === `${prefix}-${String(index + 1).padStart(3, "0")}`) {
+      return index;
+    }
+  }
+  return undefined;
+}
+
 export async function verifyMaterializedWorksheetInstanceV1(
   materialized: MaterializedWorksheetInstanceV1,
 ): Promise<WorksheetInstanceV1> {
+  return (await verifyMaterializedWorksheetSnapshotV1(materialized)).instance;
+}
+
+async function verifyMaterializedWorksheetSnapshotV1(
+  materialized: MaterializedWorksheetInstanceV1,
+): Promise<MaterializedWorksheetInstanceV1> {
   if (!isRecord(materialized)) {
     throw new PrintDocumentProjectionError(
       "invalid-materialization",
       "Worksheet materialization must be an object.",
     );
   }
-  if (typeof materialized.canonicalJson !== "string") {
+  try {
+    assertSafeDataObjectGraph(materialized);
+  } catch (error: unknown) {
+    throw new PrintDocumentProjectionError(
+      "invalid-materialization",
+      "Worksheet materialization must be a safe plain-data snapshot.",
+      { cause: error },
+    );
+  }
+
+  // Capture every caller-owned field before the first asynchronous yield.
+  // Validation returns a detached instance clone used by all later work.
+  const providedInstance = materialized.instance;
+  const providedCanonicalJson = materialized.canonicalJson;
+  const providedInstanceHash = materialized.instanceHash;
+  if (typeof providedCanonicalJson !== "string") {
     throw new PrintDocumentProjectionError(
       "invalid-materialization",
       "Worksheet materialization canonicalJson must be a string.",
     );
   }
   if (
-    typeof materialized.instanceHash !== "string" ||
-    !HASH_PATTERN.test(materialized.instanceHash)
+    typeof providedInstanceHash !== "string" ||
+    !HASH_PATTERN.test(providedInstanceHash)
   ) {
     throw new PrintDocumentProjectionError(
       "hash-mismatch",
@@ -170,7 +401,7 @@ export async function verifyMaterializedWorksheetInstanceV1(
 
   let instance: WorksheetInstanceV1;
   try {
-    instance = validateWorksheetInstanceV1(materialized.instance);
+    instance = validateWorksheetInstanceV1(providedInstance);
   } catch (error: unknown) {
     throw new PrintDocumentProjectionError(
       "invalid-instance",
@@ -189,31 +420,38 @@ export async function verifyMaterializedWorksheetInstanceV1(
       { cause: error },
     );
   }
-  if (materialized.canonicalJson !== expectedCanonicalJson) {
+  if (providedCanonicalJson !== expectedCanonicalJson) {
     throw new PrintDocumentProjectionError(
       "canonical-json-mismatch",
       "Worksheet materialization bytes do not canonically represent its instance.",
     );
   }
 
-  const actualHash = await sha256Hex(materialized.canonicalJson);
-  if (actualHash !== materialized.instanceHash) {
+  const actualHash = await sha256Hex(providedCanonicalJson);
+  if (actualHash !== providedInstanceHash) {
     throw new PrintDocumentProjectionError(
       "hash-mismatch",
       "Worksheet materialization hash does not match its canonical bytes.",
     );
   }
 
-  return instance;
+  return {
+    instance,
+    canonicalJson: providedCanonicalJson,
+    instanceHash: providedInstanceHash,
+  };
 }
 
-function projectStudentBlocks(instance: WorksheetInstanceV1): StudentPrintBlockV1[] {
+function projectStudentBlocks(
+  source: StudentPrintProjectionSource,
+  promptTextPolicy: "derive" | "preserve-source" = "derive",
+): StudentPrintBlockV1[] {
   const blocks: StudentPrintBlockV1[] = [
     {
       type: "heading",
       id: "worksheet-title",
       level: 1,
-      content: [{ type: "text", text: instance.title }],
+      content: [{ type: "text", text: source.title }],
     },
     {
       type: "paragraph",
@@ -221,21 +459,21 @@ function projectStudentBlocks(instance: WorksheetInstanceV1): StudentPrintBlockV
       content: [
         {
           type: "text",
-          text: `${instance.localStudyDate} · ${String(instance.expectedMinutes)} minutes`,
+          text: `${source.localStudyDate} · ${String(source.expectedMinutes)} minutes`,
         },
       ],
     },
   ];
 
-  for (const [index, slot] of instance.slots.entries()) {
+  for (const [index, slot] of source.slots.entries()) {
     const ordinal = index + 1;
     blocks.push({
       type: "problem-group",
       id: `problem-group-${String(ordinal).padStart(3, "0")}`,
       title: `Problem ${String(ordinal)}`,
-      problems: [projectProblem(slot, ordinal, instance.locale)],
+      problems: [projectProblem(slot, ordinal, source.locale, promptTextPolicy)],
     });
-    blocks.push(projectPrintFallback(slot, ordinal));
+    blocks.push(projectPrintFallback(slot, ordinal, promptTextPolicy));
     blocks.push({
       type: "working-space",
       id: `working-space-${String(ordinal).padStart(3, "0")}`,
@@ -248,15 +486,22 @@ function projectStudentBlocks(instance: WorksheetInstanceV1): StudentPrintBlockV
 }
 
 function projectProblem(
-  slot: WorksheetSlotV1,
+  slot: StudentPrintProjectionSlot,
   ordinal: number,
   locale: string,
+  promptTextPolicy: "derive" | "preserve-source",
 ): PrintProblemV1 {
   return {
     id: slot.id,
     ordinal,
     instruction: slot.prompt.instruction,
-    promptAccessibleText: slot.prompt.accessibleText,
+    promptAccessibleText:
+      promptTextPolicy === "derive"
+        ? deriveFractionAdditionPromptAccessibleText(
+            slot.prompt.left,
+            slot.prompt.right,
+          )
+        : slot.prompt.accessibleText,
     prompt: [
       projectFraction(slot.prompt.left, locale),
       { type: "operator", symbol: "+", accessibleText: operatorText(locale) },
@@ -281,8 +526,9 @@ function projectProblem(
 }
 
 function projectPrintFallback(
-  slot: WorksheetSlotV1,
+  slot: StudentPrintProjectionSlot,
   ordinal: number,
+  promptTextPolicy: "derive" | "preserve-source",
 ): StudentPrintBlockV1 {
   const left = toFractionBar(slot.prompt.left);
   const right = toFractionBar(slot.prompt.right);
@@ -297,7 +543,13 @@ function projectPrintFallback(
   const fallback: PrintFractionBarBlockV1 = {
     type: "fraction-bar",
     id: `fraction-bars-${String(ordinal).padStart(3, "0")}`,
-    label: slot.prompt.accessibleText,
+    label:
+      promptTextPolicy === "derive"
+        ? deriveFractionAdditionPromptAccessibleText(
+            slot.prompt.left,
+            slot.prompt.right,
+          )
+        : slot.prompt.accessibleText,
     caption: slot.printFallback.text,
     bars: [
       {

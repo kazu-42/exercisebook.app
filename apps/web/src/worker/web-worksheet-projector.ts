@@ -6,16 +6,22 @@ import type {
   MaterializedWorksheetInstanceV1,
 } from "@exercisebook/schemas";
 import {
+  assertSafeDataObjectGraph,
   assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
-  projectWorksheetForStudent,
+  deriveFractionAdditionPromptAccessibleText,
+  validateWorksheetInstanceV1,
 } from "@exercisebook/schemas";
+import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
 import type {
   AnswerKeyWebWorksheet,
   StudentWebWorksheet,
   WebAttribution,
   WebWorkedExample,
 } from "@exercisebook/web-renderer";
-import { validateStudentWebWorksheet } from "@exercisebook/web-renderer";
+import {
+  validateAnswerKeyWebWorksheet,
+  validateStudentWebWorksheet,
+} from "@exercisebook/web-renderer";
 
 const reviewedWorkedExample: WebWorkedExample = {
   left: { ...DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS[0] },
@@ -46,7 +52,8 @@ function projectAttribution(attribution: AttributionV1): WebAttribution {
 export async function projectStudentWorksheetForWeb(
   materialized: MaterializedWorksheetInstanceV1,
 ): Promise<StudentWebWorksheet> {
-  const delivery = await projectWorksheetForStudent(materialized);
+  const { canonicalAnswers, delivery } =
+    await projectWorksheetForStudentWithCanonicalAnswers(materialized);
   const firstSlot = delivery.slots[0];
   if (firstSlot === undefined) {
     throw new TypeError("A Web worksheet requires at least one slot.");
@@ -71,7 +78,7 @@ export async function projectStudentWorksheetForWeb(
         kind: "fraction-addition",
         left: slot.prompt.left,
         right: slot.prompt.right,
-        accessibleText: fractionAdditionAccessibleText(
+        accessibleText: deriveFractionAdditionPromptAccessibleText(
           slot.prompt.left,
           slot.prompt.right,
         ),
@@ -83,12 +90,9 @@ export async function projectStudentWorksheetForWeb(
   });
   assertWorkedExampleDoesNotRevealPracticeAnswers(
     worksheet.workedExample,
-    materialized.instance.slots.map((slot) => slot.canonicalAnswer.value),
+    canonicalAnswers,
   );
-  assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
-    worksheet,
-    materialized.instance.slots.map((slot) => slot.canonicalAnswer.value),
-  );
+  assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(worksheet, canonicalAnswers);
   return worksheet;
 }
 
@@ -122,15 +126,21 @@ function assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
       nonPromptItem,
       canonicalAnswers,
     );
+    if (
+      prompt.accessibleText !==
+      deriveFractionAdditionPromptAccessibleText(prompt.left, prompt.right)
+    ) {
+      throw new Error(
+        "Web worksheet prompt accessibleText must equal its deterministic fraction-addition derivation",
+      );
+    }
+    if (equalRationals(prompt.left, answer) || equalRationals(prompt.right, answer)) {
+      throw new Error(
+        "Web worksheet contains its own canonical-answer value as a prompt operand",
+      );
+    }
     assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(prompt, [answer]);
   }
-}
-
-function fractionAdditionAccessibleText(
-  left: CanonicalRationalValue,
-  right: CanonicalRationalValue,
-): string {
-  return `Add ${left.numerator} over ${left.denominator} and ${right.numerator} over ${right.denominator}. Give the answer in lowest terms.`;
 }
 
 export function assertWorkedExampleDoesNotRevealPracticeAnswers(
@@ -160,16 +170,23 @@ export function assertWorkedExampleDoesNotRevealPracticeAnswers(
 export async function projectAnswerKeyWorksheetForWeb(
   materialized: MaterializedWorksheetInstanceV1,
 ): Promise<AnswerKeyWebWorksheet> {
-  // The student projector is the shared integrity gate for canonical bytes and
-  // the instance hash. The answer key then projects the same verified instance.
-  await projectWorksheetForStudent(materialized);
-  const { instance, instanceHash } = materialized;
+  // Capture a detached instance and every envelope field before the first
+  // asynchronous yield. The shared projector then authenticates that one
+  // snapshot, so caller mutation cannot change the answer-key source later.
+  assertSafeDataObjectGraph(materialized);
+  const snapshot = {
+    instance: validateWorksheetInstanceV1(materialized.instance),
+    canonicalJson: materialized.canonicalJson,
+    instanceHash: materialized.instanceHash,
+  };
+  await projectWorksheetForStudentWithCanonicalAnswers(snapshot);
+  const { instance, instanceHash } = snapshot;
   const firstSlot = instance.slots[0];
   if (firstSlot === undefined) {
     throw new TypeError("A Web worksheet requires at least one slot.");
   }
 
-  return {
+  return validateAnswerKeyWebWorksheet({
     schemaVersion: "web-worksheet.v1",
     instanceHash,
     assignmentId: instance.assignmentId,
@@ -203,5 +220,5 @@ export async function projectAnswerKeyWorksheetForWeb(
       ),
     })),
     attributions: instance.attributions.map(projectAttribution),
-  };
+  });
 }

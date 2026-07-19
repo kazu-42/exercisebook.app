@@ -43,12 +43,12 @@ recognized answer-bearing string in the final worked example reveals any
 generated practice answer.
 
 The final validated student DTO uses a field-sensitive scan. Global worksheet
-fields and every non-prompt field of every item are checked against every
-canonical practice answer. A structured prompt operand may legitimately equal
-another slot's answer, so prompt `accessibleText` is derived from the prompt's
-validated operands and each complete prompt is checked against its own answer
-only. This distinction rejects cross-slot leaks in fields such as
-`printFallback` without rejecting mathematically valid operand reuse.
+fields, prompt instructions, and every non-prompt field of every item are
+checked against every canonical practice answer. A structured prompt operand
+may legitimately equal another slot's answer, but never its own; prompt
+`accessibleText` and accessibility summaries are exact derivations from the
+validated operands. This distinction rejects cross-slot leaks in fields such
+as `printFallback` without rejecting mathematically valid operand reuse.
 
 ## 1. Purpose
 
@@ -390,9 +390,34 @@ be inferred. The selected concrete `student`, `answer-key`, or `teacher`
 variant lives in the hashed `PrintDocument`, not in the shared instance.
 
 Integrity hashing proves which instance was projected; it does not prove that
-every student-visible field is safe. The implemented final Web projection
-therefore performs the field-sensitive answer scan after validation, even for
-a canonical instance whose recomputed hash is correct.
+every student-visible field is safe. The shared student-delivery boundary and
+the final Web projection therefore perform field-sensitive answer scans after
+validation, even for a canonical instance whose recomputed hash is correct.
+Global and non-prompt fields reject every answer; a prompt may expose a
+different slot's answer only when it is structurally one of its operands, and
+its accessibility strings are exact deterministic operand derivations. The
+student PrintDocument path consumes that answer-free delivery rather than the
+full instance, then applies another field-role assertion to the validated
+document so an authorized operand cannot migrate into a caption or prose field.
+
+The final Web and print assertions use a trusted server-only projection context
+that pairs the answer-free delivery with detached canonical answers. That
+answer context is never a response DTO and must not be serialized, logged,
+cached, returned by an HTTP handler, persisted in browser state, or imported by
+React/client code. Before its first asynchronous hash, the projector rejects
+unsafe object graphs, captures the complete envelope, and validates a detached
+instance. Every later integrity and authorization decision therefore describes
+one snapshot even if the caller mutates its original object after the call
+starts; consumers must not re-read the caller-owned materialization after an
+await.
+
+Browser response parsing is another trust boundary. Worksheet loaders measure
+the response stream against an explicit route-owned byte cap, decode UTF-8
+fatally, cap non-final reads at 1,024, and reject duplicate-key JSON before DTO
+validation. Cancellation and deadlines abort pending body reads and retain
+their original reason identity; early failures best-effort cancel without
+shadowing the primary error. `Response.json()` is not used as the production
+boundary.
 
 ## 8. Main daily worksheet sequence
 

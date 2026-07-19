@@ -13,11 +13,11 @@ before the content catalog expands.
 
 ## Project status
 
-The Phase 1 local walking skeleton and the anonymous Phase 1.5 daily-plan
-preview are implemented on stacked feature branches. The repository compiles
-one draft English fraction lesson with author/reviewer metadata, materializes
-deterministic exact-rational problems, and projects the same immutable
-worksheet instance to:
+The Phase 1 local walking skeleton and anonymous Phase 1.5 daily-plan preview
+are implemented on stacked feature branches. Phase 1.6 student-delivery
+hardening is active locally. The repository compiles one draft English fraction
+lesson with author/reviewer metadata, materializes deterministic exact-rational
+problems, and projects the same immutable worksheet instance to:
 
 - a Hono/React learning experience;
 - separate student and answer-key Web views;
@@ -150,6 +150,7 @@ engines are replaceable adapters behind one artifact contract.
 - [Naming and domains](docs/naming-and-domains.md)
 - [Delivery roadmap](docs/roadmap.md)
 - [Daily Plan Preview v1](specs/daily-plan-preview-v1.md)
+- [Student Delivery Hardening v1](specs/student-delivery-hardening-v1.md)
 - [Architecture decision record](docs/decisions/0001-core-architecture.md)
 - [TypeScript 7 toolchain decision](docs/decisions/0002-typescript-7-toolchain.md)
 - [Engineering guardrails](AGENTS.md)

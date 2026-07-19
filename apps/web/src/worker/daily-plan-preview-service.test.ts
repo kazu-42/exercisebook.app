@@ -14,7 +14,10 @@ import {
   type DailyPlanPreviewRequestV1,
 } from "@exercisebook/planner";
 
+import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
+import { parseStrictJson } from "../shared/strict-json.js";
 import { createDailyPlanPreviewService } from "./daily-plan-preview-service.js";
+import { projectStudentWorksheetForWeb } from "./web-worksheet-projector.js";
 
 function request(practiceMinutes: 8 | 12 | 20): DailyPlanPreviewRequestV1 {
   return {
@@ -52,6 +55,8 @@ describe("generator-backed Daily Plan Preview service", () => {
       expect(result.response.worksheet.items).toHaveLength(itemCount);
       expect(result.response.worksheet.expectedMinutes).toBe(planned);
       expect(result.response.worksheet.assignmentId).toBe(result.response.plan.id);
+      const serialized = JSON.stringify(result.response);
+      expect(parseStrictJson(serialized)).toEqual(result.response);
     },
   );
 
@@ -124,6 +129,8 @@ describe("generator-backed Daily Plan Preview service", () => {
   it("reserves every worked-example value across a full year and all slots", async () => {
     const service = createDailyPlanPreviewService();
     const collisions: string[] = [];
+    let maximumResponseBytes = 0;
+    let maximumResponseDate = "";
 
     for (let dayOffset = 0; dayOffset < 365; dayOffset += 1) {
       const localStudyDate = new Date(Date.UTC(2026, 0, dayOffset + 1))
@@ -135,6 +142,14 @@ describe("generator-backed Daily Plan Preview service", () => {
       });
       if (result.status !== "ready") {
         throw new Error(`Expected a ready preview for ${localStudyDate}`);
+      }
+
+      const responseBytes = new TextEncoder().encode(
+        JSON.stringify(result.response),
+      ).byteLength;
+      if (responseBytes > maximumResponseBytes) {
+        maximumResponseBytes = responseBytes;
+        maximumResponseDate = localStudyDate;
       }
 
       for (const item of result.response.worksheet.items) {
@@ -150,7 +165,14 @@ describe("generator-backed Daily Plan Preview service", () => {
     }
 
     expect(collisions).toEqual([]);
-  }, 20_000);
+    expect(maximumResponseBytes * 2).toBeLessThanOrEqual(
+      MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES,
+    );
+    expect({ maximumResponseBytes, maximumResponseDate }).toEqual({
+      maximumResponseBytes: 4_899,
+      maximumResponseDate: "2026-01-01",
+    });
+  }, 60_000);
 
   it.each(["policy", "skillGraph", "content", "generator"] as const)(
     "returns unavailable before materialization when %s is disabled",
@@ -181,6 +203,25 @@ describe("generator-backed Daily Plan Preview service", () => {
     const result = await service.createPreview(request(8));
 
     expect(result.status).toBe("ready");
+  });
+
+  it("compares the public worksheet with the pre-await materialization hash", async () => {
+    const service = createDailyPlanPreviewService({
+      async projectStudentWorksheet(materialized) {
+        const pending = projectStudentWorksheetForWeb(materialized);
+        const callerOwned = materialized as unknown as { instanceHash: string };
+        callerOwned.instanceHash = "0".repeat(64);
+        return pending;
+      },
+    });
+
+    const result = await service.createPreview(request(8));
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      throw new Error("Expected a ready preview");
+    }
+    expect(result.response.worksheet.instanceHash).not.toBe("0".repeat(64));
   });
 
   it("fails closed when materialization violates the plan contract", async () => {

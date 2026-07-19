@@ -35,4 +35,12 @@ describe("parseStrictJson", () => {
 
     expect(() => parseStrictJson(source)).toThrow("nesting limit");
   });
+
+  it("accepts exactly 512 parsed values and rejects the next value", () => {
+    const exactlyAtLimit = JSON.stringify(Array.from({ length: 511 }, () => null));
+    const overLimit = JSON.stringify(Array.from({ length: 512 }, () => null));
+
+    expect(parseStrictJson(exactlyAtLimit)).toHaveLength(511);
+    expect(() => parseStrictJson(overLimit)).toThrow("value limit");
+  });
 });

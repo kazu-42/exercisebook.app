@@ -42,6 +42,12 @@ Each concrete slot contains:
 4. Store the object by content address before committing its assignment pointer.
 5. Return a student delivery projection that omits base/slot seeds, canonical
    answer, locked solution, scoring internals, and diagnostic leakage.
+   Global and per-slot non-prompt delivery fields are checked against every
+   canonical answer. Prompt accessibility strings must equal deterministic
+   derivations from the structured left/right operands. A different slot's
+   answer is therefore permitted only as a genuine operand representation; the
+   current slot's answer is always forbidden, including when two slots have
+   equal answers.
 6. Never mutate a historical instance; corrections create a new revision.
 7. Treat the exported versioned validation entrypoint as normative for
    acceptance. It applies the bounded plain-data guard to the original input
@@ -83,12 +89,20 @@ presentation slot ID.
 - Phase-1 materialization accepts draft content only. A future trusted release
   manifest may authorize published content; source frontmatter never
   self-authorizes publication.
+- Canonical JSON and its hash prove exact identity, not student-field
+  authorization. A recomputed, hash-correct instance containing an answer in a
+  global field, hint, accessibility field, or print fallback still fails the
+  student projection.
 
 ## Acceptance criteria
 
 - [ ] Same validated input yields byte-identical canonical JSON and hash.
 - [ ] Student projection answer-leak tests cover text, attributes, accessible
       labels, URLs, metadata, and serialized application state.
+- [ ] Cross-slot tests reject answers in every non-prompt field, allow only a
+      genuine structured operand in another slot's exactly derived prompt,
+      reject appended answer prose, and keep the own-answer rule fail-closed
+      for duplicate-equal rationals.
 - [ ] Leak-marker scanning is documented and tested as defense in depth; it is
       not treated as proof against arbitrary prose obfuscation.
 - [ ] Web and PrintDocument projections name the same instance hash.

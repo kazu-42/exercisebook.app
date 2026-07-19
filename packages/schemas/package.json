@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./trusted-student-projection": "./src/trusted-student-projection.ts",
     "./json-schema/content-document-v1": "./json-schema/content-document-v1.schema.json",
     "./json-schema/worksheet-instance-v1": "./json-schema/worksheet-instance-v1.schema.json"
   },
