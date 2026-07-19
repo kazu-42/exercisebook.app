@@ -135,7 +135,7 @@ DPP-001
 
 ### DPP-009 — Independent review and stacked draft PR
 
-- Status: pending
+- Status: complete
 - Size: S
 - Owner: independent reviewer then coordinator
 - Dependencies: DPP-008
@@ -144,6 +144,12 @@ DPP-001
   `feat/phase-1-walking-skeleton`
 - Required evidence: clean worktree after commit, remote SHA readback, draft PR
   readback, CI result; no merge or deployment
+- Recorded evidence: three independent review lanes approved after repaired
+  findings; commit `e637fc46caba874ed07d5ed5fc8b112b7fef2d24` was pushed and read back on
+  `origin/feat/daily-plan-preview`; draft PR
+  [#2](https://github.com/kazu-42/exercisebook.app/pull/2) targets
+  `feat/phase-1-walking-skeleton`; GitHub CI run `29671532041` completed
+  successfully; the PR remains unmerged and undeployed
 
 ## Deferred findings (not silently dropped)
 
