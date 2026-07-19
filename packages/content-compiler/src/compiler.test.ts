@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { materializeFractionAdditionWorksheetFromContent } from "@exercisebook/generators";
+import {
+  FRACTION_ADDITION_SAMPLE_INPUT,
+  materializeFractionAdditionWorksheetFromContent,
+} from "@exercisebook/generators";
 import { validateContentDocumentV1 } from "@exercisebook/schemas";
 
 import { ContentCompilationError, compileContentSource } from "./compiler.js";
@@ -69,6 +72,11 @@ describe("ContentDocumentV1 compiler", () => {
         locale: "en",
         seed: "0123456789abcdef".repeat(4),
         seedSecretVersion: "test-secret-v1",
+        requestedItemCount: FRACTION_ADDITION_SAMPLE_INPUT.itemCount,
+        plan: FRACTION_ADDITION_SAMPLE_INPUT.plan,
+        policy: FRACTION_ADDITION_SAMPLE_INPUT.policy,
+        skillGraph: FRACTION_ADDITION_SAMPLE_INPUT.skillGraph,
+        selectionReasons: FRACTION_ADDITION_SAMPLE_INPUT.selectionReasons,
       },
     );
 
@@ -433,6 +441,11 @@ describe("ContentDocumentV1 compiler", () => {
           locale: "en",
           seed: "0123456789abcdef".repeat(4),
           seedSecretVersion: "test-secret-v1",
+          requestedItemCount: FRACTION_ADDITION_SAMPLE_INPUT.itemCount,
+          plan: FRACTION_ADDITION_SAMPLE_INPUT.plan,
+          policy: FRACTION_ADDITION_SAMPLE_INPUT.policy,
+          skillGraph: FRACTION_ADDITION_SAMPLE_INPUT.skillGraph,
+          selectionReasons: FRACTION_ADDITION_SAMPLE_INPUT.selectionReasons,
         },
       ),
     ).rejects.toThrow("trusted release approval");

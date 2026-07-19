@@ -6,6 +6,7 @@ const protectedRoots = [
   "packages/content-compiler/src",
   "packages/domain/src",
   "packages/generators/src",
+  "packages/planner/src",
   "packages/schemas/src",
 ];
 const sourceExtensions = new Set([".cts", ".mts", ".ts", ".tsx"]);

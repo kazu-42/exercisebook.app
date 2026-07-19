@@ -6,7 +6,6 @@ import {
   FRACTION_ADDITION_SAMPLE_INPUT,
   materializeFractionAdditionWorksheetFromContent,
 } from "@exercisebook/generators";
-import { projectWorksheetForStudent } from "@exercisebook/schemas";
 import { WorksheetView, type WebWorksheet } from "@exercisebook/web-renderer";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -72,10 +71,14 @@ const materialized = await materializeFractionAdditionWorksheetFromContent(
     locale: FRACTION_ADDITION_SAMPLE_INPUT.locale,
     seed: FRACTION_ADDITION_SAMPLE_INPUT.seed,
     seedSecretVersion: FRACTION_ADDITION_SAMPLE_INPUT.seedSecretVersion,
+    requestedItemCount: FRACTION_ADDITION_SAMPLE_INPUT.itemCount,
+    plan: FRACTION_ADDITION_SAMPLE_INPUT.plan,
+    policy: FRACTION_ADDITION_SAMPLE_INPUT.policy,
+    skillGraph: FRACTION_ADDITION_SAMPLE_INPUT.skillGraph,
+    selectionReasons: FRACTION_ADDITION_SAMPLE_INPUT.selectionReasons,
   },
 );
-const studentDelivery = await projectWorksheetForStudent(materialized);
-const studentWorksheet = projectStudentWorksheetForWeb(studentDelivery);
+const studentWorksheet = await projectStudentWorksheetForWeb(materialized);
 const answerKeyWorksheet = await projectAnswerKeyWorksheetForWeb(materialized);
 
 const [applicationStyles, rendererStyles] = await Promise.all([

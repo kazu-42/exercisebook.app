@@ -505,6 +505,24 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
     );
   });
 
+  it("rejects an accessor-bearing materialization envelope before invoking it", async () => {
+    const materialized = await materializeWorksheetFixture({});
+    let getterRan = false;
+    const hostile = { ...materialized } as Record<string, unknown>;
+    Object.defineProperty(hostile, "instance", {
+      enumerable: true,
+      get() {
+        getterRan = true;
+        return materialized.instance;
+      },
+    });
+
+    await expect(projectWorksheetForStudent(hostile as never)).rejects.toThrow(
+      "Accessor",
+    );
+    expect(getterRan).toBe(false);
+  });
+
   it("allows a hash-correct projection whose visible strings do not disclose answers", async () => {
     const materialized = await materializeWorksheetFixture({});
     await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({

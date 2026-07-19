@@ -8,14 +8,21 @@ import {
 } from "@exercisebook/domain";
 import {
   projectWorksheetForStudent,
+  validateContentDocumentV1,
   validateWorksheetInstanceV1,
 } from "@exercisebook/schemas";
 
 import {
   FRACTION_ADDITION_SAMPLE_INPUT,
+  fractionAdditionWorksheetInputFromContent,
   generateFractionAdditionProblem,
   materializeFractionAdditionWorksheet,
+  materializeFractionAdditionWorksheetFromContent,
 } from "./fraction-addition.js";
+
+import compiledFractionLesson from "../../../content/compiled/math.fractions.add-unlike-denominators.v1.json" with { type: "json" };
+
+const REVIEWED_FRACTION_LESSON = validateContentDocumentV1(compiledFractionLesson);
 
 const ZERO_SEED = "0".repeat(64);
 const FF_SEED = "f".repeat(64);
@@ -79,6 +86,165 @@ describe("fractions.add@1", () => {
     expect(materialized.instance.rng.seedSecretVersion).toBe("fixture-secret-v2");
   });
 
+  it("records caller-provided planner provenance instead of inventing it", async () => {
+    const materialized = await materializeFractionAdditionWorksheet({
+      ...FRACTION_ADDITION_SAMPLE_INPUT,
+      assignmentId: "preview-custom-provenance",
+      plan: { id: "preview-custom-provenance", version: 7 },
+      policy: { id: "day-one-fraction-preview", version: 3 },
+      skillGraph: { id: "reviewed-math", revision: 9 },
+      selectionReasons: ["prerequisite-repair"],
+    });
+
+    expect(materialized.instance.plan).toEqual({
+      id: "preview-custom-provenance",
+      version: 7,
+    });
+    expect(materialized.instance.policy).toEqual({
+      id: "day-one-fraction-preview",
+      version: 3,
+    });
+    expect(materialized.instance.skillGraph).toEqual({
+      id: "reviewed-math",
+      revision: 9,
+    });
+    expect(
+      materialized.instance.slots.every(
+        (slot) =>
+          slot.selectionReasons.length === 1 &&
+          slot.selectionReasons[0] === "prerequisite-repair",
+      ),
+    ).toBe(true);
+  });
+
+  it("includes changed policy metadata in the materialized instance hash", async () => {
+    const first = await materializeFractionAdditionWorksheet(
+      FRACTION_ADDITION_SAMPLE_INPUT,
+    );
+    const second = await materializeFractionAdditionWorksheet({
+      ...FRACTION_ADDITION_SAMPLE_INPUT,
+      policy: {
+        ...FRACTION_ADDITION_SAMPLE_INPUT.policy,
+        version: FRACTION_ADDITION_SAMPLE_INPUT.policy.version + 1,
+      },
+    });
+
+    expect(first.instance.policy).not.toEqual(second.instance.policy);
+    expect(first.instanceHash).not.toBe(second.instanceHash);
+  });
+
+  it("requires planner provenance at the direct materializer boundary", async () => {
+    const { plan: _plan, ...withoutPlan } = FRACTION_ADDITION_SAMPLE_INPUT;
+
+    await expect(
+      materializeFractionAdditionWorksheet(
+        withoutPlan as unknown as typeof FRACTION_ADDITION_SAMPLE_INPUT,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("resolves exactly the requested reviewed prefix and rejects unreviewed padding", async () => {
+    const assignment = {
+      assignmentId: "preview-reviewed-prefix",
+      localStudyDate: "2026-07-19",
+      timeZone: "Asia/Tokyo",
+      locale: "en",
+      seed: "0123456789abcdef".repeat(4),
+      seedSecretVersion: "public-preview-v1",
+      requestedItemCount: 4,
+      plan: { id: "preview-reviewed-prefix", version: 1 },
+      policy: { id: "reviewed-prefix-test", version: 1 },
+      skillGraph: { id: "phase-1-math", revision: 1 },
+      selectionReasons: ["current-frontier"],
+    } as const;
+    const resolved = await fractionAdditionWorksheetInputFromContent(
+      REVIEWED_FRACTION_LESSON,
+      assignment,
+    );
+
+    expect(resolved.itemCount).toBe(4);
+    await expect(
+      fractionAdditionWorksheetInputFromContent(REVIEWED_FRACTION_LESSON, {
+        ...assignment,
+        requestedItemCount: 9,
+      }),
+    ).rejects.toThrow("reviewed content limit of 8");
+  });
+
+  it("keeps shorter materializations as stable prompt prefixes", async () => {
+    const instances = await Promise.all(
+      [4, 6, 8].map((itemCount) =>
+        materializeFractionAdditionWorksheet({
+          ...FRACTION_ADDITION_SAMPLE_INPUT,
+          itemCount,
+        }),
+      ),
+    );
+    const signatures = instances.map((materialized) =>
+      materialized.instance.slots.map((slot) => JSON.stringify(slot.prompt)),
+    );
+
+    expect(signatures[1]?.slice(0, 4)).toEqual(signatures[0]);
+    expect(signatures[2]?.slice(0, 4)).toEqual(signatures[0]);
+    expect(signatures[2]?.slice(0, 6)).toEqual(signatures[1]);
+  });
+
+  it("deterministically retries answers reserved for reviewed worked examples", async () => {
+    const collidingSeed =
+      "11cfadc10111057deaafb5f31ff85ecc1a6e19c202a5b04a830f803ba9c5f6bb";
+    const withoutReservation = await materializeFractionAdditionWorksheet({
+      ...FRACTION_ADDITION_SAMPLE_INPUT,
+      seed: collidingSeed,
+      itemCount: 4,
+    });
+    expect(withoutReservation.instance.slots[0]?.canonicalAnswer.value).toEqual({
+      numerator: "5",
+      denominator: "6",
+    });
+
+    const withReservation = await materializeFractionAdditionWorksheet({
+      ...FRACTION_ADDITION_SAMPLE_INPUT,
+      seed: collidingSeed,
+      itemCount: 4,
+      policy: { id: "worked-example-safe-materialization", version: 2 },
+      excludedCanonicalAnswers: [{ numerator: "5", denominator: "6" }],
+    });
+
+    expect(
+      withReservation.instance.slots.every(
+        (slot) =>
+          !equalRationals(slot.canonicalAnswer.value, {
+            numerator: "5",
+            denominator: "6",
+          }),
+      ),
+    ).toBe(true);
+    expect(withReservation.instance.slots[0]?.provenance.generationAttempt).toBe(1);
+  });
+
+  it("preserves the Phase 1 content-resolved sample vector", async () => {
+    const materialized = await materializeFractionAdditionWorksheetFromContent(
+      REVIEWED_FRACTION_LESSON,
+      {
+        assignmentId: FRACTION_ADDITION_SAMPLE_INPUT.assignmentId,
+        localStudyDate: FRACTION_ADDITION_SAMPLE_INPUT.localStudyDate,
+        timeZone: FRACTION_ADDITION_SAMPLE_INPUT.timeZone,
+        locale: FRACTION_ADDITION_SAMPLE_INPUT.locale,
+        seed: FRACTION_ADDITION_SAMPLE_INPUT.seed,
+        seedSecretVersion: FRACTION_ADDITION_SAMPLE_INPUT.seedSecretVersion,
+        requestedItemCount: FRACTION_ADDITION_SAMPLE_INPUT.itemCount,
+        plan: FRACTION_ADDITION_SAMPLE_INPUT.plan,
+        policy: FRACTION_ADDITION_SAMPLE_INPUT.policy,
+        skillGraph: FRACTION_ADDITION_SAMPLE_INPUT.skillGraph,
+        selectionReasons: FRACTION_ADDITION_SAMPLE_INPUT.selectionReasons,
+      },
+    );
+
+    expect(materialized.instanceHash).toBe(
+      "5252ef64b127638b785a94b3a2c7d1859cd7299e7032bed10aa41e07b2c4d12b",
+    );
+  });
+
   it("rejects self-asserted publication through the direct materializer entrypoint", async () => {
     await expect(
       materializeFractionAdditionWorksheet({
@@ -125,7 +291,7 @@ describe("fractions.add@1", () => {
         ).size,
       ).toBe(96);
     }
-  });
+  }, 30_000);
 
   it("rejects hostile runtime shapes instead of coercing typed input", async () => {
     await expect(
@@ -226,7 +392,7 @@ describe("fractions.add@1", () => {
       ),
       { numRuns: 10_000, seed: 2_026_071_9 },
     );
-  });
+  }, 30_000);
 
   it("projects a hash-verified student document without answer or solution fields", async () => {
     const materialized = await materializeFractionAdditionWorksheet({

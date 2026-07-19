@@ -1,26 +1,37 @@
+import { equalRationals } from "@exercisebook/domain";
+import { DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS } from "@exercisebook/planner";
 import type {
   AttributionV1,
+  CanonicalRationalValue,
   MaterializedWorksheetInstanceV1,
-  StudentWorksheetDeliveryV1,
 } from "@exercisebook/schemas";
-import { projectWorksheetForStudent } from "@exercisebook/schemas";
+import {
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
+  projectWorksheetForStudent,
+} from "@exercisebook/schemas";
 import type {
   AnswerKeyWebWorksheet,
   StudentWebWorksheet,
   WebAttribution,
   WebWorkedExample,
 } from "@exercisebook/web-renderer";
+import { validateStudentWebWorksheet } from "@exercisebook/web-renderer";
 
 const reviewedWorkedExample: WebWorkedExample = {
-  left: { numerator: "1", denominator: "2" },
-  right: { numerator: "1", denominator: "3" },
-  result: { numerator: "5", denominator: "6" },
+  left: { ...DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS[0] },
+  right: { ...DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS[1] },
+  result: { ...DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS[2] },
   steps: [
     "The least common denominator of 2 and 3 is 6.",
     "Rename 1/2 as 3/6 and 1/3 as 2/6.",
     "Add 3/6 + 2/6 to get 5/6.",
   ],
 };
+Object.freeze(reviewedWorkedExample.left);
+Object.freeze(reviewedWorkedExample.right);
+Object.freeze(reviewedWorkedExample.result);
+Object.freeze(reviewedWorkedExample.steps);
+export const REVIEWED_WORKED_EXAMPLE = Object.freeze(reviewedWorkedExample);
 
 function projectAttribution(attribution: AttributionV1): WebAttribution {
   return {
@@ -32,15 +43,16 @@ function projectAttribution(attribution: AttributionV1): WebAttribution {
   };
 }
 
-export function projectStudentWorksheetForWeb(
-  delivery: StudentWorksheetDeliveryV1,
-): StudentWebWorksheet {
+export async function projectStudentWorksheetForWeb(
+  materialized: MaterializedWorksheetInstanceV1,
+): Promise<StudentWebWorksheet> {
+  const delivery = await projectWorksheetForStudent(materialized);
   const firstSlot = delivery.slots[0];
   if (firstSlot === undefined) {
     throw new TypeError("A Web worksheet requires at least one slot.");
   }
 
-  return {
+  const worksheet = validateStudentWebWorksheet({
     schemaVersion: "web-worksheet.v1",
     instanceHash: delivery.instanceHash,
     assignmentId: delivery.assignmentId,
@@ -51,7 +63,7 @@ export function projectStudentWorksheetForWeb(
     expectedMinutes: delivery.expectedMinutes,
     variant: "student",
     introduction: firstSlot.prompt.instruction,
-    workedExample: reviewedWorkedExample,
+    workedExample: REVIEWED_WORKED_EXAMPLE,
     items: delivery.slots.map((slot, index) => ({
       id: slot.id,
       ordinal: index + 1,
@@ -59,13 +71,90 @@ export function projectStudentWorksheetForWeb(
         kind: "fraction-addition",
         left: slot.prompt.left,
         right: slot.prompt.right,
-        accessibleText: slot.prompt.accessibleText,
+        accessibleText: fractionAdditionAccessibleText(
+          slot.prompt.left,
+          slot.prompt.right,
+        ),
       },
       responseLabel: `Your answer for problem ${index + 1}`,
       printFallback: slot.printFallback.text,
     })),
     attributions: delivery.attributions.map(projectAttribution),
-  };
+  });
+  assertWorkedExampleDoesNotRevealPracticeAnswers(
+    worksheet.workedExample,
+    materialized.instance.slots.map((slot) => slot.canonicalAnswer.value),
+  );
+  assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
+    worksheet,
+    materialized.instance.slots.map((slot) => slot.canonicalAnswer.value),
+  );
+  return worksheet;
+}
+
+/**
+ * Scan the final validated Web DTO, not an earlier intermediate projection.
+ * Global fields and every non-prompt item field are checked against every
+ * answer. Structured prompt operands may legitimately equal a different
+ * problem's result; their accessible text is therefore derived locally from
+ * those operands and the prompt is checked only against its own answer.
+ */
+function assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
+  worksheet: StudentWebWorksheet,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  if (worksheet.items.length !== canonicalAnswers.length) {
+    throw new Error("Web worksheet item-to-answer mapping is inconsistent");
+  }
+
+  const { items, ...globalWorksheet } = worksheet;
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+    globalWorksheet,
+    canonicalAnswers,
+  );
+  for (const [index, item] of items.entries()) {
+    const answer = canonicalAnswers[index];
+    if (answer === undefined) {
+      throw new Error("Web worksheet item-to-answer mapping is inconsistent");
+    }
+    const { prompt, ...nonPromptItem } = item;
+    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+      nonPromptItem,
+      canonicalAnswers,
+    );
+    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(prompt, [answer]);
+  }
+}
+
+function fractionAdditionAccessibleText(
+  left: CanonicalRationalValue,
+  right: CanonicalRationalValue,
+): string {
+  return `Add ${left.numerator} over ${left.denominator} and ${right.numerator} over ${right.denominator}. Give the answer in lowest terms.`;
+}
+
+export function assertWorkedExampleDoesNotRevealPracticeAnswers(
+  workedExample: WebWorkedExample,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  const structuredExampleValues = [
+    workedExample.left,
+    workedExample.right,
+    workedExample.result,
+  ];
+  if (
+    canonicalAnswers.some((answer) =>
+      structuredExampleValues.some((value) => equalRationals(answer, value)),
+    )
+  ) {
+    throw new TypeError(
+      "The student worked example reveals a generated practice answer value.",
+    );
+  }
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+    workedExample,
+    canonicalAnswers,
+  );
 }
 
 export async function projectAnswerKeyWorksheetForWeb(
@@ -91,7 +180,7 @@ export async function projectAnswerKeyWorksheetForWeb(
     expectedMinutes: instance.expectedMinutes,
     variant: "answer-key",
     introduction: firstSlot.prompt.instruction,
-    workedExample: reviewedWorkedExample,
+    workedExample: REVIEWED_WORKED_EXAMPLE,
     items: instance.slots.map((slot, index) => ({
       id: slot.id,
       ordinal: index + 1,

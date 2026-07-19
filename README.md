@@ -13,22 +13,31 @@ before the content catalog expands.
 
 ## Project status
 
-The first local walking skeleton is implemented. It compiles one draft English
-fraction lesson with author/reviewer metadata, materializes eight deterministic
-exact-rational problems, and projects the same immutable worksheet instance to:
+The Phase 1 local walking skeleton and the anonymous Phase 1.5 daily-plan
+preview are implemented on stacked feature branches. The repository compiles
+one draft English fraction lesson with author/reviewer metadata, materializes
+deterministic exact-rational problems, and projects the same immutable
+worksheet instance to:
 
 - a Hono/React learning experience;
 - separate student and answer-key Web views;
 - renderer-neutral `PrintDocumentV1` data;
-- self-contained, print-ready A4 HTML for both variants.
+- self-contained, print-ready A4 HTML for both variants;
+- an unsaved `/new` preview with an explicit 8-, 12-, or 20-minute practice
+  cap, a learner-readable reason, and same-instance browser printing.
 
 The project is not deployed, connected to either purchased domain, or ready for
-learner data. Hosted PDF rendering, persistence, accounts, daily planning, and
+learner data. The preview uses no account, learning history, cookie, browser
+storage, or durable write and makes no adaptive or mastery claim. Hosted PDF
+rendering, persistent assignments, evidence-based planning, accounts, and
 curriculum breadth remain later roadmap phases.
 
-The executable slice already verifies deterministic seeds and hashes, exact
-answers and solution traces, student answer isolation, hostile content
-rejection, keyboard access, Web/print semantic parity, and production builds.
+The executable slices verify deterministic planner identities, stable problem
+prefixes across practice budgets, seeds and instance hashes, exact answers and
+solution traces, policy-owned exclusion of every rational exposed by the
+reviewed worked example, strict student-only delivery, hostile input/response
+rejection, keyboard access, Web/print semantic parity, A4 pagination, and
+production builds.
 
 ## Local development
 
@@ -52,6 +61,11 @@ Vite. Useful routes include:
 - `/worksheet/sample`
 - `/worksheet/sample/answers`
 - `/worksheet/sample/print?variant=student`
+
+The `/new` page calls the strict student-only `POST /api/plans/preview`
+endpoint. Its request includes an explicit local date, IANA time zone, locale,
+reviewed goal, and practice limit; it never accepts a learner-selected seed or
+free-form learner data.
 
 Generate deterministic local worksheet, Web, and print artifacts with:
 
@@ -84,8 +98,10 @@ Markdown/YAML -> Content AST -> Worksheet Instance AST
                  semantic Web UI            printable PDF
 ```
 
-The exact instance shown to a learner is persisted before presentation. A
-published exercise must remain reproducible from its content revision,
+Every durable assignment is persisted before presentation. The explicitly
+unsaved `/new` cold-start preview is not an assignment or learning evidence; it
+is replayable from its complete versioned inputs but is never durably written.
+A published exercise must remain reproducible from its content revision,
 generator version, RNG version, seed, renderer version, template, and fonts.
 
 ## Non-negotiable properties
@@ -133,6 +149,7 @@ engines are replaceable adapters behind one artifact contract.
 - [Printing, LuaLaTeX, and Cloudflare](docs/research/printing-cloudflare.md)
 - [Naming and domains](docs/naming-and-domains.md)
 - [Delivery roadmap](docs/roadmap.md)
+- [Daily Plan Preview v1](specs/daily-plan-preview-v1.md)
 - [Architecture decision record](docs/decisions/0001-core-architecture.md)
 - [TypeScript 7 toolchain decision](docs/decisions/0002-typescript-7-toolchain.md)
 - [Engineering guardrails](AGENTS.md)

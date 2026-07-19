@@ -4,16 +4,51 @@ Status: proposed foundation
 
 Date: 2026-07-19
 
-This is a target architecture, not a deployment record. The Phase-1 repository
-implements a local walking skeleton through printable A4 HTML. It does not
-claim production DNS/application deployment, durable Cloudflare storage, a
-hosted PDF service, Browser Run rendering, or a LuaLaTeX backend.
+This is a target architecture, not a deployment record. The Phase 1 repository
+implements a local walking skeleton through printable A4 HTML, and Phase 1.5
+adds an anonymous deterministic daily-plan preview. It does not claim
+production DNS/application deployment, durable Cloudflare storage, learner
+adaptation, a hosted PDF service, Browser Run rendering, or a LuaLaTeX backend.
 
 Primary application: `https://exercisebook.app`
 
 Action entrypoint: `https://learning.new`
 
 Decision record: [ADR-0001](decisions/0001-core-architecture.md)
+
+### Current implemented boundary
+
+The local Phase 1.5 slice is intentionally smaller than the target containers
+below. `@exercisebook/planner` is a pure, version-pinned policy package. The
+Hono Worker application service composes that policy with reviewed content,
+the deterministic fraction generator, an integrity check, and a strict
+student-only Web projection. `POST /api/plans/preview` returns an unsaved set
+for one reviewed goal and an 8-, 12-, or 20-minute practice cap.
+
+The current preview has no repository or Cloudflare storage adapter, accepts no
+learner identity or evidence, writes no cookie or browser storage, and does not
+claim mastery or adaptation. Its sequence seed is internal to materialization;
+the public response exposes only the preview identity, pinned public
+provenance, selection reason, counts, minutes, and student worksheet. The
+executable contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+
+The enabled `day-one-fraction-preview@2` policy also owns every reduced
+canonical rational structurally exposed by the reviewed worked example—its
+left operand, right operand, and result—as the ordered plan-activity tuple
+`[1/2, 1/3, 5/6]`. The example's left/right/result values are derived from that
+same tuple. Materialization deterministically advances its retry sequence when
+a candidate answer matches any reserved value. As a second, independent
+boundary, the Web projector fails closed if any structured rational or
+recognized answer-bearing string in the final worked example reveals any
+generated practice answer.
+
+The final validated student DTO uses a field-sensitive scan. Global worksheet
+fields and every non-prompt field of every item are checked against every
+canonical practice answer. A structured prompt operand may legitimately equal
+another slot's answer, so prompt `accessibleText` is derived from the prompt's
+validated operands and each complete prompt is checked against its own answer
+only. This distinction rejects cross-slot leaks in fields such as
+`printFallback` without rejecting mathematically valid operand reuse.
 
 ## 1. Purpose
 
@@ -84,8 +119,11 @@ Canonical links, OAuth callbacks, cookies, APIs, and indexed content belong to
 
 These are correctness properties, not implementation preferences.
 
-1. **The presented assignment is durable.** The exact
-   `WorksheetInstance` is committed before a learner can see or answer it.
+1. **A presented assignment is durable.** The exact `WorksheetInstance` for a
+   durable assignment is committed before a learner can see or answer it. The
+   explicitly unsaved `/new` cold-start preview is not an assignment or
+   evidence; it must instead be replayable from complete versioned inputs and
+   carry `saved: false` through its public contract.
 2. **Generation is reproducible.** Content revision, generator version, RNG
    version, policy version, explicit caller-supplied seed-secret version, base
    seed, stable slot sub-seeds, and duplicate-retry provenance are recorded.
@@ -351,6 +389,11 @@ solution traces not yet unlocked, and any diagnostic field from which they can
 be inferred. The selected concrete `student`, `answer-key`, or `teacher`
 variant lives in the hashed `PrintDocument`, not in the shared instance.
 
+Integrity hashing proves which instance was projected; it does not prove that
+every student-visible field is safe. The implemented final Web projection
+therefore performs the field-sensitive answer scan after validation, even for
+a canonical instance whose recomputed hash is correct.
+
 ## 8. Main daily worksheet sequence
 
 ```mermaid
@@ -527,7 +570,7 @@ events, not destructive rewrites.
 
 ### Daily planner
 
-The initial planner is rule based and explainable:
+The target rule-based planner orders evidence-backed work as follows:
 
 1. due retrieval;
 2. repair of blocking prerequisites;
@@ -537,6 +580,13 @@ The initial planner is rule based and explainable:
 Every plan has a hard item/time budget. Difficulty does not cause an unbounded
 worksheet. The planner records reason codes for each selected slot and supports
 a policy-level kill switch.
+
+The implemented anonymous preview is a cold-start subset: with no learner
+evidence it selects only `current-frontier` practice for the explicitly chosen
+goal. It cannot emit due-review, prerequisite-repair, transfer, readiness, or
+mastery claims. The 20-minute request currently plans 16 minutes because the
+reviewed content cap is eight two-minute items; unused budget is preferable to
+unreviewed padding.
 
 ### Problem generation
 

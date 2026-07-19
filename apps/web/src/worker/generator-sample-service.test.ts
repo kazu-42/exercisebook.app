@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { FRACTION_ADDITION_SAMPLE_INPUT } from "@exercisebook/generators";
+import { addRationals, equalRationals } from "@exercisebook/domain";
+import { DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS } from "@exercisebook/planner";
 
 import { generatorSampleService } from "./generator-sample-service.js";
 
@@ -40,6 +42,35 @@ describe("generator-backed sample service", () => {
     expect(other.instanceHash).not.toBe(first.instanceHash);
     expect(other.assignmentId).not.toBe(first.assignmentId);
     expect(JSON.stringify(first)).not.toContain(requestedSeed);
+  });
+
+  it("reserves every worked-example value across caller-selected seeds", async () => {
+    const seed = "11cfadc10111057deaafb5f31ff85ecc1a6e19c202a5b04a830f803ba9c5f6bb";
+    const worksheet = await generatorSampleService.getSample({
+      seed,
+      variant: "student",
+    });
+    const answerKey = await generatorSampleService.getSample({
+      seed,
+      variant: "answer-key",
+    });
+
+    expect(
+      worksheet.items.every(
+        (item) =>
+          !DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS.some((reserved) =>
+            equalRationals(addRationals(item.prompt.left, item.prompt.right), reserved),
+          ),
+      ),
+    ).toBe(true);
+    expect(worksheet.assignmentId).toBe(
+      "sample-0d2e4f18c887611e9b4e6739ef1cb3697df8f2ef1bc2b2cbceb6c5f8773470ef",
+    );
+    expect(worksheet.instanceHash).toBe(
+      "69d9c7ebe12ab40093f3d084015b02a0f658f57566176793501a6fd208a65888",
+    );
+    expect(answerKey.instanceHash).toBe(worksheet.instanceHash);
+    expect(answerKey.assignmentId).toBe(worksheet.assignmentId);
   });
 
   it("projects an explicit answer key from the same instance hash", async () => {

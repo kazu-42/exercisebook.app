@@ -14,6 +14,7 @@
   "dependencies": {
     "@exercisebook/domain": "workspace:*",
     "@exercisebook/generators": "workspace:*",
+    "@exercisebook/planner": "workspace:*",
     "@exercisebook/schemas": "workspace:*",
     "@exercisebook/web-renderer": "workspace:*",
     "hono": "4.12.30",
