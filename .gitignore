@@ -12,5 +12,6 @@ coverage/
 !.env.example
 
 output/
+artifacts/
 tmp/
 *.log

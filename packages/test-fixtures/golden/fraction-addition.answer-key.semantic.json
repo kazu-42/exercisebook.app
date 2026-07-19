@@ -1,0 +1,117 @@
+{
+  "sourceInstanceHash": "5252ef64b127638b785a94b3a2c7d1859cd7299e7032bed10aa41e07b2c4d12b",
+  "variant": "answer-key",
+  "problemIds": [
+    "practice-01",
+    "practice-02",
+    "practice-03",
+    "practice-04",
+    "practice-05",
+    "practice-06",
+    "practice-07",
+    "practice-08"
+  ],
+  "promptText": [
+    "Add each pair of fractions. Give every answer in lowest terms. Add 6 over 7 and 5 over 6. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 7 and 1 over 4. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 3 and 5 over 7. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 3 over 8 and 1 over 5. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 6 and 1 over 4. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 3 over 5 and 1 over 3. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 4 over 5 and 1 over 8. Give the answer in lowest terms.",
+    "Add each pair of fractions. Give every answer in lowest terms. Add 1 over 2 and 3 over 8. Give the answer in lowest terms."
+  ],
+  "attributionText": [
+    "Draft original lesson by Exercise Book contributors. Not yet licensed for publication. — LicenseRef-ExerciseBook-Draft — https://exercisebook.app/content/math/fractions/add-unlike-denominators"
+  ],
+  "keyEntries": [
+    {
+      "problemId": "practice-01",
+      "responseText": "71 over 42 is already in lowest terms.",
+      "explanation": [
+        "Use 42 as the least common denominator. The least common denominator is 42.",
+        "Rewrite the first addend with the common denominator. 6 over 7 equals 36 over 42.",
+        "Rewrite the second addend with the common denominator. 5 over 6 equals 35 over 42.",
+        "Add the numerators while keeping the common denominator. 36 plus 35 over 42 is 71 over 42.",
+        "Check the fraction. It is already in lowest terms. 71 over 42 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-02",
+      "responseText": "11 over 28 is already in lowest terms.",
+      "explanation": [
+        "Use 28 as the least common denominator. The least common denominator is 28.",
+        "Rewrite the first addend with the common denominator. 1 over 7 equals 4 over 28.",
+        "Rewrite the second addend with the common denominator. 1 over 4 equals 7 over 28.",
+        "Add the numerators while keeping the common denominator. 4 plus 7 over 28 is 11 over 28.",
+        "Check the fraction. It is already in lowest terms. 11 over 28 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-03",
+      "responseText": "22 over 21 is already in lowest terms.",
+      "explanation": [
+        "Use 21 as the least common denominator. The least common denominator is 21.",
+        "Rewrite the first addend with the common denominator. 1 over 3 equals 7 over 21.",
+        "Rewrite the second addend with the common denominator. 5 over 7 equals 15 over 21.",
+        "Add the numerators while keeping the common denominator. 7 plus 15 over 21 is 22 over 21.",
+        "Check the fraction. It is already in lowest terms. 22 over 21 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-04",
+      "responseText": "23 over 40 is already in lowest terms.",
+      "explanation": [
+        "Use 40 as the least common denominator. The least common denominator is 40.",
+        "Rewrite the first addend with the common denominator. 3 over 8 equals 15 over 40.",
+        "Rewrite the second addend with the common denominator. 1 over 5 equals 8 over 40.",
+        "Add the numerators while keeping the common denominator. 15 plus 8 over 40 is 23 over 40.",
+        "Check the fraction. It is already in lowest terms. 23 over 40 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-05",
+      "responseText": "5 over 12 is already in lowest terms.",
+      "explanation": [
+        "Use 12 as the least common denominator. The least common denominator is 12.",
+        "Rewrite the first addend with the common denominator. 1 over 6 equals 2 over 12.",
+        "Rewrite the second addend with the common denominator. 1 over 4 equals 3 over 12.",
+        "Add the numerators while keeping the common denominator. 2 plus 3 over 12 is 5 over 12.",
+        "Check the fraction. It is already in lowest terms. 5 over 12 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-06",
+      "responseText": "14 over 15 is already in lowest terms.",
+      "explanation": [
+        "Use 15 as the least common denominator. The least common denominator is 15.",
+        "Rewrite the first addend with the common denominator. 3 over 5 equals 9 over 15.",
+        "Rewrite the second addend with the common denominator. 1 over 3 equals 5 over 15.",
+        "Add the numerators while keeping the common denominator. 9 plus 5 over 15 is 14 over 15.",
+        "Check the fraction. It is already in lowest terms. 14 over 15 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-07",
+      "responseText": "37 over 40 is already in lowest terms.",
+      "explanation": [
+        "Use 40 as the least common denominator. The least common denominator is 40.",
+        "Rewrite the first addend with the common denominator. 4 over 5 equals 32 over 40.",
+        "Rewrite the second addend with the common denominator. 1 over 8 equals 5 over 40.",
+        "Add the numerators while keeping the common denominator. 32 plus 5 over 40 is 37 over 40.",
+        "Check the fraction. It is already in lowest terms. 37 over 40 is already in lowest terms."
+      ]
+    },
+    {
+      "problemId": "practice-08",
+      "responseText": "7 over 8 is already in lowest terms.",
+      "explanation": [
+        "Use 8 as the least common denominator. The least common denominator is 8.",
+        "Rewrite the first addend with the common denominator. 1 over 2 equals 4 over 8.",
+        "Rewrite the second addend with the common denominator. 3 over 8 equals 3 over 8.",
+        "Add the numerators while keeping the common denominator. 4 plus 3 over 8 is 7 over 8.",
+        "Check the fraction. It is already in lowest terms. 7 over 8 is already in lowest terms."
+      ]
+    }
+  ]
+}

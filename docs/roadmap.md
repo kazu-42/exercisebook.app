@@ -3,6 +3,10 @@
 Status: working plan
 Updated: 2026-07-19
 
+This roadmap is not a deployment-status page. Phase 1 is a local walking
+skeleton; production DNS, hosted Cloudflare persistence, and PDF backends
+remain gated future work.
+
 ## Product direction
 
 Exercise Book aims to make high-quality learning material freely available
@@ -38,6 +42,7 @@ Outcome: a reviewable project with explicit boundaries.
 
 Deliver:
 
+- pinned TypeScript 7 workspace with pnpm and Vite;
 - Exercise Book identity and `exercisebook.app` as the primary application
   domain;
 - repository license decisions for software, original curriculum, and project
@@ -49,6 +54,7 @@ Deliver:
 
 Exit gate:
 
+- the workspace compiler reports TypeScript major version 7;
 - repository and domain names agree;
 - no old project identity remains in public-facing files;
 - code/content licenses are explicitly approved by the owner;
@@ -88,14 +94,21 @@ Suggested curriculum slice:
 Deliver:
 
 - Markdown/YAML/directive compiler;
-- versioned Content AST and Worksheet Instance AST JSON Schemas;
+- normative exported runtime validators (bounded original-input guard followed
+  by versioned Zod contracts) plus checked-in structural JSON Schema
+  interoperability projections for Content AST and Worksheet Instance;
 - exact integer/rational problem model and answer types;
-- deterministic RNG, stable slots, generator versioning, and fixed vectors;
+- exact binary-key HMAC-SHA256/RFC 8785 slot derivation, stable presentation
+  slots, explicit seed-secret version input, generator versioning, and fixed
+  vectors;
+- bounded deterministic commutative-prompt deduplication with retry provenance;
+- draft-only compilation/materialization; published content waits for the
+  trusted release manifest in Phase 2;
 - semantic Web renderer;
 - Print IR with student and answer-key variants;
 - one interactive component with keyboard and print fallback;
-- local Browser/HTML PDF and LuaLaTeX reference fixtures;
-- correctness, property, parity, accessibility, and visual tests.
+- printable A4 HTML for manual/local browser printing, with no PDF backend;
+- correctness, property, parity, accessibility, and HTML rendering tests.
 
 Exit gate:
 
@@ -103,8 +116,9 @@ Exit gate:
 - large seed tests produce no invalid or ambiguous items;
 - canonical answer equals the final solution step;
 - student output contains no hidden answer;
-- Web and PDF preserve prompt/order/answer semantics and attribution;
-- Japanese, English, math, long text, and page-break fixtures pass;
+- Web and PrintDocument/printable HTML preserve prompt/order/answer semantics
+  and attribution;
+- Phase-1 English fraction math, working-space, and page-break fixtures pass;
 - every asset has provenance and license metadata.
 
 Rollback:
