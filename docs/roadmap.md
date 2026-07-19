@@ -4,7 +4,8 @@ Status: working plan
 Updated: 2026-07-19
 
 This roadmap is not a deployment-status page. Phase 1 is implemented as a
-local walking skeleton and Phase 1.5 is active on a stacked draft branch;
+local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
+and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3;
 production DNS, hosted Cloudflare persistence, and PDF backends remain gated
 future work.
 
@@ -183,6 +184,92 @@ Rollback:
 - never silently substitute a different problem sequence after a failure.
 
 See [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+
+## Phase 1.6 — Student delivery hardening
+
+Outcome: the shared Web/print student boundary and browser transport fail
+closed before any hosted catalog or PDF service is considered safe.
+
+This is an output-preserving correctness slice. No accepted safe worksheet or
+PrintDocument shape/bytes change; the presentable subset is narrowed by a
+fail-closed authorization check. It adds no persistence or deployment.
+
+Deliver:
+
+- field-sensitive student projection that rejects every canonical answer in
+  global and non-prompt fields while preserving only genuine cross-slot
+  structured prompt operands;
+- an own-answer rule that remains fail-closed for duplicate-equal rationals;
+- student PrintDocument projection from the answer-free
+  `StudentWorksheetDeliveryV1` rather than the full answer-bearing instance;
+- one shared, streaming, duplicate-aware browser JSON response decoder;
+- explicit 32 KiB preview and 64 KiB sample response limits;
+- fatal UTF-8, strict JSON, media-type, cancellation, and 15-second deadline
+  behavior for both browser loaders;
+- component cleanup that aborts superseded fixed-sample requests.
+
+Exit gate:
+
+- a canonical, rehashed cross-slot fallback disclosure fails before student
+  Web or print delivery;
+- a different answer is allowed in prompt text only when it is structurally
+  one of that prompt's operands, while the current answer always fails;
+- malformed, duplicate-key, invalid-UTF-8, misleading-length, oversized, and
+  indefinitely streaming responses fail within explicit resource bounds;
+- caller cancellation and timeout preserve their exact reason identities;
+- fixed vectors and canonical output for every valid sample remain unchanged;
+- full static, artifact, production-bundle browser, and independent review
+  gates pass.
+
+Rollback:
+
+- revert the stacked feature commit; there is no data or contract migration;
+- keep hosted/public student PDF disabled until this gate passes.
+
+See
+[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
+
+## Phase 1.7 — Content-derived, instance-bound presentation
+
+Outcome: the standalone lesson, worksheet Web view, and printable worksheet
+show the same reviewed explanation and worked example committed into the
+concrete instance, rather than application-owned constants.
+
+Deliver:
+
+- an immutable new content revision with a typed semantic fraction-addition
+  worked-example model and exact-rational compiler validation;
+- policy v3 pinning the content revision/hash, selected lesson/example/exercise
+  node IDs, and ordered reserved `[left, right, result]` tuple;
+- fail-closed equality between content-derived example semantics and the
+  policy-owned generator exclusions;
+- a versioned worksheet presentation inside `WorksheetInstanceV2` so the
+  instance hash commits the exact explanation shown;
+- Web worksheet, standalone lesson, and `PrintDocumentV2` projection from that
+  presentation using the Phase 1.6 role-sensitive authorization boundary;
+- immutable preservation of all v1 content, worksheet, sample, and print
+  artifacts and hashes.
+
+Exit gate:
+
+- changing any selected presentation byte changes the v2 instance identity;
+- wrong/missing content identity, node selection, semantic model, or reserved
+  tuple fails rather than falling back;
+- Web, lesson, and print expose the same semantic presentation snapshot and
+  source identity;
+- student Web/print contain no answers, scoring internals, solution traces, or
+  seeds, while answer-key output remains correct;
+- v1 fixed artifacts remain byte-identical and the new A4 layout passes visual,
+  extraction, clipping, and page-break checks.
+
+Rollback:
+
+- disable policy/content v3 for new previews and return to the immutable v1
+  path; never reinterpret or overwrite a historical v1 artifact.
+
+This phase is a prerequisite for the Phase 2 catalog. It explicitly excludes
+answer submission, evidence/mastery, persistence, abuse controls, hosted PDF,
+DNS, and deployment.
 
 ## Phase 2 — Public read-only catalog
 
@@ -452,18 +539,18 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 
 ## The next concrete milestone
 
-The active milestone is Phase 1.5: make `/new` create an anonymous, explainable,
-deterministic practice preview that obeys a hard time budget and prints the same
-loaded student instance. Its executable contract and acceptance matrix are in
-[Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+The active milestone is Phase 1.6: close canonical student-print authorization
+and bounded strict browser-response gaps before hosted delivery. Its executable
+contract and acceptance matrix are in
+[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
 
-The next correctness slice is content-derived lesson and worked-example
-projection so reviewed content, Web, and print no longer rely on an
-application-owned example. The next product-value slice is exact rational
-answer submission and formative feedback for one problem. It must distinguish
-first attempt, retry, and hint use while keeping answers out of the student
-payload and making no mastery claim. The current public deterministic sequence
-is replay provenance, not cryptographic answer secrecy, and must never be used
-to authenticate attempts or justify mastery. Curriculum breadth and
-Cloudflare persistence remain behind those learning-value checks; public
-curriculum publication remains behind the owner's license decision.
+Phase 1.7 then makes reviewed content, Web, and print share an instance-bound
+presentation rather than application-owned examples. The next product-value
+slice after those correctness gates is exact rational answer submission and
+formative feedback for one problem. It must distinguish first attempt, retry,
+and hint use while keeping answers out of the student payload and making no
+mastery claim. The current public deterministic sequence is replay provenance,
+not cryptographic answer secrecy, and must never be used to authenticate
+attempts or justify mastery. Curriculum breadth and Cloudflare persistence
+remain behind those learning-value checks; public curriculum publication
+remains behind the owner's license decision.

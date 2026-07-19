@@ -24,6 +24,8 @@ import {
   TimeZoneSchema,
   WORKSHEET_INSTANCE_V1_SCHEMA,
   assertSafeDataObjectGraph,
+  deriveFractionAdditionAccessibilitySummary,
+  deriveFractionAdditionPromptAccessibleText,
   validateContentDocumentV1,
   validateWorksheetInstanceV1,
   type AttributionV1,
@@ -357,7 +359,7 @@ export function generateFractionAdditionProblem(
       instruction: "Add. Give your answer in lowest terms.",
       left,
       right,
-      accessibleText: `Add ${left.numerator} over ${left.denominator} and ${right.numerator} over ${right.denominator}. Give the answer in lowest terms.`,
+      accessibleText: deriveFractionAdditionPromptAccessibleText(left, right),
     },
     canonicalAnswer: {
       type: "rational",
@@ -381,7 +383,7 @@ export function generateFractionAdditionProblem(
     solutionTrace,
     misconceptions: buildMisconceptions(left, right, answer),
     accessibility: {
-      summary: `Fraction addition problem: ${left.numerator} over ${left.denominator} plus ${right.numerator} over ${right.denominator}.`,
+      summary: deriveFractionAdditionAccessibilitySummary(left, right),
     },
     printFallback: {
       type: "text",

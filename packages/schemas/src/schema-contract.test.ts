@@ -23,11 +23,14 @@ import {
   WORKSHEET_INSTANCE_V1_RUNTIME_INVARIANTS,
   WorksheetInstanceV1Schema,
   assertSafeDataObjectGraph,
+  deriveFractionAdditionAccessibilitySummary,
+  deriveFractionAdditionPromptAccessibleText,
   derivePhase1MathAccessibleText,
   projectWorksheetForStudent,
   validateContentDocumentV1,
   validateWorksheetInstanceV1,
 } from "./index.js";
+import { projectWorksheetForStudentWithCanonicalAnswers } from "./trusted-student-projection.js";
 
 interface SchemaFixture {
   readonly fileUrl: URL;
@@ -494,7 +497,7 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
       accessibilitySummary: "Equivalent to 39 over 35.",
     });
     await expect(projectWorksheetForStudent(accessibilityLeak)).rejects.toThrow(
-      "canonical-answer",
+      "deterministic fraction-addition",
     );
 
     const urlLeak = await materializeWorksheetFixture({
@@ -531,15 +534,173 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
     });
   });
 
+  it("authorizes one detached snapshot when the caller mutates during hashing", async () => {
+    const materialized = await materializeWorksheetFixture({});
+    const expectedAnswer = structuredClone(
+      materialized.instance.slots[0]!.canonicalAnswer.value,
+    );
+    const expectedHash = materialized.instanceHash;
+
+    const pending = projectWorksheetForStudentWithCanonicalAnswers(materialized);
+    materialized.instance.slots[0]!.canonicalAnswer.value = {
+      numerator: "1",
+      denominator: "2",
+    };
+
+    const projection = await pending;
+    expect(projection.canonicalAnswers).toEqual([expectedAnswer]);
+    expect(projection.delivery.instanceHash).toBe(expectedHash);
+  });
+
   it("allows one slot to display an operand equal to another slot's answer", async () => {
-    const materialized = await materializeWorksheetFixture({
+    const base = await materializeWorksheetFixture({
       includeCrossSlotCollision: true,
     });
+    const instance = structuredClone(base.instance);
+    const targetSlot = instance.slots[1];
+    if (targetSlot === undefined) {
+      throw new Error("Expected a two-slot worksheet fixture");
+    }
+    targetSlot.accessibility.summary =
+      "Fraction addition problem: 39 over 35 plus 1 over 2.";
+    const materialized = await rematerializeWorksheetFixture(instance);
 
     await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
       assignmentId: "assignment-1",
-      slots: [{ id: "practice-01" }, { id: "practice-02" }],
+      slots: [
+        { id: "practice-01" },
+        {
+          id: "practice-02",
+          prompt: {
+            left: { numerator: "39", denominator: "35" },
+            accessibleText:
+              "Add 39 over 35 and 1 over 2. Give the answer in lowest terms.",
+          },
+          accessibility: {
+            summary: "Fraction addition problem: 39 over 35 plus 1 over 2.",
+          },
+        },
+      ],
     });
+  });
+
+  it("rejects one slot's answer in another slot's non-prompt fields", async () => {
+    const materialized = await materializeWorksheetFixture({
+      includeCrossSlotCollision: true,
+    });
+    const instance = structuredClone(materialized.instance);
+    const leakedAnswer = instance.slots[1]?.canonicalAnswer.value;
+    const targetSlot = instance.slots[0];
+    if (leakedAnswer === undefined || targetSlot === undefined) {
+      throw new Error("Expected a two-slot worksheet fixture");
+    }
+    targetSlot.printFallback.text = `A leaked answer is ${leakedAnswer.numerator}/${leakedAnswer.denominator}.`;
+
+    await expect(
+      projectWorksheetForStudent(await rematerializeWorksheetFixture(instance)),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it.each(["prompt accessible text", "accessibility summary"] as const)(
+    "rejects cross-slot answer prose in %s when it is not backed by a prompt operand",
+    async (field) => {
+      const materialized = await materializeWorksheetFixture({
+        includeCrossSlotCollision: true,
+      });
+      const instance = structuredClone(materialized.instance);
+      const leakedAnswer = instance.slots[1]?.canonicalAnswer.value;
+      const targetSlot = instance.slots[0];
+      if (leakedAnswer === undefined || targetSlot === undefined) {
+        throw new Error("Expected a two-slot worksheet fixture");
+      }
+      const leakedText =
+        `A leaked answer is ${leakedAnswer.numerator} over ` +
+        `${leakedAnswer.denominator}.`;
+      if (field === "prompt accessible text") {
+        targetSlot.prompt.accessibleText = leakedText;
+      } else {
+        targetSlot.accessibility.summary = leakedText;
+      }
+
+      await expect(
+        projectWorksheetForStudent(await rematerializeWorksheetFixture(instance)),
+      ).rejects.toThrow("deterministic fraction-addition");
+    },
+  );
+
+  it.each(["prompt accessible text", "accessibility summary"] as const)(
+    "rejects appended answer prose in exact %s even when the value is a prompt operand",
+    async (field) => {
+      const materialized = await materializeWorksheetFixture({
+        includeCrossSlotCollision: true,
+      });
+      const instance = structuredClone(materialized.instance);
+      const answer = instance.slots[0]?.canonicalAnswer.value;
+      const targetSlot = instance.slots[1];
+      if (answer === undefined || targetSlot === undefined) {
+        throw new Error("Expected a two-slot worksheet fixture");
+      }
+      const appendedAnswer = ` The answer is ${answer.numerator}/${answer.denominator}.`;
+      if (field === "prompt accessible text") {
+        targetSlot.prompt.accessibleText += appendedAnswer;
+      } else {
+        targetSlot.accessibility.summary += appendedAnswer;
+      }
+
+      await expect(
+        projectWorksheetForStudent(await rematerializeWorksheetFixture(instance)),
+      ).rejects.toThrow("deterministic fraction-addition");
+    },
+  );
+
+  it("checks prompt instructions against every answer without an operand exception", async () => {
+    const materialized = await materializeWorksheetFixture({
+      includeCrossSlotCollision: true,
+    });
+    const instance = structuredClone(materialized.instance);
+    const answer = instance.slots[0]?.canonicalAnswer.value;
+    const targetSlot = instance.slots[1];
+    if (answer === undefined || targetSlot === undefined) {
+      throw new Error("Expected a two-slot worksheet fixture");
+    }
+    targetSlot.prompt.instruction = `Add the fractions. The answer is ${answer.numerator}/${answer.denominator}.`;
+
+    await expect(
+      projectWorksheetForStudent(await rematerializeWorksheetFixture(instance)),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it("rejects an own-answer prompt operand when another slot has the same answer", async () => {
+    const materialized = await materializeWorksheetFixture({
+      includeCrossSlotCollision: true,
+    });
+    const instance = structuredClone(materialized.instance);
+    const duplicateAnswer = instance.slots[1]?.canonicalAnswer.value;
+    const targetSlot = instance.slots[0];
+    const finalStep = targetSlot?.solutionTrace.at(-1);
+    if (
+      duplicateAnswer === undefined ||
+      targetSlot === undefined ||
+      finalStep === undefined
+    ) {
+      throw new Error("Expected a two-slot worksheet fixture with a solution");
+    }
+    targetSlot.canonicalAnswer.value = { ...duplicateAnswer };
+    targetSlot.scoringRule.accepted = { ...duplicateAnswer };
+    finalStep.result = { ...duplicateAnswer };
+    targetSlot.prompt.left = { ...duplicateAnswer };
+    targetSlot.prompt.accessibleText = deriveFractionAdditionPromptAccessibleText(
+      targetSlot.prompt.left,
+      targetSlot.prompt.right,
+    );
+    targetSlot.accessibility.summary = deriveFractionAdditionAccessibilitySummary(
+      targetSlot.prompt.left,
+      targetSlot.prompt.right,
+    );
+
+    await expect(
+      projectWorksheetForStudent(await rematerializeWorksheetFixture(instance)),
+    ).rejects.toThrow("canonical-answer");
   });
 
   it("checks global attribution strings against every slot answer", async () => {
@@ -671,6 +832,11 @@ interface WorksheetFixtureOverrides {
 
 async function materializeWorksheetFixture(overrides: WorksheetFixtureOverrides) {
   const instance = WorksheetInstanceV1Schema.parse(worksheetInstanceFixture(overrides));
+  return rematerializeWorksheetFixture(instance);
+}
+
+async function rematerializeWorksheetFixture(instanceValue: unknown) {
+  const instance = validateWorksheetInstanceV1(instanceValue);
   const canonicalJson = canonicalizeJson(instance);
   return {
     instance,
@@ -730,7 +896,7 @@ function worksheetInstanceFixture(overrides: WorksheetFixtureOverrides): unknown
           instruction: "Add the fractions.",
           left: { numerator: "2", denominator: "5" },
           right: { numerator: "5", denominator: "7" },
-          accessibleText: "Add two fifths and five sevenths.",
+          accessibleText: "Add 2 over 5 and 5 over 7. Give the answer in lowest terms.",
         },
         canonicalAnswer: {
           type: "rational",
@@ -769,7 +935,7 @@ function worksheetInstanceFixture(overrides: WorksheetFixtureOverrides): unknown
         accessibility: {
           summary:
             overrides.accessibilitySummary ??
-            "A fraction addition problem with unlike denominators.",
+            "Fraction addition problem: 2 over 5 plus 5 over 7.",
         },
         printFallback: {
           type: "text",
@@ -815,7 +981,7 @@ function crossSlotCollisionWorksheetSlotFixture(id: string): unknown {
       instruction: "Add the fractions.",
       left: { numerator: "39", denominator: "35" },
       right: { numerator: "1", denominator: "2" },
-      accessibleText: "Add 39 over 35 and 1 over 2.",
+      accessibleText: "Add 39 over 35 and 1 over 2. Give the answer in lowest terms.",
     },
     canonicalAnswer: {
       type: "rational",
@@ -844,7 +1010,7 @@ function crossSlotCollisionWorksheetSlotFixture(id: string): unknown {
     ],
     misconceptions: [],
     accessibility: {
-      summary: "A fraction addition problem with unlike denominators.",
+      summary: "Fraction addition problem: 39 over 35 plus 1 over 2.",
     },
     printFallback: {
       type: "text",

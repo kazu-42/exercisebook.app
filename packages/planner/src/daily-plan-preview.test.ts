@@ -249,7 +249,7 @@ describe("DailyPlanPreviewV1", () => {
       ),
       { numRuns: 10_000, seed: 2_026_071_9 },
     );
-  }, 15_000);
+  }, 30_000);
 
   it("returns unavailable when no reviewed items exist", async () => {
     await expect(

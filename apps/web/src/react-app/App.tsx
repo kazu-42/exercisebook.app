@@ -529,38 +529,53 @@ type WorksheetPageProps = Readonly<{
   variant: WebWorksheetVariant;
 }>;
 
+type WorksheetPageState =
+  | Readonly<{ status: "loading"; variant: WebWorksheetVariant }>
+  | Readonly<{ status: "failed"; variant: WebWorksheetVariant }>
+  | Readonly<{
+      status: "ready";
+      variant: WebWorksheetVariant;
+      worksheet: WebWorksheet;
+    }>;
+
 function WorksheetPage({ loadSample, printMode = false, variant }: WorksheetPageProps) {
-  const [worksheet, setWorksheet] = useState<WebWorksheet | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [state, setState] = useState<WorksheetPageState>({
+    status: "loading",
+    variant,
+  });
 
   useEffect(() => {
     let active = true;
-    setWorksheet(null);
-    setFailed(false);
+    const controller = new AbortController();
+    setState({ status: "loading", variant });
 
-    void loadSample(variant)
+    void loadSample(variant, controller.signal)
       .then((loaded) => {
         if (!active) {
           return;
         }
         if (loaded.variant !== variant) {
-          setFailed(true);
+          setState({ status: "failed", variant });
           return;
         }
-        setWorksheet(loaded);
+        setState({ status: "ready", variant, worksheet: loaded });
       })
       .catch(() => {
         if (active) {
-          setFailed(true);
+          setState({ status: "failed", variant });
         }
       });
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [loadSample, variant]);
 
-  if (failed) {
+  const visibleState: WorksheetPageState =
+    state.variant === variant ? state : { status: "loading", variant };
+
+  if (visibleState.status === "failed") {
     return (
       <div className="worksheet-state">
         <p role="alert">The sample worksheet could not be loaded.</p>
@@ -569,7 +584,7 @@ function WorksheetPage({ loadSample, printMode = false, variant }: WorksheetPage
     );
   }
 
-  if (worksheet === null) {
+  if (visibleState.status === "loading") {
     return (
       <div className="worksheet-state" role="status">
         <span className="loading-mark" aria-hidden="true" />
@@ -577,6 +592,8 @@ function WorksheetPage({ loadSample, printMode = false, variant }: WorksheetPage
       </div>
     );
   }
+
+  const worksheet = visibleState.worksheet;
 
   if (printMode) {
     return (

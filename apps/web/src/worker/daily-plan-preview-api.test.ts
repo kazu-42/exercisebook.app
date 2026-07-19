@@ -14,6 +14,7 @@ import {
   validateDailyPlanPreviewResponseV1,
   type DailyPlanPreviewResponseV1,
 } from "../shared/daily-plan-preview-contract.js";
+import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
 import { createApp } from "./app.js";
 import type {
   DailyPlanPreviewService,
@@ -136,6 +137,11 @@ describe("POST /api/plans/preview", () => {
       expect(first.status).toBe(200);
       expectPrivateJsonHeaders(first);
       const firstText = await first.text();
+      const responseBytes = new TextEncoder().encode(firstText).byteLength;
+      expect(responseBytes).toBeLessThanOrEqual(MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES);
+      expect(responseBytes * 2).toBeLessThanOrEqual(
+        MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES,
+      );
       expect(await repeated.text()).toBe(firstText);
       const payload = validateDailyPlanPreviewResponseV1(JSON.parse(firstText));
       expect(payload.plan).toMatchObject({

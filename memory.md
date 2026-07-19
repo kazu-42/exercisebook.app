@@ -131,7 +131,7 @@ need rate limiting plus reviewed security headers. The public deterministic
 sequence provides replay, not answer secrecy, and preview attempts cannot be
 treated as mastery evidence.
 
-## 2026-07-19 - Make the final student leak scan field-sensitive
+## 2026-07-19 - Make every student delivery boundary field-sensitive
 
 **Context**: A reviewer constructed a hash-correct two-slot instance in which
 the first slot's `printFallback` disclosed the second slot's canonical answer.
@@ -140,17 +140,71 @@ could not prove student-field safety. A blanket cross-answer scan of each whole
 item was also incorrect: fraction operands can legitimately equal another
 slot's reduced answer.
 
-**Decision**: Scan the final validated student DTO by field role. Global fields
-and each item's non-prompt fields are checked against every canonical answer.
-Prompt `accessibleText` is derived from validated structured operands, and each
-complete prompt is checked only against its own answer, allowing legitimate
-cross-slot operand reuse without allowing cross-slot prose or `printFallback`
-leaks. Worked-example structured values and recognized strings retain their
-separate all-answer scan.
+**Decision**: Scan student data by field role at the shared delivery boundary
+and again after Web or Print projection. Global fields, prompt instructions,
+and every non-prompt field are checked against all canonical answers. Structured
+left/right operands may equal another slot's answer, but never their own;
+prompt `accessibleText` and its accessibility summary must equal deterministic
+derivations from those operands, so appended answer prose cannot inherit the
+operand exception. Student PrintDocument helpers consume the answer-free
+delivery, and the final validated PrintDocument independently verifies prompt
+and fraction-bar operand roles while scanning captions, fallbacks, prose, and
+all other fields against every answer. Worked-example structured values and
+recognized strings retain their separate all-answer scan.
 
 **Impact**: The repaired regression re-canonicalizes and re-hashes the mutated
 two-slot instance: a cross-slot value in a structured prompt operand passes,
-while that same value in another item's `printFallback` fails closed. Browser
-request cancellation follows the same identity-preserving rule across the
-post-header body-read phase: caller abort reasons remain caller aborts, timeout
-errors remain timeout errors, and neither is wrapped as an invalid response.
+while that same value in another item's `printFallback` or appended prompt prose
+fails closed. Safe existing canonical worksheet, student/answer-key
+PrintDocument, and printable outputs remain unchanged; hash-valid but unsafe
+instances are no longer student-presentable. See
+[Student Delivery Hardening v1](specs/student-delivery-hardening-v1.md).
+
+## 2026-07-19 - Bound strict browser response decoding
+
+**Context**: `Response.json()` buffers outside an application-owned byte budget
+and accepts duplicate object keys with JavaScript last-key-wins semantics. A
+byte cap alone also permits unbounded zero-byte reads or excessive per-chunk
+bookkeeping, and the fixed sample loader did not cancel on component cleanup.
+
+**Decision**: Both browser worksheet loaders share a streaming response
+decoder. Preview and sample routes own 32 KiB and 64 KiB delivered-byte limits;
+the decoder additionally allows at most 1,024 non-final reads, counts empty
+chunks, requires byte chunks, decodes UTF-8 fatally, and uses the existing
+64-depth/512-value duplicate-aware JSON parser. Media type and declared length
+are early fail-closed checks; actual delivered bytes remain authoritative.
+Every early or streaming failure best-effort cancels the body without replacing
+the primary error. Caller abort and 15-second timeout reasons retain exact
+identity, and React cleanup actively aborts superseded sample work.
+
+**Impact**: Producer-budget tests keep every reviewed 8/12/20-minute preview
+and both fixed sample variants below their route caps before learner delivery.
+Expected cleanup does not display an error or permit stale variant overwrite.
+The decoder does not use Fetch convenience body decoders. Limit growth is an
+explicit contract review rather than an incidental DTO-schema expansion.
+
+## 2026-07-19 - Authorize one detached projection snapshot
+
+**Context**: Integrity checks hash asynchronously. A caller that retained the
+materialization object could mutate it while hashing, and several consumers
+then re-read that caller-owned object for answer checks, answer-key projection,
+or hash comparison. The values being authorized and the values being emitted
+could therefore diverge even in single-threaded JavaScript across an `await`.
+
+**Decision**: Student authorization captures every safe materialization field
+and validates a detached instance before the first asynchronous yield. Trusted
+Web and Print projectors receive the answer-free delivery plus detached
+canonical answers through the explicit server-only
+`@exercisebook/schemas/trusted-student-projection` subpath. Browser-reachable
+modules cannot import that subpath under the repository boundary check.
+Consumers never re-read the original materialization after awaiting. Both Web
+variants and both PrintDocument variants validate their final DTOs; answer-key
+PrintDocument keeps schema-valid source accessibility prose, while the student
+variant requires exact operand-derived prose.
+
+**Impact**: Caller-mutation regressions cover the shared projector, daily
+service, Web student and answer-key, materialization verifier, and both print
+variants. Existing generated worksheet, Web, and print bytes retain their
+versioned identities. A source whose projected answer-key prose exceeds the Web
+DTO bound now fails closed instead of returning an invalid object; the source
+and target text-bound reconciliation remains explicit follow-up work.

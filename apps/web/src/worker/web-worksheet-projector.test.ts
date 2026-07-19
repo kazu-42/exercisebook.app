@@ -91,7 +91,7 @@ async function createMaterializedFixture(
           },
         ],
         accessibility: {
-          summary: "Add one fourth and one third.",
+          summary: "Fraction addition problem: 1 over 4 plus 1 over 3.",
         },
         printFallback: {
           type: "text",
@@ -145,6 +145,8 @@ async function createCrossSlotFixture(): Promise<MaterializedWorksheetInstanceV1
     right: { numerator: "1", denominator: "12" },
     accessibleText: "Add 1 over 6 and 1 over 12. Give the answer in lowest terms.",
   };
+  secondSlot.accessibility.summary =
+    "Fraction addition problem: 1 over 6 plus 1 over 12.";
   secondSlot.canonicalAnswer.value = secondAnswer;
   secondSlot.scoringRule.accepted = secondAnswer;
   const finalStep = secondSlot.solutionTrace.at(-1)!;
@@ -172,6 +174,9 @@ describe("Web worksheet projector", () => {
 
     expect(worksheet.instanceHash).toBe(materialized.instanceHash);
     expect(worksheet.items.map((item) => item.id)).toEqual(["practice-01"]);
+    expect(worksheet.items[0]?.prompt.accessibleText).toBe(
+      "Add 1 over 4 and 1 over 3. Give the answer in lowest terms.",
+    );
     expect(serialized).not.toContain("baseSeed");
     expect(serialized).not.toContain("slotSeed");
     expect(serialized).not.toContain("canonicalAnswer");
@@ -190,6 +195,62 @@ describe("Web worksheet projector", () => {
     await expect(projectStudentWorksheetForWeb(materialized)).rejects.toThrow(
       "worked example",
     );
+  });
+
+  it("uses the authorized answer snapshot when the caller mutates during hashing", async () => {
+    const materialized = await createMaterializedFixture({
+      numerator: "5",
+      denominator: "6",
+    });
+
+    const pending = projectStudentWorksheetForWeb(materialized);
+    materialized.instance.slots[0]!.canonicalAnswer.value = {
+      numerator: "7",
+      denominator: "12",
+    };
+
+    await expect(pending).rejects.toThrow("worked example");
+  });
+
+  it("projects an answer key from one detached snapshot", async () => {
+    const materialized = await createMaterializedFixture();
+    const expectedHash = materialized.instanceHash;
+    const expectedTitle = materialized.instance.title;
+
+    const pending = projectAnswerKeyWorksheetForWeb(materialized);
+    materialized.instance.title = "Caller-mutated title";
+    materialized.instance.slots[0]!.canonicalAnswer.value = {
+      numerator: "1",
+      denominator: "2",
+    };
+
+    const worksheet = await pending;
+    expect(worksheet.instanceHash).toBe(expectedHash);
+    expect(worksheet.title).toBe(expectedTitle);
+    expect(worksheet.items[0]?.answer).toMatchObject({
+      numerator: "7",
+      denominator: "12",
+    });
+  });
+
+  it("validates the final answer-key DTO and fails closed on oversized solution prose", async () => {
+    const materialized = await createMaterializedFixture();
+    const instance = structuredClone(materialized.instance);
+    const firstStep = instance.slots[0]?.solutionTrace[0];
+    if (firstStep === undefined) {
+      throw new Error("Expected a solution step fixture");
+    }
+    firstStep.explanation = "e".repeat(2_000);
+    firstStep.accessibleText = "a".repeat(2_000);
+    const canonicalJson = canonicalizeJson(instance);
+
+    await expect(
+      projectAnswerKeyWorksheetForWeb({
+        instance,
+        canonicalJson,
+        instanceHash: await sha256Hex(canonicalJson),
+      }),
+    ).rejects.toThrow();
   });
 
   it("scans worked-example prose for a practice answer even when its result differs", () => {
@@ -240,6 +301,24 @@ describe("Web worksheet projector", () => {
       numerator: "1",
       denominator: "4",
     });
+    expect(worksheet.items[0]?.prompt.accessibleText).toBe(
+      "Add 1 over 4 and 1 over 3. Give the answer in lowest terms.",
+    );
+  });
+
+  it("rejects appended answer prose hidden behind an authorized prompt operand", async () => {
+    const base = await createCrossSlotFixture();
+    const instance = structuredClone(base.instance);
+    instance.slots[0]!.prompt.accessibleText += " The answer is 1/4.";
+    const canonicalJson = canonicalizeJson(instance);
+
+    await expect(
+      projectStudentWorksheetForWeb({
+        instance,
+        canonicalJson,
+        instanceHash: await sha256Hex(canonicalJson),
+      }),
+    ).rejects.toThrow("deterministic fraction-addition derivation");
   });
 
   it("rejects a different problem's answer in a non-prompt item field", async () => {

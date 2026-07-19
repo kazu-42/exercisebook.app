@@ -3,11 +3,17 @@ import {
   type DailyPlanPreviewResponseV1,
 } from "../shared/daily-plan-preview-contract.js";
 import {
+  cancelResponseBodyBestEffort,
+  readBoundedStrictJsonResponse,
+} from "../shared/bounded-json-response.js";
+import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
+import {
   DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
   type DailyPlanPreviewRequestV1,
 } from "@exercisebook/planner";
 
 export { DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA };
+export { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES };
 export type { DailyPlanPreviewRequestV1 };
 
 export const DAILY_PLAN_PREVIEW_TIMEOUT_MS = 15_000;
@@ -65,20 +71,24 @@ export const loadDailyPlanPreviewFromApi: DailyPlanPreviewLoader = async (
       throw error;
     }
 
+    if (requestController.signal.aborted) {
+      cancelResponseBodyBestEffort(response, requestController.signal.reason);
+      throwRequestAbortReason();
+    }
+
     if (!response.ok) {
-      throw new Error(`Daily plan preview request failed: ${String(response.status)}`);
+      const error = new Error(
+        `Daily plan preview request failed: ${String(response.status)}`,
+      );
+      cancelResponseBodyBestEffort(response, error);
+      throw error;
     }
 
     try {
-      const contentType = response.headers
-        .get("Content-Type")
-        ?.split(";", 1)[0]
-        ?.trim()
-        .toLowerCase();
-      if (contentType !== "application/json") {
-        throw new TypeError("Expected an application/json preview response.");
-      }
-      const payload: unknown = await response.json();
+      const payload = await readBoundedStrictJsonResponse(response, {
+        maximumBytes: MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES,
+        signal: requestController.signal,
+      });
       const validated = validateDailyPlanPreviewResponseV1(payload);
       if (
         validated.plan.goalId !== request.goalId ||
