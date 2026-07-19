@@ -1,6 +1,6 @@
 # Student Delivery Hardening v1 implementation tasks
 
-Status: active
+Status: complete in draft PR #3
 Branch: `feat/student-delivery-hardening`
 Base: `feat/daily-plan-preview`
 
@@ -135,7 +135,7 @@ SDH-001
 
 ### SDH-006 — Independent review and stacked draft PR
 
-- Status: in progress
+- Status: complete
 - Size: S
 - Owner: independent reviewers then coordinator
 - Dependencies: SDH-005
@@ -145,10 +145,14 @@ SDH-001
 - Required evidence: clean worktree, remote SHA and draft/base/head readback,
   successful CI, no merge or deployment, and remaining findings recorded as
   explicit next-loop work
-- Evidence so far: independent browser-transport, snapshot/privacy,
+- Evidence: independent browser-transport, snapshot/privacy,
   integration/documentation, and release-readiness reviews approved after their
-  findings were repaired. Commit, remote, stacked draft PR, and CI readback are
-  still pending.
+  findings were repaired. Implementation commit
+  `1be4c7d8c80ab0c55e0ab1819086065aab4c8d08` was pushed to
+  `feat/student-delivery-hardening`; draft PR #3 is open and mergeable with base
+  `feat/daily-plan-preview` and the expected head. GitHub CI passed its full
+  `Format, types, tests, and build` job in 44 seconds. The PR remains unmerged
+  and nothing was deployed.
 
 ## Deferred findings (not silently dropped)
 
