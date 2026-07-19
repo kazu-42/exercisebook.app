@@ -271,6 +271,13 @@ This phase is a prerequisite for the Phase 2 catalog. It explicitly excludes
 answer submission, evidence/mastery, persistence, abuse controls, hosted PDF,
 DNS, and deployment.
 
+Product-direction gate: the current local Web pages are implementation
+prototypes and are not an approved product or visual direction. Continue the
+renderer-neutral content, planner, instance, privacy, and print contracts, but
+align with the owner on the primary learner journey, information architecture,
+content density, interaction model, and visual references before the Phase 1.7
+Web surface is treated as final or receives substantial design polish.
+
 ## Phase 2 — Public read-only catalog
 
 Outcome: anyone can browse explanations, worked examples, and fixed practice

@@ -1,5 +1,6 @@
 export * from "./common.js";
 export * from "./content-document-v1.js";
+export * from "./content-document-v2.js";
 export * from "./phase-1-safe-math.js";
 export * from "./runtime-invariants.js";
 export {
@@ -34,3 +35,22 @@ export type {
   WorksheetInstanceV1,
   WorksheetSlotV1,
 } from "./worksheet-instance-v1.js";
+export {
+  ContentReferenceV2Schema,
+  SlotProvenanceV2Schema,
+  WORKSHEET_INSTANCE_V2_SCHEMA,
+  WORKSHEET_PRESENTATION_V1_SCHEMA,
+  WorksheetInstanceV2Schema,
+  WorksheetPresentationV1Schema,
+  WorksheetSlotV2Schema,
+  validateWorksheetInstanceV2,
+  validateWorksheetPresentationV1,
+} from "./worksheet-instance-v2.js";
+export type {
+  ContentReferenceV2,
+  MaterializedWorksheetInstanceV2,
+  SlotProvenanceV2,
+  WorksheetInstanceV2,
+  WorksheetPresentationV1,
+  WorksheetSlotV2,
+} from "./worksheet-instance-v2.js";

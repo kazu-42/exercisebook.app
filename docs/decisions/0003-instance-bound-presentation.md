@@ -85,8 +85,10 @@ The selected presentation contains only the material needed by the assignment:
 
 Attribution remains in the instance's top-level attribution collection and is
 derived from the same validated content identity. Validators and parity tests
-require exact attribution agreement across content, instance, standalone
-lesson, Web worksheet, and PrintDocument.
+require exact attribution agreement across controlled content-to-instance
+materialization, standalone lesson, Web worksheet, and PrintDocument. The
+standalone instance schema validates shape and internal consistency; it does
+not claim to reconstruct absent author/license source data.
 
 It is not a ContentDocument copy and does not contain React elements, DOM
 attributes, HTML, CSS, TeX documents, PDF commands, or backend layout

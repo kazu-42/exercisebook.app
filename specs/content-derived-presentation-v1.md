@@ -462,9 +462,12 @@ another exercise, application copy, or a generated example.
 Attribution remains a top-level worksheet/content concern rather than a field
 inside `WorksheetPresentationV1`. The resolver returns presentation semantics;
 the materializer separately derives the instance attribution from the same
-validated `ContentDocumentV2`. Instance validation and cross-surface parity
-tests require that exact attribution to agree across pinned content, worksheet,
-lesson DTO, Web worksheet, and PrintDocument.
+validated `ContentDocumentV2`. A standalone `WorksheetInstanceV2` validator can
+prove attribution shape and instance consistency, but cannot reconstruct the
+author/license source that is intentionally absent from the presentation.
+Resolver/materializer integration tests prove derivation from content, and
+cross-surface parity tests require that resulting attribution to agree across
+the worksheet, lesson DTO, Web worksheet, and PrintDocument.
 
 ## 11. WorksheetInstanceV2 and materialization
 
@@ -499,6 +502,10 @@ canonical JSON, and SHA-256 instance hash. Changing any selected presentation
 value or any pinned content identity changes the canonical bytes and instance
 hash. An edit to source whitespace that normalizes to the same visible text
 still changes the source/content hash and therefore the instance identity.
+The three node IDs are fixed literals in presentation v1: an in-place ID change
+is invalid and must be rejected, not rehashed as another v1 value. If a future
+policy/presentation version permits a different selected ID, that valid new
+identity will necessarily produce different canonical bytes.
 
 ### Data flow
 
@@ -741,8 +748,9 @@ different bytes.
 
 - [ ] Same complete v2 input yields byte-identical canonical instance JSON and
       hash.
-- [ ] Changing any selected presentation text, title, model value, node ID, or
-      pinned content identity changes the instance hash.
+- [ ] Changing any schema-valid selected presentation text, title, model value,
+      or pinned content identity changes the instance hash; changing a fixed
+      v1 node ID is rejected before materialization.
 - [ ] Slot instruction, generator, content provenance, and exclusion checks
       agree with the selected presentation.
 - [ ] Student delivery contains the exact worked-example presentation but no

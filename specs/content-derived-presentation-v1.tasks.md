@@ -22,9 +22,9 @@ available and byte-identical.
 | Task | Outcome | Size | Dependencies | Status |
 | --- | --- | --- | --- | --- |
 | P17-001 | Freeze specification, ADR, contracts, and compatibility baseline | M | none | complete |
-| P17-002 | Compile immutable ContentDocumentV2 revision 2 | L | P17-001 | pending |
-| P17-003 | Add plan/registry v2 and policy v3 | L | P17-001; vector lock after P17-002 | pending |
-| P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 | pending |
+| P17-002 | Compile immutable ContentDocumentV2 revision 2 | L | P17-001 | complete |
+| P17-003 | Add plan/registry v2 and policy v3 | L | P17-001; vector lock after P17-002 | in progress |
+| P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 planner foundation | complete |
 | P17-005 | Authorize detached StudentWorksheetDeliveryV2 | L | P17-004 | pending |
 | P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | pending |
 | P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | pending |
@@ -103,7 +103,7 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-002 — ContentDocumentV2 and compiler v2
 
-- Status: pending
+- Status: complete
 - Type: feature / tests
 - Size: L
 - Dependencies: P17-001
@@ -133,10 +133,22 @@ Every value below must remain exact throughout Phase 1.7.
     fail with bounded diagnostics;
   - checked-in v2 JSON Schema is current;
   - all v1 content hashes and bytes remain exact.
+- Current evidence:
+  - revision-2 source hash is
+    `456c8908debd52c7fcc5eba6e2e9a38434b5fcd8343e7a14a427faae34502523`;
+  - canonical revision-2 content hash is
+    `944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd`;
+  - compiler tests pass 107/107: 56 frozen-v1 and 51 v2 tests;
+  - the v2 boundary rejects noncanonical rational source, unsafe prose,
+    variable or missing container closing fences, one- and multi-column table
+    syntax, and Unicode White_Space normalization drift including U+0085;
+  - content/compiler typecheck, schema generation, `content:check`, formatting,
+    and independent foundation review pass while both frozen v1 hashes remain
+    exact.
 
 ## P17-003 — Plan/registry v2 and policy v3
 
-- Status: pending
+- Status: in progress — planner-policy foundation complete; wire integration pending
 - Type: feature / tests
 - Size: L
 - Dependencies: P17-001; final hash/vector lock depends on P17-002
@@ -160,10 +172,25 @@ Every value below must remain exact throughout Phase 1.7.
   - policy tuple order/length/value mutation tests fail closed;
   - v3 fixed plan/seed vectors are recorded;
   - all policy-v2 vectors in the frozen baseline remain exact.
+- Current evidence:
+  - the enabled final registry pins the exact P17-002 source/content hashes,
+    compiler v2, reviewed count eight, three selected node IDs, and ordered
+    `[1/2, 1/3, 5/6]` tuple;
+  - the 12-minute v3 plan ID is
+    `preview-d8e7bffb76e814cf8fed232ed5817008d9291247f94d4e63bda6fbeb647daf33`
+    and its base seed is
+    `338bee573add98fce96ae0616b008d002f1bb613bcbb805d6b291ce34bb1671f`;
+  - planner tests pass 83/83: 27 frozen-v1 and 56 v2 tests, including
+    detached snapshots, exact reviewed-count matching, and non-throwing
+    lexical rational validation;
+  - planner typecheck, formatting, and independent foundation review pass;
+  - response-v2 contracts, strict Worker request/response dispatch, trusted
+    resolution-error mapping, and sanitized HTTP failure mapping remain open,
+    so the ledger does not mark the whole task complete yet.
 
 ## P17-004 — Presentation resolver and WorksheetInstanceV2
 
-- Status: pending
+- Status: complete
 - Type: feature / tests
 - Size: L
 - Dependencies: P17-002, P17-003
@@ -186,11 +213,31 @@ Every value below must remain exact throughout Phase 1.7.
     instruction, provenance, generator, and excluded answers.
 - Completion evidence:
   - identical inputs yield byte-identical v2 instances;
-  - every selected presentation change changes v2 identity;
+  - every schema-valid selected presentation/content change changes v2
+    identity, while an in-place mutation of a fixed node ID is rejected;
   - wrong/missing/duplicate node and content/tuple mismatch fixtures fail before
     an instance is returned;
   - fixed v2 instance vector is recorded;
   - fixed WorksheetInstanceV1 remains exact.
+- Current evidence:
+  - the additive WorksheetPresentationV1/WorksheetInstanceV2 schema lane and
+    checked-in JSON Schema are implemented; 41 focused tests and all 129 schema
+    tests pass with schema check and TypeScript 7 typecheck;
+  - every v2 rational-bearing slot field uses a lexical gate before exact
+    rational refinement, and schema-level content/presentation/provenance,
+    instruction, generator, arithmetic, exclusion, duration, scoring, and
+    uniqueness relationships fail closed;
+  - the pure resolver passes 36 focused tests for exact content and node
+    selection, arithmetic, ordered exclusions, safe-data detachment, strict
+    envelope keys, and bounded typed errors;
+  - the materializer passes 18 focused tests for deterministic 4/6/8 stable
+    prefixes, same-document presentation/attribution/provenance, broad-seed
+    exclusions, pre-await caller detachment, hostile opaque selection values,
+    and fixed-node/content rejection;
+  - the fixed eight-item WorksheetInstanceV2 hash is
+    `318c97a01880bf253ae3fb2c5ed58cfe9eb5111436e1a70555607788ace7c039`;
+  - all 73 generator tests pass, including 19 frozen-v1 tests and the exact v1
+    instance hash, and independent P17-004 review reports no remaining blocker.
 
 ## P17-005 — StudentWorksheetDeliveryV2 authorization
 
@@ -229,6 +276,15 @@ Every value below must remain exact throughout Phase 1.7.
 - Size: L
 - Dependencies: P17-005
 - Suggested ownership: Web lane; parallel with P17-007
+- Product-alignment gate:
+  - the current local Web page is a technical prototype, not an accepted
+    product or visual direction;
+  - before opinionated page structure, navigation, copy hierarchy, or visual
+    styling changes, align with the owner on primary learners, daily workflow,
+    information architecture, and design references;
+  - DTO, service, privacy, determinism, and renderer-neutral component tests
+    may proceed before that conversation, but current hard-coded layout must
+    not shape the canonical presentation contract.
 - Primary files:
   - `packages/web-renderer/src/model.ts`
   - `packages/web-renderer/src/worksheet-view.tsx`

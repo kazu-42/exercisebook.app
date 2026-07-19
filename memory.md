@@ -224,3 +224,21 @@ for history and rollback.
 renderer-time content lookup. Disable policy v3 to roll new work back to V1;
 never reinterpret or overwrite historical V1/V2 artifacts. See
 [ADR-0003](docs/decisions/0003-instance-bound-presentation.md).
+
+## 2026-07-19 18:40 - Backend - V2 boundary validation
+
+**Context**: Independent review of the content-derived presentation foundation
+found several cases where structurally invalid authoring or registry data could
+bypass the intended canonical boundary or escape as a raw arithmetic error.
+
+**Decision**: New V2 rational boundaries apply a bounded lexical strict-object
+gate before the shared semantic `RationalJsonSchema`. Compiler-v2 presentation
+normalization uses `Unicode White_Space` plus U+FEFF, rejects GFM delimiter rows
+including one-column forms, and validates exact balanced `:::` container closing
+fences from raw normalized source before Markdown parser recovery.
+
+**Impact**: Do not directly apply the historical rational refinement to hostile
+V2 strings, and do not rely on a permissive Markdown parser to define canonical
+source syntax. The current source/content hashes remain unchanged. P17-003 is
+complete only at the planner-policy layer; response-v2 and strict HTTP dispatch
+remain separate wire-integration evidence.
