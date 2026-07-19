@@ -8,7 +8,10 @@ import {
   type FractionAdditionAssignmentInput,
 } from "@exercisebook/generators";
 import type { CompiledContentV1 } from "@exercisebook/content-compiler";
-import type { MaterializedWorksheetInstanceV1 } from "@exercisebook/schemas";
+import {
+  projectWorksheetForStudent,
+  type MaterializedWorksheetInstanceV1,
+} from "@exercisebook/schemas";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -20,8 +23,10 @@ import {
   renderPrintableHtml,
   snapshotPrintSemantics,
   validatePrintDocumentV1,
+  verifyMaterializedWorksheetInstanceV1,
   type ProjectPrintDocumentV1Options,
 } from "./index.js";
+import { assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers } from "./project.js";
 
 describe("WorksheetInstanceV1 -> PrintDocumentV1", () => {
   let compiledContent: CompiledContentV1;
@@ -123,6 +128,158 @@ describe("WorksheetInstanceV1 -> PrintDocumentV1", () => {
       expect(figure.bars).toHaveLength(2);
       expect(figure.bars.every((bar) => bar.denominator > 0)).toBe(true);
     }
+  });
+
+  it("preserves schema-valid source prompt text in the answer-key variant", async () => {
+    const instance = structuredClone(materialized.instance);
+    const firstSlot = instance.slots[0];
+    if (firstSlot === undefined) {
+      throw new Error("Expected a worksheet slot");
+    }
+    const sourceAccessibleText = "Add the displayed fractions in lowest terms.";
+    firstSlot.prompt.accessibleText = sourceAccessibleText;
+    const custom = await rematerializeWorksheetInstance(instance);
+
+    await expect(
+      projectPrintDocumentV1(custom, { variant: "student" }),
+    ).rejects.toThrow("deterministic fraction-addition");
+
+    const answerKey = await projectPrintDocumentV1(custom, {
+      variant: "answer-key",
+    });
+    const problemGroup = answerKey.blocks.find(
+      (block) => block.type === "problem-group",
+    );
+    const fractionBar = answerKey.blocks.find((block) => block.type === "fraction-bar");
+    expect(problemGroup?.type).toBe("problem-group");
+    expect(
+      problemGroup?.type === "problem-group"
+        ? problemGroup.problems[0]?.promptAccessibleText
+        : undefined,
+    ).toBe(sourceAccessibleText);
+    expect(fractionBar?.type === "fraction-bar" ? fractionBar.label : undefined).toBe(
+      sourceAccessibleText,
+    );
+  });
+
+  it("rejects one problem's answer in another problem's printable fallback", async () => {
+    const instance = structuredClone(materialized.instance);
+    const leakedAnswer = instance.slots[1]?.canonicalAnswer.value;
+    const targetSlot = instance.slots[0];
+    if (leakedAnswer === undefined || targetSlot === undefined) {
+      throw new Error("Expected at least two materialized worksheet slots");
+    }
+    targetSlot.printFallback.text = `A leaked answer is ${leakedAnswer.numerator}/${leakedAnswer.denominator}.`;
+
+    await expect(
+      projectPrintDocumentV1(await rematerializeWorksheetInstance(instance), {
+        variant: "student",
+      }),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it("allows another problem's answer when it is a structured prompt operand", async () => {
+    const crossOperand = await createCrossOperandMaterialization(materialized);
+    const sourceOperand = crossOperand.instance.slots[0]!.prompt.left;
+    const student = await projectPrintDocumentV1(crossOperand, {
+      variant: "student",
+    });
+    const firstProblemGroup = student.blocks.find(
+      (block) => block.type === "problem-group",
+    );
+
+    expect(firstProblemGroup?.type).toBe("problem-group");
+    if (firstProblemGroup?.type !== "problem-group") {
+      throw new Error("Expected a projected problem group");
+    }
+    expect(firstProblemGroup.problems[0]?.prompt[0]).toMatchObject({
+      type: "fraction",
+      numerator: sourceOperand.numerator,
+      denominator: sourceOperand.denominator,
+    });
+  });
+
+  it.each(["fraction-bar caption", "paragraph"] as const)(
+    "rejects an allowed prompt operand when copied into final %s prose",
+    async (target) => {
+      const crossOperand = await createCrossOperandMaterialization(materialized);
+      const delivery = await projectWorksheetForStudent(crossOperand);
+      const student = await projectPrintDocumentV1(crossOperand, {
+        variant: "student",
+      });
+      const answers = crossOperand.instance.slots.map(
+        (slot) => slot.canonicalAnswer.value,
+      );
+      const leakedAnswer = answers[1];
+      if (leakedAnswer === undefined) {
+        throw new Error("Expected a cross-slot answer fixture");
+      }
+      const tampered = structuredClone(student) as unknown as {
+        blocks: Array<Record<string, unknown>>;
+      };
+      const leakedText = ` The answer is ${leakedAnswer.numerator}/${leakedAnswer.denominator}.`;
+      if (target === "fraction-bar caption") {
+        const fractionBar = tampered.blocks.find(
+          (block) => block.type === "fraction-bar",
+        );
+        if (fractionBar === undefined || typeof fractionBar.caption !== "string") {
+          throw new Error("Expected a fraction-bar fallback");
+        }
+        fractionBar.caption += leakedText;
+      } else {
+        tampered.blocks.push({
+          type: "paragraph",
+          id: "leaked-operand-paragraph",
+          content: [{ type: "text", text: leakedText.trim() }],
+        });
+      }
+      const validated = validatePrintDocumentV1(tampered);
+      if (validated.variant !== "student") {
+        throw new Error("Expected a student PrintDocument fixture");
+      }
+
+      expect(() =>
+        assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
+          validated,
+          delivery,
+          answers,
+        ),
+      ).toThrow("canonical-answer");
+    },
+  );
+
+  it("rejects an unmapped fraction bar instead of scanning split rational leaves", async () => {
+    const crossOperand = await createCrossOperandMaterialization(materialized);
+    const delivery = await projectWorksheetForStudent(crossOperand);
+    const student = await projectPrintDocumentV1(crossOperand, {
+      variant: "student",
+    });
+    const answers = crossOperand.instance.slots.map(
+      (slot) => slot.canonicalAnswer.value,
+    );
+    const tampered = structuredClone(student) as unknown as {
+      blocks: Array<Record<string, unknown>>;
+    };
+    const fractionBar = tampered.blocks.find((block) => block.type === "fraction-bar");
+    if (fractionBar === undefined) {
+      throw new Error("Expected a fraction-bar fallback");
+    }
+    tampered.blocks.push({
+      ...structuredClone(fractionBar),
+      id: "unmapped-fraction-bars",
+    });
+    const validated = validatePrintDocumentV1(tampered);
+    if (validated.variant !== "student") {
+      throw new Error("Expected a student PrintDocument fixture");
+    }
+
+    expect(() =>
+      assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
+        validated,
+        delivery,
+        answers,
+      ),
+    ).toThrow("fraction-bar mapping");
   });
 
   it("contains no canonical response, solution trace, seeds, or answer-only DOM metadata in student bytes", async () => {
@@ -243,6 +400,80 @@ describe("WorksheetInstanceV1 -> PrintDocumentV1", () => {
     });
   });
 
+  it("rejects an accessor-bearing print envelope before invoking it", async () => {
+    let getterRan = false;
+    const hostile = { ...materialized } as Record<string, unknown>;
+    Object.defineProperty(hostile, "instance", {
+      enumerable: true,
+      get() {
+        getterRan = true;
+        return materialized.instance;
+      },
+    });
+
+    await expect(
+      projectPrintDocumentV1(hostile as never, { variant: "answer-key" }),
+    ).rejects.toMatchObject({
+      name: "PrintDocumentProjectionError",
+      code: "invalid-materialization",
+    });
+    expect(getterRan).toBe(false);
+  });
+
+  it("projects both variants from the detached snapshot captured before hashing", async () => {
+    const callerOwned = structuredClone(materialized);
+    const expectedTitle = callerOwned.instance.title;
+    const expectedHash = callerOwned.instanceHash;
+
+    const studentPending = projectPrintDocumentV1(callerOwned, {
+      variant: "student",
+    });
+    callerOwned.instance.title = "Caller-mutated title";
+    const student = await studentPending;
+
+    expect(student.title).toBe(expectedTitle);
+    expect(student.sourceInstanceHash).toBe(expectedHash);
+
+    const answerKeySource = structuredClone(materialized);
+    const answerKeyPending = projectPrintDocumentV1(answerKeySource, {
+      variant: "answer-key",
+    });
+    answerKeySource.instance.title = "Caller-mutated answer-key title";
+    answerKeySource.instance.slots[0]!.canonicalAnswer.value = {
+      numerator: "1",
+      denominator: "2",
+    };
+    const answerKey = await answerKeyPending;
+
+    expect(answerKey.title).toBe(`${expectedTitle} — Answer key`);
+    expect(answerKey.sourceInstanceHash).toBe(expectedHash);
+    expect(answerKey.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "answer-key",
+          canonicalResponse: [
+            expect.objectContaining({
+              numerator:
+                materialized.instance.slots[0]!.canonicalAnswer.value.numerator,
+              denominator:
+                materialized.instance.slots[0]!.canonicalAnswer.value.denominator,
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it("verifies one detached materialization snapshot across the hash await", async () => {
+    const callerOwned = structuredClone(materialized);
+    const expectedTitle = callerOwned.instance.title;
+
+    const pending = verifyMaterializedWorksheetInstanceV1(callerOwned);
+    callerOwned.instance.title = "Caller-mutated verifier title";
+
+    await expect(pending).resolves.toMatchObject({ title: expectedTitle });
+  });
+
   it("rejects an unsupported output variant", async () => {
     const unsupported = {
       variant: "teacher",
@@ -294,6 +525,41 @@ function readGolden(filename: string): unknown {
       "utf8",
     ),
   );
+}
+
+async function rematerializeWorksheetInstance(
+  instance: MaterializedWorksheetInstanceV1["instance"],
+): Promise<MaterializedWorksheetInstanceV1> {
+  const canonicalJson = canonicalizeJson(instance);
+  return {
+    instance,
+    canonicalJson,
+    instanceHash: await sha256Hex(canonicalJson),
+  };
+}
+
+async function createCrossOperandMaterialization(
+  base: MaterializedWorksheetInstanceV1,
+): Promise<MaterializedWorksheetInstanceV1> {
+  const instance = structuredClone(base.instance);
+  const sourceOperand = instance.slots[0]?.prompt.left;
+  const answerSlot = instance.slots[1];
+  const finalStep = answerSlot?.solutionTrace.at(-1);
+  if (
+    sourceOperand === undefined ||
+    answerSlot === undefined ||
+    finalStep === undefined
+  ) {
+    throw new Error("Expected at least two materialized worksheet slots");
+  }
+  answerSlot.canonicalAnswer.value = { ...sourceOperand };
+  answerSlot.scoringRule.accepted = { ...sourceOperand };
+  finalStep.expression =
+    `\\frac{${sourceOperand.numerator}}{${sourceOperand.denominator}}=` +
+    `\\frac{${sourceOperand.numerator}}{${sourceOperand.denominator}}`;
+  finalStep.accessibleText = `${sourceOperand.numerator} over ${sourceOperand.denominator} is already in lowest terms.`;
+  finalStep.result = { ...sourceOperand };
+  return rematerializeWorksheetInstance(instance);
 }
 
 function sampleAssignmentMetadata(): FractionAdditionAssignmentInput {

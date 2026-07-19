@@ -4,9 +4,33 @@ import { FRACTION_ADDITION_SAMPLE_INPUT } from "@exercisebook/generators";
 import { addRationals, equalRationals } from "@exercisebook/domain";
 import { DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS } from "@exercisebook/planner";
 
+import { MAX_SAMPLE_WORKSHEET_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
+import { parseStrictJson } from "../shared/strict-json.js";
 import { generatorSampleService } from "./generator-sample-service.js";
 
 describe("generator-backed sample service", () => {
+  it.each([
+    ["student", 4_238],
+    ["answer-key", 8_562],
+  ] as const)(
+    "keeps the current %s producer payload below its browser cap with 2x headroom",
+    async (variant, expectedResponseBytes) => {
+      const worksheet = await generatorSampleService.getSample({
+        seed: FRACTION_ADDITION_SAMPLE_INPUT.seed,
+        variant,
+      });
+      const serialized = JSON.stringify(worksheet);
+      const responseBytes = new TextEncoder().encode(serialized).byteLength;
+
+      expect(responseBytes).toBeLessThanOrEqual(MAX_SAMPLE_WORKSHEET_RESPONSE_BYTES);
+      expect(responseBytes * 2).toBeLessThanOrEqual(
+        MAX_SAMPLE_WORKSHEET_RESPONSE_BYTES,
+      );
+      expect(responseBytes).toBe(expectedResponseBytes);
+      expect(parseStrictJson(serialized)).toEqual(worksheet);
+    },
+  );
+
   it("returns the canonical eight-item student sample without answer data", async () => {
     const worksheet = await generatorSampleService.getSample({
       seed: FRACTION_ADDITION_SAMPLE_INPUT.seed,

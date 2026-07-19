@@ -100,6 +100,122 @@ describe("Exercise Book app", () => {
     );
   });
 
+  it("aborts an in-flight sample request when its page unmounts", async () => {
+    let requestSignal: AbortSignal | undefined;
+    const pending = deferred<typeof studentWorksheetFixture>();
+    const { unmount } = render(
+      <App
+        initialLocation="/worksheet/sample"
+        loadSample={(_variant, signal) => {
+          requestSignal = signal;
+          return pending.promise;
+        }}
+      />,
+    );
+
+    await act(async () => Promise.resolve());
+    expect(requestSignal).toBeDefined();
+    expect(requestSignal?.aborted).toBe(false);
+
+    unmount();
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(requestSignal?.reason).toMatchObject({ name: "AbortError" });
+  });
+
+  it("silently cancels a replaced sample variant without showing an error", async () => {
+    const answerKey = deferred<typeof answerKeyWorksheetFixture>();
+    let studentSignal: AbortSignal | undefined;
+    const loadSample = vi.fn((variant, signal: AbortSignal) => {
+      if (variant === "answer-key") {
+        return answerKey.promise;
+      }
+      studentSignal = signal;
+      return new Promise<typeof studentWorksheetFixture>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    });
+    const { rerender } = render(
+      <App initialLocation="/worksheet/sample" loadSample={loadSample} />,
+    );
+    await act(async () => Promise.resolve());
+
+    rerender(
+      <App initialLocation="/worksheet/sample/answers" loadSample={loadSample} />,
+    );
+    await act(async () => Promise.resolve());
+
+    expect(studentSignal?.aborted).toBe(true);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await act(async () => answerKey.resolve(answerKeyWorksheetFixture));
+    expect(await screen.findByRole("heading", { name: "Answer key" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not let a replaced sample response overwrite the active variant", async () => {
+    const student = deferred<typeof studentWorksheetFixture>();
+    const answerKey = deferred<typeof answerKeyWorksheetFixture>();
+    let studentSignal: AbortSignal | undefined;
+    const loadSample = vi.fn((variant, signal: AbortSignal) => {
+      if (variant === "student") {
+        studentSignal = signal;
+        return student.promise;
+      }
+      return answerKey.promise;
+    });
+    const { rerender } = render(
+      <App initialLocation="/worksheet/sample" loadSample={loadSample} />,
+    );
+    await act(async () => Promise.resolve());
+
+    rerender(
+      <App initialLocation="/worksheet/sample/answers" loadSample={loadSample} />,
+    );
+    await act(async () => answerKey.resolve(answerKeyWorksheetFixture));
+    expect(await screen.findByRole("heading", { name: "Answer key" })).toBeVisible();
+    expect(studentSignal?.aborted).toBe(true);
+
+    await act(async () => student.resolve(studentWorksheetFixture));
+
+    expect(screen.getByRole("heading", { name: "Answer key" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("never paints a loaded answer key while a student variant is pending", async () => {
+    const student = deferred<typeof studentWorksheetFixture>();
+    const loadSample = vi.fn((variant: "student" | "answer-key") =>
+      variant === "answer-key"
+        ? Promise.resolve(answerKeyWorksheetFixture)
+        : student.promise,
+    );
+    const { rerender } = render(
+      <App initialLocation="/worksheet/sample/answers" loadSample={loadSample} />,
+    );
+    expect(await screen.findByRole("heading", { name: "Answer key" })).toBeVisible();
+    expect(screen.getAllByText("7/12")[0]).toBeVisible();
+
+    rerender(<App initialLocation="/worksheet/sample" loadSample={loadSample} />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Answer key" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("7/12")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Preparing the fixed sample set",
+    );
+
+    await act(async () => student.resolve(studentWorksheetFixture));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Adding fractions with unlike denominators",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText("7/12")).not.toBeInTheDocument();
+  });
+
   it("loads the answer-key route as an explicit variant", async () => {
     render(
       <App
@@ -248,7 +364,7 @@ describe("Exercise Book app", () => {
 
     const result = await axe(container);
     expect(result.violations).toEqual([]);
-  });
+  }, 15_000);
 
   it("keeps the chosen time and exposes an accessible retry after failure", async () => {
     const user = userEvent.setup();

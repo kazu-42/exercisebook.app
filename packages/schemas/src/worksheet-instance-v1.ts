@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { canonicalizeJson, sha256Hex } from "@exercisebook/domain";
+import {
+  canonicalizeJson,
+  equalRationals,
+  MAX_CANONICAL_INTEGER_DIGITS,
+  sha256Hex,
+} from "@exercisebook/domain";
 
 import {
   assertSafeDataObjectGraph,
@@ -318,6 +323,20 @@ export type StudentWorksheetDeliveryV1 = z.infer<
   typeof StudentWorksheetDeliveryV1Schema
 >;
 
+export function deriveFractionAdditionPromptAccessibleText(
+  left: CanonicalRationalValue,
+  right: CanonicalRationalValue,
+): string {
+  return `Add ${left.numerator} over ${left.denominator} and ${right.numerator} over ${right.denominator}. Give the answer in lowest terms.`;
+}
+
+export function deriveFractionAdditionAccessibilitySummary(
+  left: CanonicalRationalValue,
+  right: CanonicalRationalValue,
+): string {
+  return `Fraction addition problem: ${left.numerator} over ${left.denominator} plus ${right.numerator} over ${right.denominator}.`;
+}
+
 export function validateWorksheetInstanceV1(value: unknown): WorksheetInstanceV1 {
   assertSafeDataObjectGraph(value);
   return WorksheetInstanceV1Schema.parse(value);
@@ -330,23 +349,57 @@ export function validateStudentWorksheetDeliveryV1(
   return StudentWorksheetDeliveryV1Schema.parse(value);
 }
 
+/**
+ * Trusted server-projector context. This is not a response DTO and must never
+ * cross into an HTTP response, browser state, client bundle, log, or cache.
+ */
+export interface StudentWorksheetProjectionV1 {
+  readonly delivery: StudentWorksheetDeliveryV1;
+  /**
+   * Trusted projector context only. Never serialize this collection into a
+   * student response or client bundle.
+   */
+  readonly canonicalAnswers: readonly CanonicalRationalValue[];
+}
+
 export async function projectWorksheetForStudent(
   materialized: MaterializedWorksheetInstanceV1,
 ): Promise<StudentWorksheetDeliveryV1> {
+  return (await projectWorksheetForStudentWithCanonicalAnswers(materialized)).delivery;
+}
+
+/**
+ * Builds delivery and authorization context from one detached, verified
+ * snapshot captured before the first await. Consumers must not re-read the
+ * caller-owned materialization after awaiting this function.
+ */
+export async function projectWorksheetForStudentWithCanonicalAnswers(
+  materialized: MaterializedWorksheetInstanceV1,
+): Promise<StudentWorksheetProjectionV1> {
   assertSafeDataObjectGraph(materialized);
-  const validatedInstance = validateWorksheetInstanceV1(materialized.instance);
+  // Capture the safe data envelope before the first asynchronous yield. Every
+  // later authorization decision must describe this one immutable snapshot,
+  // even if a caller retains and mutates its original object.
+  const providedInstance = materialized.instance;
+  const providedCanonicalJson = materialized.canonicalJson;
+  const providedInstanceHash = materialized.instanceHash;
+  const validatedInstance = validateWorksheetInstanceV1(providedInstance);
   const canonicalJson = canonicalizeJson(validatedInstance);
-  if (canonicalJson !== materialized.canonicalJson) {
+  if (canonicalJson !== providedCanonicalJson) {
     throw new Error("Worksheet canonical JSON does not match the validated instance");
   }
   const computedHash = await sha256Hex(canonicalJson);
-  if (computedHash !== materialized.instanceHash) {
+  if (computedHash !== providedInstanceHash) {
     throw new Error("Worksheet instance hash does not match its canonical JSON");
   }
 
+  const canonicalAnswers = validatedInstance.slots.map((slot) => ({
+    ...slot.canonicalAnswer.value,
+  }));
+
   const delivery = validateStudentWorksheetDeliveryV1({
     schema: WORKSHEET_DELIVERY_V1_SCHEMA,
-    instanceHash: materialized.instanceHash,
+    instanceHash: providedInstanceHash,
     assignmentId: validatedInstance.assignmentId,
     title: validatedInstance.title,
     localStudyDate: validatedInstance.localStudyDate,
@@ -366,11 +419,8 @@ export async function projectWorksheetForStudent(
     })),
     attributions: validatedInstance.attributions,
   });
-  assertNoRecognizedCanonicalAnswer(
-    delivery,
-    validatedInstance.slots.map((slot) => slot.canonicalAnswer.value),
-  );
-  return delivery;
+  assertNoRecognizedCanonicalAnswer(delivery, canonicalAnswers);
+  return { delivery, canonicalAnswers };
 }
 
 /**
@@ -387,8 +437,8 @@ function assertNoRecognizedCanonicalAnswer(
   }
 
   const { slots, ...globalDelivery } = delivery;
-  assertStringsDoNotContainCanonicalAnswers(
-    collectStringLeaves(globalDelivery),
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+    globalDelivery,
     canonicalAnswers,
   );
 
@@ -397,7 +447,40 @@ function assertNoRecognizedCanonicalAnswer(
     if (answer === undefined) {
       throw new Error("Student projection slot-to-answer mapping is inconsistent");
     }
-    assertStringsDoNotContainCanonicalAnswers(collectStringLeaves(slot), [answer]);
+
+    const { prompt, accessibility, ...nonPromptSlot } = slot;
+    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+      nonPromptSlot,
+      canonicalAnswers,
+    );
+
+    const promptOperands = [prompt.left, prompt.right];
+    if (promptOperands.some((operand) => equalRationals(operand, answer))) {
+      throw new Error(
+        "Student projection contains its own canonical-answer value as a prompt operand",
+      );
+    }
+
+    if (
+      prompt.accessibleText !==
+      deriveFractionAdditionPromptAccessibleText(prompt.left, prompt.right)
+    ) {
+      throw new Error(
+        "Student projection prompt accessibleText must equal its deterministic fraction-addition derivation",
+      );
+    }
+    if (
+      accessibility.summary !==
+      deriveFractionAdditionAccessibilitySummary(prompt.left, prompt.right)
+    ) {
+      throw new Error(
+        "Student projection accessibility summary must equal its deterministic fraction-addition derivation",
+      );
+    }
+    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+      { type: prompt.type, instruction: prompt.instruction },
+      canonicalAnswers,
+    );
   }
 }
 
@@ -411,10 +494,76 @@ export function assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
   assertSafeDataObjectGraph(visibleData);
+  assertStructuredRationalsDoNotMatchCanonicalAnswers(visibleData, canonicalAnswers);
   assertStringsDoNotContainCanonicalAnswers(
     collectStringLeaves(visibleData),
     canonicalAnswers,
   );
+}
+
+function assertStructuredRationalsDoNotMatchCanonicalAnswers(
+  visibleData: unknown,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  const pending: unknown[] = [visibleData];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === null || typeof current !== "object") {
+      continue;
+    }
+    const record = current as Record<string, unknown>;
+    if (
+      typeof record.numerator === "string" &&
+      typeof record.denominator === "string" &&
+      canonicalAnswers.some((answer) =>
+        rationalStringsAreEqual(
+          record.numerator as string,
+          record.denominator as string,
+          answer,
+        ),
+      )
+    ) {
+      throw new Error(
+        "Student projection contains a recognized canonical-answer representation",
+      );
+    }
+    pending.push(...Object.values(record));
+  }
+}
+
+function rationalStringsAreEqual(
+  numerator: string,
+  denominator: string,
+  answer: CanonicalRationalValue,
+): boolean {
+  if (
+    !isCanonicalIntegerSyntax(numerator) ||
+    !isCanonicalIntegerSyntax(denominator) ||
+    denominator === "0" ||
+    denominator.startsWith("-")
+  ) {
+    return false;
+  }
+  if (
+    canonicalIntegerDigitCount(numerator) > MAX_CANONICAL_INTEGER_DIGITS ||
+    canonicalIntegerDigitCount(denominator) > MAX_CANONICAL_INTEGER_DIGITS
+  ) {
+    throw new Error(
+      "Student projection contains an unsupported oversized rational representation",
+    );
+  }
+  return (
+    BigInt(numerator) * BigInt(answer.denominator) ===
+    BigInt(answer.numerator) * BigInt(denominator)
+  );
+}
+
+function isCanonicalIntegerSyntax(value: string): boolean {
+  return /^-?(?:0|[1-9][0-9]*)$/u.test(value) && value !== "-0";
+}
+
+function canonicalIntegerDigitCount(value: string): number {
+  return value.startsWith("-") ? value.length - 1 : value.length;
 }
 
 function assertStringsDoNotContainCanonicalAnswers(

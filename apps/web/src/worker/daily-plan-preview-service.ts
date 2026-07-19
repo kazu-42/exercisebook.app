@@ -47,12 +47,14 @@ type MaterializePreview = (
   document: ContentDocumentV1,
   assignment: FractionAdditionAssignmentInput,
 ) => Promise<MaterializedWorksheetInstanceV1>;
+type ProjectStudentWorksheet = typeof projectStudentWorksheetForWeb;
 
 export interface DailyPlanPreviewServiceDependencies {
   readonly registry?: DailyPlanPreviewRegistryV1;
   readonly contentDocument?: ContentDocumentV1;
   readonly planPreview?: PlanPreview;
   readonly materializePreview?: MaterializePreview;
+  readonly projectStudentWorksheet?: ProjectStudentWorksheet;
 }
 
 /**
@@ -72,6 +74,8 @@ export function createDailyPlanPreviewService(
   const planPreview = dependencies.planPreview ?? planDailyPreviewV1;
   const materializePreview =
     dependencies.materializePreview ?? materializeFractionAdditionWorksheetFromContent;
+  const projectStudentWorksheet =
+    dependencies.projectStudentWorksheet ?? projectStudentWorksheetForWeb;
 
   return {
     async createPreview(request) {
@@ -101,7 +105,8 @@ export function createDailyPlanPreviewService(
 
       assertSafeDataObjectGraph(materialized);
       assertMaterializationAgreesWithPlan(plan, materialized);
-      const worksheet = await projectStudentWorksheetForWeb(materialized);
+      const expectedInstanceHash = materialized.instanceHash;
+      const worksheet = await projectStudentWorksheet(materialized);
       const response = validateDailyPlanPreviewResponseV1({
         schema: DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA,
         plan: {
@@ -119,7 +124,7 @@ export function createDailyPlanPreviewService(
         },
         worksheet,
       });
-      if (response.worksheet.instanceHash !== materialized.instanceHash) {
+      if (response.worksheet.instanceHash !== expectedInstanceHash) {
         throw new Error("Public worksheet hash differs from materialized instance");
       }
       return { status: "ready", response };

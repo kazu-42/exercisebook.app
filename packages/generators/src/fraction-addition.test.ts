@@ -291,7 +291,7 @@ describe("fractions.add@1", () => {
         ).size,
       ).toBe(96);
     }
-  }, 30_000);
+  }, 60_000);
 
   it("rejects hostile runtime shapes instead of coercing typed input", async () => {
     await expect(

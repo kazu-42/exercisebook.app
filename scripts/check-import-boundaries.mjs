@@ -19,6 +19,8 @@ const forbiddenImports = [
   "react-dom",
   "wrangler",
 ];
+const clientRoots = ["apps/web/src"];
+const forbiddenClientImports = ["@exercisebook/schemas/trusted-student-projection"];
 
 async function collectSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
@@ -65,6 +67,32 @@ for (const relativeRoot of protectedRoots) {
       if (specifier !== undefined && isForbidden(specifier)) {
         violations.push(
           `${path.relative(repositoryRoot, file)} imports forbidden dependency ${JSON.stringify(specifier)}`,
+        );
+      }
+    }
+  }
+}
+
+for (const relativeRoot of clientRoots) {
+  const files = await collectSourceFiles(path.join(repositoryRoot, relativeRoot));
+
+  for (const file of files) {
+    const relativeFile = path.relative(repositoryRoot, file);
+    if (
+      relativeFile.startsWith(
+        `apps${path.sep}web${path.sep}src${path.sep}worker${path.sep}`,
+      )
+    ) {
+      continue;
+    }
+    const source = await readFile(file, "utf8");
+
+    for (const match of source.matchAll(importPattern)) {
+      const specifier = match[1];
+
+      if (specifier !== undefined && forbiddenClientImports.includes(specifier)) {
+        violations.push(
+          `${relativeFile} imports trusted server-only dependency ${JSON.stringify(specifier)}`,
         );
       }
     }

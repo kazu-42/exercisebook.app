@@ -8,7 +8,7 @@ import {
   type DailyPlanPreviewService,
 } from "./daily-plan-preview-service.js";
 import type { SampleWorksheetService } from "./sample-worksheet-service.js";
-import { parseStrictJson } from "./strict-json.js";
+import { parseStrictJson } from "../shared/strict-json.js";
 
 export const DEFAULT_SAMPLE_SEED =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
