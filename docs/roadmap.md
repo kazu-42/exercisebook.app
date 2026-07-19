@@ -5,8 +5,9 @@ Updated: 2026-07-19
 
 This roadmap is not a deployment-status page. Phase 1 is implemented as a
 local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
-and Phase 1.6 student-delivery hardening is active locally; production DNS,
-hosted Cloudflare persistence, and PDF backends remain gated future work.
+and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3;
+production DNS, hosted Cloudflare persistence, and PDF backends remain gated
+future work.
 
 ## Product direction
 

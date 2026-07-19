@@ -1,6 +1,6 @@
 # Spec: Student Delivery Hardening v1
 
-Status: active
+Status: implemented in draft PR #3
 Branch: `feat/student-delivery-hardening`
 Base: `feat/daily-plan-preview`
 
