@@ -17,6 +17,7 @@ import {
   LocalDateSchema,
   LocaleSchema,
   RNG_ALGORITHM_V1,
+  RationalJsonSchema,
   RevisionSchema,
   Sha256HexSchema,
   StableIdSchema,
@@ -61,12 +62,26 @@ export interface FractionAdditionWorksheetInput {
   readonly locale: string;
   readonly seed: string;
   readonly seedSecretVersion: string;
+  readonly plan: {
+    readonly id: string;
+    readonly version: number;
+  };
+  readonly policy: {
+    readonly id: string;
+    readonly version: number;
+  };
+  readonly skillGraph: {
+    readonly id: string;
+    readonly revision: number;
+  };
+  readonly selectionReasons: readonly WorksheetSlotV1["selectionReasons"][number][];
+  readonly excludedCanonicalAnswers?: readonly RationalJson[] | undefined;
   readonly itemCount: number;
   readonly difficulty: number;
   readonly content: FractionAdditionContentReference;
 }
 
-export type FractionAdditionAssignmentInput = Pick<
+export interface FractionAdditionAssignmentInput extends Pick<
   FractionAdditionWorksheetInput,
   | "assignmentId"
   | "localStudyDate"
@@ -74,7 +89,14 @@ export type FractionAdditionAssignmentInput = Pick<
   | "locale"
   | "seed"
   | "seedSecretVersion"
->;
+  | "plan"
+  | "policy"
+  | "skillGraph"
+  | "selectionReasons"
+  | "excludedCanonicalAnswers"
+> {
+  readonly requestedItemCount: number;
+}
 
 export interface FractionAdditionProblemModelV1 {
   readonly left: RationalJson;
@@ -114,6 +136,28 @@ const FractionAdditionContentReferenceSchema = z.strictObject({
   attribution: AttributionV1Schema,
 });
 
+const PlannerProvenanceShape = {
+  plan: z.strictObject({
+    id: StableIdSchema,
+    version: RevisionSchema,
+  }),
+  policy: z.strictObject({
+    id: StableIdSchema,
+    version: RevisionSchema,
+  }),
+  skillGraph: z.strictObject({
+    id: StableIdSchema,
+    revision: RevisionSchema,
+  }),
+  selectionReasons: z
+    .array(
+      z.enum(["due-review", "prerequisite-repair", "current-frontier", "transfer"]),
+    )
+    .min(1)
+    .max(10),
+  excludedCanonicalAnswers: z.array(RationalJsonSchema).max(32).optional(),
+} as const;
+
 const FractionAdditionWorksheetInputSchema = z.strictObject({
   assignmentId: StableIdSchema,
   localStudyDate: LocalDateSchema,
@@ -121,6 +165,7 @@ const FractionAdditionWorksheetInputSchema = z.strictObject({
   locale: LocaleSchema,
   seed: Sha256HexSchema,
   seedSecretVersion: StableIdSchema,
+  ...PlannerProvenanceShape,
   itemCount: z
     .number()
     .int()
@@ -133,6 +178,27 @@ const FractionAdditionWorksheetInputSchema = z.strictObject({
   content: FractionAdditionContentReferenceSchema,
 });
 
+const FractionAdditionAssignmentInputSchema = z.strictObject({
+  assignmentId: StableIdSchema,
+  localStudyDate: LocalDateSchema,
+  timeZone: TimeZoneSchema,
+  locale: LocaleSchema,
+  seed: Sha256HexSchema,
+  seedSecretVersion: StableIdSchema,
+  ...PlannerProvenanceShape,
+  requestedItemCount: z
+    .number()
+    .int()
+    .min(
+      1,
+      `requestedItemCount must be an integer from 1 to ${MAX_FRACTION_ADDITION_ITEMS}`,
+    )
+    .max(
+      MAX_FRACTION_ADDITION_ITEMS,
+      `requestedItemCount must be an integer from 1 to ${MAX_FRACTION_ADDITION_ITEMS}`,
+    ),
+});
+
 export const FRACTION_ADDITION_SAMPLE_INPUT: FractionAdditionWorksheetInput = {
   assignmentId: "sample-fractions-2026-07-19",
   localStudyDate: "2026-07-19",
@@ -140,6 +206,19 @@ export const FRACTION_ADDITION_SAMPLE_INPUT: FractionAdditionWorksheetInput = {
   locale: "en",
   seed: "0123456789abcdef".repeat(4),
   seedSecretVersion: "public-sample-v1",
+  plan: {
+    id: "phase-1-fraction-addition",
+    version: 1,
+  },
+  policy: {
+    id: "rule-based-daily-plan",
+    version: 1,
+  },
+  skillGraph: {
+    id: "phase-1-math",
+    revision: 1,
+  },
+  selectionReasons: ["current-frontier"],
   itemCount: 8,
   difficulty: 2,
   content: {
@@ -317,6 +396,9 @@ export async function materializeFractionAdditionWorksheet(
   const stableInput = validateWorksheetInput(input);
   const slots: WorksheetSlotV1[] = [];
   const promptSignatures = new Set<string>();
+  const excludedAnswerSignatures = new Set(
+    (stableInput.excludedCanonicalAnswers ?? []).map(rationalSignature),
+  );
 
   for (let index = 0; index < stableInput.itemCount; index += 1) {
     const id = `practice-${String(index + 1).padStart(2, "0")}`;
@@ -345,7 +427,11 @@ export async function materializeFractionAdditionWorksheet(
         difficulty: stableInput.difficulty,
       });
       const signature = fractionAdditionPromptSignature(generated);
-      if (!promptSignatures.has(signature)) {
+      const answerSignature = rationalSignature(generated.canonicalAnswer.value);
+      if (
+        !promptSignatures.has(signature) &&
+        !excludedAnswerSignatures.has(answerSignature)
+      ) {
         promptSignatures.add(signature);
         selected = { slotSeed, generated, generationAttempt };
         break;
@@ -361,7 +447,7 @@ export async function materializeFractionAdditionWorksheet(
       id,
       skillIds: [...stableInput.content.skillIds],
       slotSeed,
-      selectionReasons: ["current-frontier"],
+      selectionReasons: [...stableInput.selectionReasons],
       expectedMinutes: 2,
       prompt: {
         ...generated.prompt,
@@ -395,18 +481,9 @@ export async function materializeFractionAdditionWorksheet(
     timeZone: stableInput.timeZone,
     locale: stableInput.locale,
     expectedMinutes: slots.reduce((total, slot) => total + slot.expectedMinutes, 0),
-    plan: {
-      id: "phase-1-fraction-addition",
-      version: 1,
-    },
-    policy: {
-      id: "rule-based-daily-plan",
-      version: 1,
-    },
-    skillGraph: {
-      id: "phase-1-math",
-      revision: 1,
-    },
+    plan: stableInput.plan,
+    policy: stableInput.policy,
+    skillGraph: stableInput.skillGraph,
     rng: {
       algorithm: RNG_ALGORITHM_V1,
       baseSeed: stableInput.seed,
@@ -433,6 +510,8 @@ export async function fractionAdditionWorksheetInputFromContent(
   document: ContentDocumentV1,
   assignment: FractionAdditionAssignmentInput,
 ): Promise<FractionAdditionWorksheetInput> {
+  assertSafeDataObjectGraph(assignment);
+  const validatedAssignment = FractionAdditionAssignmentInputSchema.parse(assignment);
   const validatedDocument = validateContentDocumentV1(document);
   if (validatedDocument.publication.status !== "draft") {
     throw new RangeError(
@@ -458,14 +537,20 @@ export async function fractionAdditionWorksheetInputFromContent(
   if (typeof difficulty !== "number") {
     throw new TypeError("The fraction exercise difficulty must be a number");
   }
-  if (assignment.locale !== validatedDocument.locale) {
+  if (validatedAssignment.locale !== validatedDocument.locale) {
     throw new RangeError("The assignment locale must match the content locale");
+  }
+  if (validatedAssignment.requestedItemCount > exercise.count) {
+    throw new RangeError(
+      `requestedItemCount exceeds the reviewed content limit of ${exercise.count}`,
+    );
   }
 
   const contentHash = await sha256Hex(canonicalizeJson(validatedDocument));
+  const { requestedItemCount, ...worksheetAssignment } = validatedAssignment;
   return {
-    ...assignment,
-    itemCount: exercise.count,
+    ...worksheetAssignment,
+    itemCount: requestedItemCount,
     difficulty,
     content: {
       id: validatedDocument.id,
@@ -525,6 +610,10 @@ function fractionAdditionPromptSignature(
     .map((value) => `${value.numerator}/${value.denominator}`)
     .sort()
     .join("+");
+}
+
+function rationalSignature(value: RationalJson): string {
+  return `${value.numerator}/${value.denominator}`;
 }
 
 function buildMisconceptions(

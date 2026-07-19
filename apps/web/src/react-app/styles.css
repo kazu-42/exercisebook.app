@@ -536,6 +536,10 @@ a:hover {
   color: var(--ink-muted);
 }
 
+.plan-start__intro {
+  align-self: center;
+}
+
 .plan-card {
   display: grid;
   gap: 1.35rem;
@@ -568,6 +572,12 @@ a:hover {
   color: var(--ink);
 }
 
+.plan-card select:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  color: var(--ink-muted);
+}
+
 .plan-card fieldset {
   display: grid;
   gap: 0.55rem;
@@ -581,6 +591,132 @@ a:hover {
   min-height: 2rem;
   align-items: center;
   gap: 0.55rem;
+}
+
+.plan-card__note {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.plan-preview-state,
+.plan-preview-result {
+  grid-column: 1 / -1;
+}
+
+.plan-preview-state {
+  display: flex;
+  min-height: 7rem;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-deep);
+  text-align: center;
+}
+
+.plan-preview-state .loading-mark {
+  width: 1.7rem;
+  height: 2.1rem;
+}
+
+.plan-preview-state--error {
+  display: grid;
+  gap: 0.35rem;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.plan-preview-result {
+  display: grid;
+  gap: 2rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--rule-dark);
+}
+
+.plan-preview-result__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.plan-preview-result__heading h2 {
+  margin: 0.25rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.plan-preview-result__status {
+  max-width: 18rem;
+  margin: 0;
+  color: var(--success-dark);
+  font-weight: 750;
+}
+
+.plan-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-block: 1px solid var(--rule);
+}
+
+.plan-preview-summary div {
+  padding: 1rem;
+  border-right: 1px solid var(--rule);
+}
+
+.plan-preview-summary div:last-child {
+  border-right: 0;
+}
+
+.plan-preview-summary dt {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.plan-preview-summary dd {
+  margin: 0.4rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.25rem, 3vw, 1.8rem);
+  font-weight: 700;
+}
+
+.plan-preview-rationale {
+  max-width: 50rem;
+  padding: 1.4rem 1.6rem;
+  border-left: 0.35rem solid var(--success);
+  background: rgba(38, 116, 91, 0.08);
+}
+
+.plan-preview-rationale p:last-child {
+  margin: 0.35rem 0 0;
+  line-height: 1.65;
+}
+
+.plan-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.plan-preview-actions a {
+  color: var(--accent-dark);
+  font-weight: 750;
+}
+
+.plan-preview-worksheet {
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
 }
 
 .worksheet-page {
@@ -742,6 +878,24 @@ a:hover {
   .site-footer p + p {
     margin-top: 0.5rem;
   }
+
+  .plan-preview-result__heading,
+  .plan-preview-actions {
+    display: grid;
+    align-items: start;
+  }
+
+  .plan-preview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-preview-summary div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .plan-preview-summary div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--rule);
+  }
 }
 
 @media print {
@@ -755,10 +909,28 @@ a:hover {
   }
 
   .print-toolbar,
+  .skip-link,
   .site-header,
   .site-footer,
-  .worksheet-actions {
+  .worksheet-actions,
+  .plan-start__intro,
+  .plan-card,
+  .plan-preview-state,
+  .plan-preview-result > :not(.plan-preview-worksheet) {
     display: none;
+  }
+
+  .plan-start {
+    display: block;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .plan-preview-result,
+  .plan-preview-worksheet {
+    display: block;
+    padding: 0;
+    border: 0;
   }
 }
 

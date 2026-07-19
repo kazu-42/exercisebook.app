@@ -3,9 +3,10 @@
 Status: working plan
 Updated: 2026-07-19
 
-This roadmap is not a deployment-status page. Phase 1 is a local walking
-skeleton; production DNS, hosted Cloudflare persistence, and PDF backends
-remain gated future work.
+This roadmap is not a deployment-status page. Phase 1 is implemented as a
+local walking skeleton and Phase 1.5 is active on a stacked draft branch;
+production DNS, hosted Cloudflare persistence, and PDF backends remain gated
+future work.
 
 ## Product direction
 
@@ -126,6 +127,62 @@ Rollback:
 - disable a content/generator version through a registry;
 - historical fixtures remain replayable;
 - no automatic migration of assigned instances.
+
+## Phase 1.5 — Anonymous day-one plan preview
+
+Outcome: `/new` produces a useful, bounded set instead of discarding the
+learner's goal and time choice.
+
+This is a cold-start product-validation slice. It is not saved, uses no learner
+history, and makes no adaptive or mastery claim.
+
+Deliver:
+
+- strict `DailyPlanPreviewV1` request, internal decision, and public response
+  contracts;
+- an explicit version-pinned registry and revision kill switches;
+- a pure deterministic policy for the reviewed fraction-addition goal;
+- 8-, 12-, and 20-minute practice budgets producing at most 4, 6, and 8
+  reviewed problems respectively;
+- stable-prefix problem sequences across budgets;
+- explicit plan, policy, graph, and reason provenance passed into the
+  generator rather than invented there;
+- `day-one-fraction-preview@2` plan activities explicitly reserve every
+  reduced rational exposed by the reviewed worked example as the ordered tuple
+  `[1/2, 1/3, 5/6]`; the example's left/right/result derive from the same tuple,
+  with deterministic generator retries recorded in worksheet provenance;
+- student-only `POST /api/plans/preview` composition through content,
+  generator, integrity gate, and Web projection;
+- an accessible `/new` loading/success/error flow with visible selection
+  rationale;
+- printing of the already loaded student instance without regeneration;
+- strict response validation, answer/seed leak protection, and production
+  bundle browser smoke tests.
+
+Exit gate:
+
+- planned slot time never exceeds the learner's requested practice budget or
+  reviewed content cap;
+- identical explicit inputs and versions produce byte-equivalent decisions and
+  instances without ambient clock, locale, time-zone, or randomness inputs;
+- shorter-budget prompts are prefixes of longer-budget prompts;
+- disabled/unknown revisions produce a typed unavailable result and no set;
+- public responses and rendered student output contain no answers, scoring
+  data, solution traces, base seeds, or slot seeds;
+- generated practice answers never collide with an operand or result exposed
+  by the reviewed worked example, and the final student projector independently
+  scans the complete example and fails closed on a semantic answer leak;
+- the page says the preview is unsaved and not mastery-based;
+- keyboard, accessibility, failure/race, mobile, print, and full repository
+  gates pass.
+
+Rollback:
+
+- disable `day-one-fraction-preview@2` or revert the stacked feature commit;
+- keep the fixed `/worksheet/sample` Phase 1 route available;
+- never silently substitute a different problem sequence after a failure.
+
+See [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
 ## Phase 2 — Public read-only catalog
 
@@ -395,15 +452,18 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 
 ## The next concrete milestone
 
-The first milestone is complete when one reviewed fraction lesson can:
+The active milestone is Phase 1.5: make `/new` create an anonymous, explainable,
+deterministic practice preview that obeys a hard time budget and prints the same
+loaded student instance. Its executable contract and acceptance matrix are in
+[Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
-1. compile from Markdown to a versioned Content AST;
-2. instantiate deterministic problems from fixed seeds;
-3. render the same concrete instance on the Web and in A4 PDF;
-4. provide worked examples, progressive hints, and an answer key;
-5. replace an interactive fraction-bar task with a valid print fallback;
-6. pass correctness, accessibility, license, security, and visual gates;
-7. publish as an immutable revision and roll back without rewriting history.
-
-That milestone is intentionally small. It exercises the hard architecture before
-Exercise Book grows into a large catalog.
+The next correctness slice is content-derived lesson and worked-example
+projection so reviewed content, Web, and print no longer rely on an
+application-owned example. The next product-value slice is exact rational
+answer submission and formative feedback for one problem. It must distinguish
+first attempt, retry, and hint use while keeping answers out of the student
+payload and making no mastery claim. The current public deterministic sequence
+is replay provenance, not cryptographic answer secrecy, and must never be used
+to authenticate attempts or justify mastery. Curriculum breadth and
+Cloudflare persistence remain behind those learning-value checks; public
+curriculum publication remains behind the owner's license decision.

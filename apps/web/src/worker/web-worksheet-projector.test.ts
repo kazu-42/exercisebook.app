@@ -1,19 +1,22 @@
 import { canonicalizeJson, sha256Hex } from "@exercisebook/domain";
 import {
-  projectWorksheetForStudent,
   validateWorksheetInstanceV1,
   type MaterializedWorksheetInstanceV1,
 } from "@exercisebook/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+  REVIEWED_WORKED_EXAMPLE,
+  assertWorkedExampleDoesNotRevealPracticeAnswers,
   projectAnswerKeyWorksheetForWeb,
   projectStudentWorksheetForWeb,
 } from "./web-worksheet-projector.js";
 
 const hash = "0".repeat(64);
 
-async function createMaterializedFixture(): Promise<MaterializedWorksheetInstanceV1> {
+async function createMaterializedFixture(
+  answer = { numerator: "7", denominator: "12" },
+): Promise<MaterializedWorksheetInstanceV1> {
   const instance = validateWorksheetInstanceV1({
     schema: "exercisebook.worksheet-instance/v1",
     assignmentId: "assignment.web-projector",
@@ -51,15 +54,15 @@ async function createMaterializedFixture(): Promise<MaterializedWorksheetInstanc
           instruction: "Rename the fractions, then add.",
           left: { numerator: "1", denominator: "4" },
           right: { numerator: "1", denominator: "3" },
-          accessibleText: "one fourth plus one third",
+          accessibleText: "Add 1 over 4 and 1 over 3. Give the answer in lowest terms.",
         },
         canonicalAnswer: {
           type: "rational",
-          value: { numerator: "7", denominator: "12" },
+          value: answer,
         },
         scoringRule: {
           type: "rational-equals",
-          accepted: { numerator: "7", denominator: "12" },
+          accepted: answer,
           requireReduced: true,
         },
         hints: [{ id: "hint-01", text: "Find a multiple of 4 and 3." }],
@@ -74,10 +77,10 @@ async function createMaterializedFixture(): Promise<MaterializedWorksheetInstanc
           {
             id: "solution-02",
             kind: "add-numerators",
-            explanation: "Add three twelfths and four twelfths.",
-            expression: "3/12 + 4/12 = 7/12",
-            accessibleText: "Three twelfths plus four twelfths is seven twelfths.",
-            result: { numerator: "7", denominator: "12" },
+            explanation: "Record the reduced result.",
+            expression: `${answer.numerator}/${answer.denominator}`,
+            accessibleText: `${answer.numerator} over ${answer.denominator}.`,
+            result: answer,
           },
         ],
         misconceptions: [
@@ -127,11 +130,44 @@ async function createMaterializedFixture(): Promise<MaterializedWorksheetInstanc
   };
 }
 
+async function createCrossSlotFixture(): Promise<MaterializedWorksheetInstanceV1> {
+  const base = await createMaterializedFixture();
+  const firstSlot = structuredClone(base.instance.slots[0]!);
+  firstSlot.expectedMinutes = 2;
+  const secondSlot = structuredClone(firstSlot);
+  const secondAnswer = { numerator: "1", denominator: "4" };
+  secondSlot.id = "practice-02";
+  secondSlot.slotSeed = "4".repeat(64);
+  secondSlot.prompt = {
+    type: "fraction-addition",
+    instruction: "Rename the fractions, then add.",
+    left: { numerator: "1", denominator: "6" },
+    right: { numerator: "1", denominator: "12" },
+    accessibleText: "Add 1 over 6 and 1 over 12. Give the answer in lowest terms.",
+  };
+  secondSlot.canonicalAnswer.value = secondAnswer;
+  secondSlot.scoringRule.accepted = secondAnswer;
+  const finalStep = secondSlot.solutionTrace.at(-1)!;
+  finalStep.expression = "1/4";
+  finalStep.accessibleText = "1 over 4.";
+  finalStep.result = secondAnswer;
+  const instance = validateWorksheetInstanceV1({
+    ...base.instance,
+    expectedMinutes: 4,
+    slots: [firstSlot, secondSlot],
+  });
+  const canonicalJson = canonicalizeJson(instance);
+  return {
+    instance,
+    canonicalJson,
+    instanceHash: await sha256Hex(canonicalJson),
+  };
+}
+
 describe("Web worksheet projector", () => {
   it("uses the integrity-checked student delivery and never reintroduces secrets", async () => {
     const materialized = await createMaterializedFixture();
-    const delivery = await projectWorksheetForStudent(materialized);
-    const worksheet = projectStudentWorksheetForWeb(delivery);
+    const worksheet = await projectStudentWorksheetForWeb(materialized);
     const serialized = JSON.stringify(worksheet);
 
     expect(worksheet.instanceHash).toBe(materialized.instanceHash);
@@ -145,6 +181,83 @@ describe("Web worksheet projector", () => {
     expect(serialized).not.toContain("7/12");
   });
 
+  it("fails closed when a worked example would reveal a practice answer", async () => {
+    const materialized = await createMaterializedFixture({
+      numerator: "5",
+      denominator: "6",
+    });
+
+    await expect(projectStudentWorksheetForWeb(materialized)).rejects.toThrow(
+      "worked example",
+    );
+  });
+
+  it("scans worked-example prose for a practice answer even when its result differs", () => {
+    expect(() =>
+      assertWorkedExampleDoesNotRevealPracticeAnswers(
+        {
+          ...REVIEWED_WORKED_EXAMPLE,
+          left: { ...REVIEWED_WORKED_EXAMPLE.left },
+          right: { ...REVIEWED_WORKED_EXAMPLE.right },
+          result: { ...REVIEWED_WORKED_EXAMPLE.result },
+          steps: [
+            ...REVIEWED_WORKED_EXAMPLE.steps,
+            "A different practice answer is 7/12.",
+          ],
+        },
+        [{ numerator: "7", denominator: "12" }],
+      ),
+    ).toThrow("recognized canonical-answer representation");
+  });
+
+  it.each([
+    ["left operand", { numerator: "1", denominator: "2" }],
+    ["right operand", { numerator: "1", denominator: "3" }],
+  ] as const)(
+    "structurally rejects a practice answer matching the worked-example %s",
+    (_name, canonicalAnswer) => {
+      expect(() =>
+        assertWorkedExampleDoesNotRevealPracticeAnswers(
+          {
+            left: { numerator: "1", denominator: "2" },
+            right: { numerator: "1", denominator: "3" },
+            result: { numerator: "5", denominator: "6" },
+            steps: ["Use a common denominator, then add and reduce."],
+          },
+          [canonicalAnswer],
+        ),
+      ).toThrow("worked example");
+    },
+  );
+
+  it("allows a different problem's answer as a legitimate structured operand", async () => {
+    const worksheet = await projectStudentWorksheetForWeb(
+      await createCrossSlotFixture(),
+    );
+
+    expect(worksheet.items).toHaveLength(2);
+    expect(worksheet.items[0]?.prompt.left).toEqual({
+      numerator: "1",
+      denominator: "4",
+    });
+  });
+
+  it("rejects a different problem's answer in a non-prompt item field", async () => {
+    const base = await createCrossSlotFixture();
+    const instance = structuredClone(base.instance);
+    instance.slots[0]!.printFallback.text =
+      "A leaked answer from another problem is 1/4.";
+    const canonicalJson = canonicalizeJson(instance);
+
+    await expect(
+      projectStudentWorksheetForWeb({
+        instance,
+        canonicalJson,
+        instanceHash: await sha256Hex(canonicalJson),
+      }),
+    ).rejects.toThrow("recognized canonical-answer representation");
+  });
+
   it("projects the explicit answer key from the same materialized instance", async () => {
     const materialized = await createMaterializedFixture();
     const worksheet = await projectAnswerKeyWorksheetForWeb(materialized);
@@ -153,7 +266,7 @@ describe("Web worksheet projector", () => {
     expect(worksheet.items[0]?.answer).toEqual({
       numerator: "7",
       denominator: "12",
-      accessibleText: "Three twelfths plus four twelfths is seven twelfths.",
+      accessibleText: "7 over 12.",
     });
     expect(worksheet.attributions).toEqual([
       {

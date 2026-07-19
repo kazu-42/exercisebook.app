@@ -481,10 +481,22 @@
   }
 }
 
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
 @media print {
   .worksheet {
     max-width: none;
     color: #111;
+  }
+
+  .worksheet__footer {
+    margin-top: 0.5rem;
+    padding-top: 0.4rem;
+    break-inside: avoid;
+    font-size: 7pt;
   }
 
   .worksheet__header h1 {

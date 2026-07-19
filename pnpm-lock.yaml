@@ -44,6 +44,9 @@ importers:
       '@exercisebook/generators':
         specifier: workspace:*
         version: link:../../packages/generators
+      '@exercisebook/planner':
+        specifier: workspace:*
+        version: link:../../packages/planner
       '@exercisebook/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -161,6 +164,22 @@ importers:
         specifier: 4.9.0
         version: 4.9.0
 
+  packages/planner:
+    dependencies:
+      '@exercisebook/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@exercisebook/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      fast-check:
+        specifier: 4.9.0
+        version: 4.9.0
+
   packages/print-document:
     dependencies:
       '@exercisebook/domain':
@@ -205,6 +224,10 @@ importers:
   packages/test-fixtures: {}
 
   packages/web-renderer:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@testing-library/jest-dom':
         specifier: 6.9.1
