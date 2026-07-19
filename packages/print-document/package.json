@@ -1,0 +1,25 @@
+{
+  "name": "@exercisebook/print-document",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "render:sample": "tsx ../../scripts/render-sample.ts",
+    "test": "vitest run --root ../.. packages/print-document/src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@exercisebook/domain": "workspace:*",
+    "@exercisebook/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@exercisebook/content-compiler": "workspace:*",
+    "@exercisebook/generators": "workspace:*",
+    "@types/node": "26.1.1",
+    "tsx": "4.21.1"
+  }
+}

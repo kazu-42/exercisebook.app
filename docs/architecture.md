@@ -4,6 +4,11 @@ Status: proposed foundation
 
 Date: 2026-07-19
 
+This is a target architecture, not a deployment record. The Phase-1 repository
+implements a local walking skeleton through printable A4 HTML. It does not
+claim production DNS/application deployment, durable Cloudflare storage, a
+hosted PDF service, Browser Run rendering, or a LuaLaTeX backend.
+
 Primary application: `https://exercisebook.app`
 
 Action entrypoint: `https://learning.new`
@@ -44,8 +49,11 @@ The system is designed for:
 - progressive expansion from one narrow learning slice to all grades and
   domains.
 
-The initial vertical slice should prove the full loop—author, publish, plan,
-practice, explain, print, submit, and revisit—before the catalog becomes broad.
+The initial vertical slice proves the local contract chain—author a draft,
+compile, deterministically materialize, explain, practice, and project the same
+instance to Web and printable HTML. Trusted publication, hosted planning,
+submission, durable evidence, and revisit behavior arrive behind later gates
+before the catalog becomes broad.
 
 ## 2. Domain and URL roles
 
@@ -79,7 +87,10 @@ These are correctness properties, not implementation preferences.
 1. **The presented assignment is durable.** The exact
    `WorksheetInstance` is committed before a learner can see or answer it.
 2. **Generation is reproducible.** Content revision, generator version, RNG
-   version, policy version, base seed, and stable slot sub-seeds are recorded.
+   version, policy version, explicit caller-supplied seed-secret version, base
+   seed, stable slot sub-seeds, and duplicate-retry provenance are recorded.
+   Slot seeds use a binary-key HMAC-SHA256 over the RFC 8785 canonical tuple
+   defined in the generator contract; delimiter concatenation is forbidden.
 3. **Web and print share one instance.** A PDF backend may change layout, but
    it may not regenerate or reinterpret the learning content.
 4. **Student variants do not contain answers.** Canonical answers and solution
@@ -89,7 +100,9 @@ These are correctness properties, not implementation preferences.
    assignment, item revision, attempt conditions, and policy that interpreted
    it.
 6. **Publication fails closed.** Unknown skills, directives, generators,
-   licenses, or schema versions block publication.
+   licenses, or schema versions block publication. In Phase 1 only draft
+   content compiles/materializes; a future trusted release manifest, never
+   author-controlled frontmatter, authorizes published content.
 7. **Queue processing is idempotent.** Cloudflare Queues are treated as
    at-least-once delivery; duplicate and out-of-order messages are normal.
 8. **Artifacts are immutable.** A content-addressed object is never overwritten
@@ -543,6 +556,8 @@ a policy-level kill switch.
 Use Workers Static Assets plus a Worker API on `exercisebook.app`, rather than a
 Pages-only application:
 
+- language and build authority: pinned TypeScript 7;
+- workspace and build: pnpm plus Vite;
 - public HTML, JS, CSS, and fonts: Static Assets;
 - dynamic `/api/*`: Worker;
 - thin HTTP adapter: Hono;
@@ -556,6 +571,11 @@ no state bindings or secrets beyond what deployment requires.
 
 Hono is an adapter, not a domain dependency. Replacing it must not alter
 planner, content, evidence, or renderer contracts.
+
+TypeScript 7 is the project compiler baseline. Application source uses erasable
+syntax only, and framework adapters must not make the domain depend on the
+legacy in-process TypeScript compiler API. See
+[ADR-0002](decisions/0002-typescript-7-toolchain.md).
 
 ### D1
 
@@ -598,6 +618,11 @@ Every `sha256` key identifies its exact stored bytes. `render-results` is a
 create-only, immutable first-writer pointer from a pre-render spec hash to the
 winning PDF and manifest hashes. Queue retries read it before rendering, and
 concurrent attempts accept the existing winner rather than overwrite it.
+
+Worksheet content references and per-slot provenance carry the exact
+`contentHash` and `compilerVersion` alongside content ID, revision, and
+`sourceHash`. This binds a historical worksheet to one canonical Content
+Document object even when compiler behavior changes later.
 
 - public content: custom domain and immutable cache;
 - learner-specific PDF: private bucket, authenticated Worker,
@@ -923,6 +948,7 @@ backward compatible through at least one application rollback window. The
 
 | Area | Initial choice | Reason | Rejected or deferred |
 |---|---|---|---|
+| Language/toolchain | TypeScript 7 + pnpm + Vite | Native compiler baseline, strict portable source, Workers-native build | TypeScript 5/6 baseline or compiler-API-coupled tooling |
 | Authoring | Markdown + YAML + directives | Approachable, diffable, constrained | General MDX: executable and unsafe |
 | Canonical data | Versioned JSON AST | Language-independent and testable | Markdown/LaTeX as runtime truth |
 | HTTP adapter | Hono on Workers | Small, Web-standard, typed bindings | Framework logic in the domain |

@@ -1,0 +1,37 @@
+{
+  "name": "@exercisebook/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "worksheet:sample": "tsx --tsconfig tsconfig.json scripts/write-sample.ts"
+  },
+  "dependencies": {
+    "@exercisebook/domain": "workspace:*",
+    "@exercisebook/generators": "workspace:*",
+    "@exercisebook/schemas": "workspace:*",
+    "@exercisebook/web-renderer": "workspace:*",
+    "hono": "4.12.30",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.45.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/jest-axe": "3.5.9",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "jest-axe": "10.0.0",
+    "jsdom": "29.1.1",
+    "tsx": "4.21.1"
+  }
+}
