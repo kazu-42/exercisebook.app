@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": { "$ref": "#/$defs/__schema0" },
+    "id": { "$ref": "#/$defs/__schema1" },
+    "revision": { "$ref": "#/$defs/__schema2" },
+    "locale": { "$ref": "#/$defs/__schema3" },
+    "title": { "$ref": "#/$defs/__schema4" },
+    "skills": { "$ref": "#/$defs/__schema5" },
+    "prerequisites": { "$ref": "#/$defs/__schema6" },
+    "authors": { "$ref": "#/$defs/__schema7" },
+    "license": { "$ref": "#/$defs/__schema9" },
+    "publication": { "$ref": "#/$defs/__schema10" },
+    "estimatedMinutes": { "$ref": "#/$defs/__schema11" },
+    "nodes": { "$ref": "#/$defs/__schema12" },
+    "sourceHash": { "$ref": "#/$defs/__schema26" },
+    "compilerVersion": { "$ref": "#/$defs/__schema27" }
+  },
+  "required": [
+    "schema",
+    "id",
+    "revision",
+    "locale",
+    "title",
+    "skills",
+    "prerequisites",
+    "authors",
+    "license",
+    "publication",
+    "estimatedMinutes",
+    "nodes",
+    "sourceHash",
+    "compilerVersion"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": { "type": "string", "const": "exercisebook.content-ast/v2" },
+    "__schema1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9](?:[a-z0-9._:-]*[a-z0-9])?$"
+    },
+    "__schema2": { "type": "integer", "exclusiveMinimum": 0, "maximum": 2147483647 },
+    "__schema3": { "type": "string", "minLength": 2, "maxLength": 255 },
+    "__schema4": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "__schema5": {
+      "minItems": 1,
+      "maxItems": 20,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema1" }
+    },
+    "__schema6": {
+      "maxItems": 100,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema1" }
+    },
+    "__schema7": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema8" }
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "role": { "type": "string", "enum": ["author", "reviewer"] }
+      },
+      "required": ["name", "role"],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "object",
+      "properties": {
+        "licenseId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sourceUrl": { "type": "string", "maxLength": 2048, "format": "uri" },
+        "attributionText": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "copyrightHolder": { "type": "string", "minLength": 1, "maxLength": 240 }
+      },
+      "required": ["licenseId", "sourceUrl", "attributionText", "copyrightHolder"],
+      "additionalProperties": false
+    },
+    "__schema10": {
+      "type": "object",
+      "properties": { "status": { "type": "string", "enum": ["draft", "published"] } },
+      "required": ["status"],
+      "additionalProperties": false
+    },
+    "__schema11": { "type": "integer", "exclusiveMinimum": 0, "maximum": 480 },
+    "__schema12": {
+      "minItems": 1,
+      "maxItems": 10000,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema13" }
+    },
+    "__schema13": {
+      "oneOf": [
+        { "$ref": "#/$defs/__schema14" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "heading" },
+            "level": { "type": "integer", "minimum": 1, "maximum": 6 },
+            "children": {
+              "minItems": 1,
+              "maxItems": 2000,
+              "type": "array",
+              "items": { "$ref": "#/$defs/__schema15" }
+            }
+          },
+          "required": ["type", "level", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "explanation" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+            "paragraphs": { "$ref": "#/$defs/__schema19" }
+          },
+          "required": ["type", "id", "title", "paragraphs"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "worked-example" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+            "model": {
+              "type": "object",
+              "properties": {
+                "type": { "$ref": "#/$defs/__schema21" },
+                "left": { "$ref": "#/$defs/__schema22" },
+                "right": { "$ref": "#/$defs/__schema22" },
+                "result": { "$ref": "#/$defs/__schema22" },
+                "commonDenominator": { "$ref": "#/$defs/__schema24" },
+                "leftScaledNumerator": { "$ref": "#/$defs/__schema23" },
+                "rightScaledNumerator": { "$ref": "#/$defs/__schema23" },
+                "unreducedSumNumerator": { "$ref": "#/$defs/__schema23" }
+              },
+              "required": [
+                "type",
+                "left",
+                "right",
+                "result",
+                "commonDenominator",
+                "leftScaledNumerator",
+                "rightScaledNumerator",
+                "unreducedSumNumerator"
+              ],
+              "additionalProperties": false
+            },
+            "steps": { "$ref": "#/$defs/__schema19" }
+          },
+          "required": ["type", "id", "title", "model", "steps"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "exercise" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "generator": {
+              "type": "object",
+              "properties": {
+                "id": { "$ref": "#/$defs/__schema1" },
+                "version": { "type": "string", "minLength": 1, "maxLength": 80 },
+                "parameters": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      { "type": "string", "maxLength": 500 },
+                      { "type": "number" },
+                      { "type": "boolean" }
+                    ]
+                  }
+                }
+              },
+              "required": ["id", "version", "parameters"],
+              "additionalProperties": false
+            },
+            "count": { "type": "integer", "minimum": 1, "maximum": 200 },
+            "instruction": { "type": "string", "minLength": 1, "maxLength": 500 }
+          },
+          "required": ["type", "id", "generator", "count", "instruction"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "interactive" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "kind": { "type": "string", "enum": ["fraction-bars"] },
+            "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "printFallback": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "children": { "$ref": "#/$defs/__schema25" }
+          },
+          "required": ["type", "id", "kind", "prompt", "printFallback", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "hint" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "children": { "$ref": "#/$defs/__schema25" }
+          },
+          "required": ["type", "id", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "reflection" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "children": { "$ref": "#/$defs/__schema25" }
+          },
+          "required": ["type", "id", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "callout" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "tone": { "type": "string", "enum": ["note", "tip", "warning"] },
+            "children": { "$ref": "#/$defs/__schema25" }
+          },
+          "required": ["type", "id", "tone", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "figure" },
+            "id": { "$ref": "#/$defs/__schema1" },
+            "assetId": { "$ref": "#/$defs/__schema1" },
+            "alt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "caption": { "type": "string", "minLength": 1, "maxLength": 2000 }
+          },
+          "required": ["type", "id", "assetId", "alt", "caption"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema14": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "const": "paragraph" },
+        "children": {
+          "minItems": 1,
+          "maxItems": 2000,
+          "type": "array",
+          "items": { "$ref": "#/$defs/__schema15" }
+        }
+      },
+      "required": ["type", "children"],
+      "additionalProperties": false
+    },
+    "__schema15": {
+      "oneOf": [
+        { "$ref": "#/$defs/__schema16" },
+        { "$ref": "#/$defs/__schema17" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "emphasis" },
+            "children": {
+              "minItems": 1,
+              "maxItems": 1000,
+              "type": "array",
+              "items": { "$ref": "#/$defs/__schema18" }
+            }
+          },
+          "required": ["type", "children"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "const": "strong" },
+            "children": {
+              "minItems": 1,
+              "maxItems": 1000,
+              "type": "array",
+              "items": { "$ref": "#/$defs/__schema18" }
+            }
+          },
+          "required": ["type", "children"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema16": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "const": "text" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 20000 }
+      },
+      "required": ["type", "value"],
+      "additionalProperties": false
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "const": "math" },
+        "source": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "accessibleText": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": ["type", "source", "accessibleText"],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "oneOf": [{ "$ref": "#/$defs/__schema16" }, { "$ref": "#/$defs/__schema17" }]
+    },
+    "__schema19": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema20" }
+    },
+    "__schema20": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "__schema21": { "type": "string", "const": "fraction-addition" },
+    "__schema22": {
+      "type": "object",
+      "properties": {
+        "numerator": { "$ref": "#/$defs/__schema23" },
+        "denominator": { "$ref": "#/$defs/__schema23" }
+      },
+      "required": ["numerator", "denominator"],
+      "additionalProperties": false
+    },
+    "__schema23": {
+      "type": "string",
+      "maxLength": 129,
+      "pattern": "^(?:0|-?[1-9][0-9]{0,127})$"
+    },
+    "__schema24": {
+      "allOf": [
+        { "pattern": "^(?:0|-?[1-9][0-9]{0,127})$" },
+        { "pattern": "^[1-9][0-9]*$" }
+      ],
+      "$ref": "#/$defs/__schema23"
+    },
+    "__schema25": {
+      "minItems": 1,
+      "maxItems": 200,
+      "type": "array",
+      "items": { "$ref": "#/$defs/__schema14" }
+    },
+    "__schema26": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "__schema27": { "type": "string", "const": "exercisebook-content-compiler/2" }
+  },
+  "$id": "https://exercisebook.app/schemas/content-document-v2.schema.json",
+  "x-exercisebook-runtime-invariants": [
+    "Original input is a plain data-object graph limited to 50,000 graph nodes, depth 128, and 1,000,000 aggregate property-name and string-value code units, with valid Unicode and without prototype-sensitive own keys, accessors, symbols, or cycles.",
+    "Every non-presentation math node uses the bounded Phase-1 math language and its accessibleText equals the deterministic derivation from source.",
+    "Every explanation paragraphs array and worked-example steps array contains between one and eight non-empty strings, each using compiler-owned canonical whitespace normalization.",
+    "Every fraction-addition worked-example uses reduced canonical rational operands and result, and its common denominator, scaled numerators, unreduced sum numerator, and reduced result equal independent exact-integer derivations from the operands.",
+    "Content node IDs are unique.",
+    "Taught skill IDs and prerequisite IDs are unique within their respective lists.",
+    "A prerequisite is not duplicated in the taught skill list.",
+    "Comma-separated author names fit the 240-character worksheet attribution author field.",
+    "License source URLs use HTTP(S) and contain no credentials.",
+    "locale is a canonical BCP 47 tag accepted by Intl.Locale."
+  ]
+}

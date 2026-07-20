@@ -12,19 +12,32 @@ import { unified } from "unified";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 
-import { canonicalizeJson, sha256Hex } from "@exercisebook/domain";
+import { canonicalizeJson, sha256Hex, type RationalJson } from "@exercisebook/domain";
 import {
   assertSafeDataObjectGraph,
   CONTENT_COMPILER_V1,
+  CONTENT_COMPILER_V2,
   CONTENT_DOCUMENT_V1_SCHEMA,
+  CONTENT_DOCUMENT_V2_SCHEMA,
+  deriveFractionAdditionWorkedExampleArithmetic,
   derivePhase1MathAccessibleText,
+  MAX_CANONICAL_INTEGER_DIGITS,
   Phase1SafeMathError,
+  RationalJsonSchema,
   validateContentDocumentV1,
+  validateContentDocumentV2,
   type ContentBlockV1,
+  type ContentBlockV2,
   type ContentDocumentV1,
+  type ContentDocumentV2,
   type ContentInlineV1,
   type ContentParagraphV1,
 } from "@exercisebook/schemas";
+
+import {
+  containsGfmTableDelimiterRow,
+  normalizePresentationPlainTextParts,
+} from "./presentation-normalization.js";
 
 const MAX_SOURCE_BYTES = 262_144;
 const MAX_YAML_BYTES = 32_768;
@@ -33,6 +46,10 @@ const MAX_AST_NODES = 10_000;
 const MAX_AST_DEPTH = 64;
 const MAX_DIRECTIVE_ATTRIBUTES = 32;
 const MAX_DIAGNOSTIC_CHARACTERS = 4_000;
+const CANONICAL_RATIONAL_ATTRIBUTE_PATTERN = new RegExp(
+  `^(?:0|-?[1-9][0-9]{0,${MAX_CANONICAL_INTEGER_DIGITS - 1}})/[1-9][0-9]{0,${MAX_CANONICAL_INTEGER_DIGITS - 1}}$`,
+  "u",
+);
 // Keep the authoring gate aligned with fractions.add@1's operational cap. Its
 // smallest-difficulty pool has 112 prompts, but bounded duplicate retries are
 // intentionally not driven to full pool exhaustion.
@@ -50,12 +67,18 @@ const PHASE_1_CONTAINER_DIRECTIVES = new Set([
   "reflection",
   "callout",
 ]);
+const CONTENT_V2_CONTAINER_DIRECTIVES = new Set([
+  ...PHASE_1_CONTAINER_DIRECTIVES,
+  "explanation",
+]);
 const PHASE_1_LEAF_DIRECTIVES = new Set(["figure"]);
 const FORBIDDEN_DIRECTIVE_ATTRIBUTE_NAMES = new Set([
   "__proto__",
   "constructor",
   "prototype",
 ]);
+const DIRECTIVE_FENCE_CANDIDATE_PATTERN =
+  /^[\p{White_Space}\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]*:{2,}/u;
 const PHASE_1_GENERATORS: ReadonlyMap<
   string,
   ReadonlyMap<string, GeneratorRevisionContract>
@@ -109,7 +132,12 @@ const FrontmatterSchema = z.strictObject({
   estimatedMinutes: PositiveIntegerTextSchema,
 });
 
+const FrontmatterV2Schema = FrontmatterSchema.extend({
+  schema: z.literal("exercisebook.content-source/v2"),
+});
+
 type Frontmatter = z.infer<typeof FrontmatterSchema>;
+type FrontmatterV2 = z.infer<typeof FrontmatterV2Schema>;
 
 export interface ContentCompilerRegistry {
   readonly skillIds: ReadonlySet<string>;
@@ -132,6 +160,12 @@ export interface CompileContentOptions {
 
 export interface CompiledContentV1 {
   readonly document: ContentDocumentV1;
+  readonly canonicalJson: string;
+  readonly contentHash: string;
+}
+
+export interface CompiledContentV2 {
+  readonly document: ContentDocumentV2;
   readonly canonicalJson: string;
   readonly contentHash: string;
 }
@@ -236,14 +270,167 @@ export async function compileContentSource(
   return { document, canonicalJson, contentHash };
 }
 
+/**
+ * Compiles the parallel v2 authoring contract. The v1 entrypoint remains
+ * intentionally independent so adding presentation metadata cannot change an
+ * already published v1 source or content identity.
+ */
+export async function compileContentSourceV2(
+  source: string,
+  options: CompileContentOptions = {},
+): Promise<CompiledContentV2> {
+  if (typeof source !== "string") {
+    throw new ContentCompilationError(
+      "source-type",
+      "Content source must be a primitive string",
+    );
+  }
+  try {
+    assertSafeDataObjectGraph(source);
+  } catch (error) {
+    throw new ContentCompilationError("source-unicode", boundedDiagnostic(error));
+  }
+  const originalBytes = new TextEncoder().encode(source);
+  if (originalBytes.byteLength > MAX_SOURCE_BYTES) {
+    throw new ContentCompilationError(
+      "source-bytes-limit",
+      `Source exceeds ${MAX_SOURCE_BYTES} UTF-8 bytes`,
+    );
+  }
+
+  const normalizedSource = normalizeSource(source);
+  const sourcePartition = partitionV2RawSource(normalizedSource);
+  assertCanonicalDirectiveHeaders(sourcePartition.markdownBody, {
+    containerDirectives: CONTENT_V2_CONTAINER_DIRECTIVES,
+    enforceTypedWorkedExampleRationalSource: true,
+    rejectWhitespaceSeparatedOpenings: true,
+  });
+  assertCanonicalContainerDirectiveClosingFences(
+    sourcePartition.markdownBody,
+    CONTENT_V2_CONTAINER_DIRECTIVES,
+  );
+  let tree: Root;
+  try {
+    tree = parser().parse(normalizedSource);
+  } catch (error) {
+    throw new ContentCompilationError("markdown-parse", errorMessage(error));
+  }
+  assertTreeLimits(tree);
+
+  const yamlNodes = tree.children.filter(isYamlNode);
+  if (yamlNodes.length !== 1 || tree.children[0]?.type !== "yaml") {
+    throw new ContentCompilationError(
+      "frontmatter",
+      "Exactly one YAML frontmatter block must be the first node",
+    );
+  }
+  const yamlSource = sourcePartition.yamlSource;
+  if (new TextEncoder().encode(yamlSource).byteLength > MAX_YAML_BYTES) {
+    throw new ContentCompilationError(
+      "yaml-bytes-limit",
+      `YAML frontmatter exceeds ${MAX_YAML_BYTES} UTF-8 bytes`,
+    );
+  }
+
+  const frontmatter = parseFrontmatterV2(yamlSource);
+  const registry = options.registry ?? defaultRegistry();
+  validateRegistryReferences(frontmatter, registry);
+
+  const nodes = tree.children
+    .filter((node) => node.type !== "yaml")
+    .map((node) => convertBlockV2(node, registry));
+  validateGeneratorCompatibility(frontmatter, nodes, registry);
+  const sourceHash = await sha256Hex(normalizedSource);
+  let document: ContentDocumentV2;
+  try {
+    document = validateContentDocumentV2({
+      schema: CONTENT_DOCUMENT_V2_SCHEMA,
+      id: frontmatter.id,
+      revision: frontmatter.revision,
+      locale: frontmatter.locale,
+      title: frontmatter.title,
+      skills: frontmatter.skills,
+      prerequisites: frontmatter.prerequisites,
+      authors: frontmatter.authors,
+      license: frontmatter.license,
+      publication: frontmatter.publication,
+      estimatedMinutes: frontmatter.estimatedMinutes,
+      nodes,
+      sourceHash,
+      compilerVersion: CONTENT_COMPILER_V2,
+    });
+  } catch (error) {
+    throw new ContentCompilationError("content-schema", boundedDiagnostic(error));
+  }
+  const canonicalJson = canonicalizeJson(document);
+  const contentHash = await sha256Hex(canonicalJson);
+  return { document, canonicalJson, contentHash };
+}
+
 function normalizeSource(source: string): string {
   const withoutBom = source.startsWith("\ufeff") ? source.slice(1) : source;
   return withoutBom.replace(/\r\n?/g, "\n");
 }
 
-function assertCanonicalDirectiveHeaders(source: string): void {
+function partitionV2RawSource(source: string): Readonly<{
+  yamlSource: string;
+  markdownBody: string;
+}> {
+  const lines = source.split("\n");
+  if (lines[0] !== "---") {
+    if (/^---[ \t]+$/u.test(lines[0] ?? "")) {
+      throw new ContentCompilationError(
+        "frontmatter-fence-syntax",
+        "V2 YAML frontmatter opening fence must be an exact --- line",
+      );
+    }
+    throw new ContentCompilationError(
+      "frontmatter",
+      "Exactly one YAML frontmatter block must be the first node",
+    );
+  }
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!/^---[ \t]*$/u.test(line)) {
+      continue;
+    }
+    if (line !== "---") {
+      throw new ContentCompilationError(
+        "frontmatter-fence-syntax",
+        "V2 YAML frontmatter closing fence must be an exact --- line",
+      );
+    }
+    return {
+      yamlSource: lines.slice(1, index).join("\n"),
+      markdownBody: lines.slice(index + 1).join("\n"),
+    };
+  }
+
+  throw new ContentCompilationError(
+    "frontmatter",
+    "Initial YAML frontmatter requires an exact --- closing fence",
+  );
+}
+
+function assertCanonicalDirectiveHeaders(
+  source: string,
+  options: Readonly<{
+    containerDirectives?: ReadonlySet<string>;
+    enforceTypedWorkedExampleRationalSource?: boolean;
+    rejectWhitespaceSeparatedOpenings?: boolean;
+  }> = {},
+): void {
+  const containerDirectives =
+    options.containerDirectives ?? PHASE_1_CONTAINER_DIRECTIVES;
   for (const line of source.split("\n")) {
-    if (!/^(?: {0,3}):{2,}[A-Za-z]/u.test(line)) {
+    if (
+      !/^(?: {0,3}):{2,}[A-Za-z]/u.test(line) &&
+      !(
+        options.rejectWhitespaceSeparatedOpenings === true &&
+        /^(?: {0,3}):{2,}[\p{White_Space}\uFEFF]+[A-Za-z][A-Za-z0-9-]*\{/u.test(line)
+      )
+    ) {
       continue;
     }
     const match = /^(?: {0,3})(:{2,3})([A-Za-z][A-Za-z0-9-]*)\{(.*)\}[ \t]*$/u.exec(
@@ -258,7 +445,7 @@ function assertCanonicalDirectiveHeaders(source: string): void {
     const fence = match[1] ?? "";
     const directiveName = match[2] ?? "";
     const header = match[3] ?? "";
-    const expectedFence = PHASE_1_CONTAINER_DIRECTIVES.has(directiveName)
+    const expectedFence = containerDirectives.has(directiveName)
       ? ":::"
       : PHASE_1_LEAF_DIRECTIVES.has(directiveName)
         ? "::"
@@ -276,8 +463,9 @@ function assertCanonicalDirectiveHeaders(source: string): void {
       );
     }
 
+    const attributes = parseCanonicalDirectiveAttributes(header);
     const seenNames = new Set<string>();
-    for (const name of parseCanonicalDirectiveAttributeNames(header)) {
+    for (const { name } of attributes) {
       if (seenNames.has(name)) {
         throw new ContentCompilationError(
           "duplicate-directive-attribute",
@@ -292,11 +480,30 @@ function assertCanonicalDirectiveHeaders(source: string): void {
         );
       }
     }
+    if (
+      options.enforceTypedWorkedExampleRationalSource === true &&
+      directiveName === "worked-example"
+    ) {
+      for (const key of ["left", "right", "result"] as const) {
+        const rawValue = attributes.find((attribute) => attribute.name === key)?.value;
+        if (
+          rawValue !== undefined &&
+          !CANONICAL_RATIONAL_ATTRIBUTE_PATTERN.test(rawValue)
+        ) {
+          throw new ContentCompilationError(
+            "worked-example-rational",
+            `${key} must use canonical reduced numerator/positive-denominator syntax`,
+          );
+        }
+      }
+    }
   }
 }
 
-function parseCanonicalDirectiveAttributeNames(source: string): readonly string[] {
-  const names: string[] = [];
+function parseCanonicalDirectiveAttributes(
+  source: string,
+): readonly Readonly<{ name: string; value: string }>[] {
+  const attributes: Readonly<{ name: string; value: string }>[] = [];
   let offset = 0;
   while (offset < source.length) {
     while (/[ \t]/u.test(source[offset] ?? "")) {
@@ -320,20 +527,69 @@ function parseCanonicalDirectiveAttributeNames(source: string): readonly string[
       throw nonCanonicalDirectiveAttributeSyntax();
     }
     offset += 1;
+    const valueStart = offset;
     while (offset < source.length && source[offset] !== '"') {
       offset += 1;
     }
     if (source[offset] !== '"') {
       throw nonCanonicalDirectiveAttributeSyntax();
     }
+    const value = source.slice(valueStart, offset);
     offset += 1;
-    names.push(name);
+    attributes.push({ name, value });
 
     if (offset < source.length && !/[ \t]/u.test(source[offset] ?? "")) {
       throw nonCanonicalDirectiveAttributeSyntax();
     }
   }
-  return names;
+  return attributes;
+}
+
+function assertCanonicalContainerDirectiveClosingFences(
+  source: string,
+  containerDirectives: ReadonlySet<string>,
+): void {
+  let openContainerCount = 0;
+
+  for (const line of source.split("\n")) {
+    if (!DIRECTIVE_FENCE_CANDIDATE_PATTERN.test(line)) {
+      continue;
+    }
+
+    const opening = /^(?: {0,3})(:{2,3})([A-Za-z][A-Za-z0-9-]*)\{.*\}[ \t]*$/u.exec(
+      line,
+    );
+    const fence = opening?.[1] ?? "";
+    const directiveName = opening?.[2] ?? "";
+    if (fence === ":::" && containerDirectives.has(directiveName)) {
+      openContainerCount += 1;
+      continue;
+    }
+    if (fence === "::" && PHASE_1_LEAF_DIRECTIVES.has(directiveName)) {
+      continue;
+    }
+
+    if (line !== ":::") {
+      throw new ContentCompilationError(
+        "directive-closing-syntax",
+        "Container directives must use an exact ::: closing fence",
+      );
+    }
+    if (openContainerCount === 0) {
+      throw new ContentCompilationError(
+        "directive-closing-balance",
+        "Container directive closing fence has no matching opening fence",
+      );
+    }
+    openContainerCount -= 1;
+  }
+
+  if (openContainerCount !== 0) {
+    throw new ContentCompilationError(
+      "directive-closing-balance",
+      "Every container directive requires one exact ::: closing fence",
+    );
+  }
 }
 
 function nonCanonicalDirectiveAttributeSyntax(): ContentCompilationError {
@@ -391,8 +647,56 @@ function parseFrontmatter(source: string): Frontmatter {
   return parsed.data;
 }
 
+function parseFrontmatterV2(source: string): FrontmatterV2 {
+  let document;
+  try {
+    document = parseDocument(source, {
+      schema: "failsafe",
+      strict: true,
+      stringKeys: true,
+      uniqueKeys: true,
+      version: "1.2",
+    });
+  } catch (error) {
+    throw new ContentCompilationError("YAML-parse", errorMessage(error));
+  }
+  if (document.errors.length > 0) {
+    throw new ContentCompilationError(
+      "YAML-parse",
+      document.errors.map((error) => error.message).join("; "),
+    );
+  }
+
+  let value: unknown;
+  try {
+    value = document.toJS({ maxAliasCount: 0 });
+  } catch (error) {
+    throw new ContentCompilationError("YAML-alias", errorMessage(error));
+  }
+  try {
+    assertSafeDataObjectGraph(value);
+  } catch (error) {
+    throw new ContentCompilationError("frontmatter-object", boundedDiagnostic(error));
+  }
+  assertDataDepth(value, 0);
+  const parsed = FrontmatterV2Schema.safeParse(value);
+  if (!parsed.success) {
+    throw new ContentCompilationError(
+      "frontmatter-schema",
+      z.prettifyError(parsed.error),
+    );
+  }
+  if (parsed.data.publication.status === "published") {
+    throw new ContentCompilationError(
+      "publication-approval",
+      "Published content requires a trusted release approval outside source frontmatter",
+    );
+  }
+  return parsed.data;
+}
+
 function validateRegistryReferences(
-  frontmatter: Frontmatter,
+  frontmatter: Pick<Frontmatter, "skills" | "prerequisites">,
   registry: ContentCompilerRegistry,
 ): void {
   for (const skillId of [...frontmatter.skills, ...frontmatter.prerequisites]) {
@@ -406,8 +710,8 @@ function validateRegistryReferences(
 }
 
 function validateGeneratorCompatibility(
-  frontmatter: Frontmatter,
-  nodes: readonly ContentBlockV1[],
+  frontmatter: Pick<Frontmatter, "locale">,
+  nodes: readonly (ContentBlockV1 | ContentBlockV2)[],
   registry: ContentCompilerRegistry,
 ): void {
   const directiveCounts = new Map<string, number>();
@@ -454,6 +758,48 @@ function convertBlock(
     case "containerDirective":
     case "leafDirective":
       return convertDirective(node, registry);
+    case "html":
+      throw new ContentCompilationError("raw-HTML", "Raw HTML is not allowed");
+    case "image":
+    case "imageReference":
+      throw new ContentCompilationError(
+        "unsupported-image",
+        "Markdown image and remote asset fetches are not allowed",
+      );
+    case "code":
+      throw new ContentCompilationError(
+        "executable-code",
+        "Fenced code is not supported in learning content",
+      );
+    case "math":
+      throw new ContentCompilationError(
+        "display-math",
+        "Display math must use a reviewed semantic directive",
+      );
+    default:
+      throw new ContentCompilationError(
+        "unsupported-markdown",
+        `Unsupported Markdown node: ${node.type}`,
+      );
+  }
+}
+
+function convertBlockV2(
+  node: RootContent,
+  registry: ContentCompilerRegistry,
+): ContentBlockV2 {
+  switch (node.type) {
+    case "paragraph":
+      return convertParagraph(node);
+    case "heading":
+      return {
+        type: "heading",
+        level: node.depth,
+        children: convertInlineChildren(node.children),
+      };
+    case "containerDirective":
+    case "leafDirective":
+      return convertDirectiveV2(node, registry);
     case "html":
       throw new ContentCompilationError("raw-HTML", "Raw HTML is not allowed");
     case "image":
@@ -671,6 +1017,88 @@ function convertDirective(
   }
 }
 
+function convertDirectiveV2(
+  node: ContainerDirective | LeafDirective,
+  registry: ContentCompilerRegistry,
+): ContentBlockV2 {
+  const attributes = normalizedAttributes(node);
+  switch (node.name) {
+    case "explanation": {
+      assertExactAttributes(attributes, ["id", "title"]);
+      return {
+        type: "explanation",
+        id: requireAttribute(attributes, "id"),
+        title: requireAttribute(attributes, "title"),
+        paragraphs: convertPresentationDirectiveBody(node),
+      };
+    }
+    case "worked-example": {
+      assertExactAttributes(attributes, [
+        "id",
+        "title",
+        "model",
+        "left",
+        "right",
+        "result",
+      ]);
+      const model = requireAttribute(attributes, "model");
+      if (model !== "fraction-addition") {
+        throw new ContentCompilationError(
+          "worked-example-model",
+          `Unknown worked-example model: ${model}`,
+        );
+      }
+      const left = parseRationalAttribute(attributes, "left");
+      const right = parseRationalAttribute(attributes, "right");
+      const declaredResult = parseRationalAttribute(attributes, "result");
+      let derived: ReturnType<typeof deriveFractionAdditionWorkedExampleArithmetic>;
+      try {
+        derived = deriveFractionAdditionWorkedExampleArithmetic(left, right);
+      } catch (error) {
+        if (!(error instanceof RangeError)) {
+          throw error;
+        }
+        throw new ContentCompilationError(
+          "worked-example-arithmetic",
+          "Derived worked-example arithmetic exceeds the bounded canonical integer contract",
+        );
+      }
+      if (!sameRational(declaredResult, derived.result)) {
+        throw new ContentCompilationError(
+          "worked-example-result",
+          "The declared worked-example result does not equal the exact sum of left and right",
+        );
+      }
+      return {
+        type: "worked-example",
+        id: requireAttribute(attributes, "id"),
+        title: requireAttribute(attributes, "title"),
+        model: {
+          type: "fraction-addition",
+          left,
+          right,
+          result: derived.result,
+          commonDenominator: derived.commonDenominator,
+          leftScaledNumerator: derived.leftScaledNumerator,
+          rightScaledNumerator: derived.rightScaledNumerator,
+          unreducedSumNumerator: derived.unreducedSumNumerator,
+        },
+        steps: convertPresentationDirectiveBody(node),
+      };
+    }
+    default: {
+      const converted = convertDirective(node, registry);
+      if (converted.type === "worked-example") {
+        throw new ContentCompilationError(
+          "worked-example-model",
+          "Content source v2 requires a typed worked-example model",
+        );
+      }
+      return converted;
+    }
+  }
+}
+
 function requireGeneratorContract(
   registry: ContentCompilerRegistry,
   generatorId: string,
@@ -704,6 +1132,86 @@ function convertDirectiveBody(
     }
     return convertParagraph(child);
   });
+}
+
+function convertPresentationDirectiveBody(
+  node: ContainerDirective | LeafDirective,
+): string[] {
+  if (node.type !== "containerDirective") {
+    throw new ContentCompilationError(
+      "presentation-paragraph-count",
+      `${node.name} requires between one and eight plain-text paragraphs`,
+    );
+  }
+  if (node.children.length < 1 || node.children.length > 8) {
+    throw new ContentCompilationError(
+      "presentation-paragraph-count",
+      `${node.name} requires between one and eight plain-text paragraphs`,
+    );
+  }
+
+  return node.children.map((child) => {
+    if (child.type !== "paragraph" || child.children.length < 1) {
+      throw new ContentCompilationError(
+        "presentation-plain-text",
+        `${node.name} presentation prose supports plain text only`,
+      );
+    }
+    const textParts: string[] = [];
+    for (const inline of child.children) {
+      if (inline.type !== "text") {
+        throw new ContentCompilationError(
+          "presentation-plain-text",
+          `${node.name} presentation prose supports plain text only`,
+        );
+      }
+      textParts.push(inline.value);
+    }
+    if (containsGfmTableDelimiterRow(textParts)) {
+      throw new ContentCompilationError(
+        "presentation-plain-text",
+        `${node.name} presentation prose does not support Markdown tables`,
+      );
+    }
+    const normalized = normalizePresentationPlainTextParts(textParts);
+    if (normalized.length === 0) {
+      throw new ContentCompilationError(
+        "presentation-plain-text",
+        `${node.name} presentation prose cannot normalize to empty text`,
+      );
+    }
+    return normalized;
+  });
+}
+
+function parseRationalAttribute(
+  attributes: Readonly<Record<string, string>>,
+  key: "left" | "right" | "result",
+): RationalJson {
+  const source = requireAttribute(attributes, key);
+  if (!CANONICAL_RATIONAL_ATTRIBUTE_PATTERN.test(source)) {
+    throw new ContentCompilationError(
+      "worked-example-rational",
+      `${key} must use canonical reduced numerator/positive-denominator syntax`,
+    );
+  }
+  const separator = source.indexOf("/");
+  const candidate = {
+    numerator: source.slice(0, separator),
+    denominator: source.slice(separator + 1),
+  };
+  const parsed = RationalJsonSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new ContentCompilationError(
+      "worked-example-rational",
+      `${key} must be a reduced rational with a positive denominator`,
+    );
+  }
+  return parsed.data;
+}
+
+function sameRational(left: RationalJson, right: RationalJson): boolean {
+  return left.numerator === right.numerator && left.denominator === right.denominator;
 }
 
 function assertEmptyDirectiveBody(node: Directives): void {

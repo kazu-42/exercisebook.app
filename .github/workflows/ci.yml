@@ -28,13 +28,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+
+      - name: Verify reviewed dependency inputs
+        run: node scripts/check-reviewed-install-inputs.mjs
+
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11.8.0
           run_install: false
 
-      - name: Set up Node.js
+      - name: Configure pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.x
@@ -67,7 +75,9 @@ jobs:
         run: pnpm content:check
 
       - name: Check dependency boundaries
-        run: pnpm check:boundaries
+        run: |
+          node --test scripts/check-import-boundaries.test.mjs
+          node scripts/check-import-boundaries.mjs
 
       - name: Test
         run: pnpm test

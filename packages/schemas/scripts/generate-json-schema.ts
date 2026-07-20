@@ -5,9 +5,13 @@ import { z, type ZodType } from "zod";
 
 import {
   CONTENT_DOCUMENT_V1_RUNTIME_INVARIANTS,
+  CONTENT_DOCUMENT_V2_RUNTIME_INVARIANTS,
   ContentDocumentV1Schema,
+  ContentDocumentV2Schema,
   WORKSHEET_INSTANCE_V1_RUNTIME_INVARIANTS,
+  WORKSHEET_INSTANCE_V2_RUNTIME_INVARIANTS,
   WorksheetInstanceV1Schema,
+  WorksheetInstanceV2Schema,
 } from "../src/index.js";
 
 interface SchemaTarget {
@@ -25,6 +29,12 @@ const targets: readonly SchemaTarget[] = [
     runtimeInvariants: CONTENT_DOCUMENT_V1_RUNTIME_INVARIANTS,
   },
   {
+    fileUrl: new URL("../json-schema/content-document-v2.schema.json", import.meta.url),
+    id: "https://exercisebook.app/schemas/content-document-v2.schema.json",
+    schema: ContentDocumentV2Schema,
+    runtimeInvariants: CONTENT_DOCUMENT_V2_RUNTIME_INVARIANTS,
+  },
+  {
     fileUrl: new URL(
       "../json-schema/worksheet-instance-v1.schema.json",
       import.meta.url,
@@ -32,6 +42,15 @@ const targets: readonly SchemaTarget[] = [
     id: "https://exercisebook.app/schemas/worksheet-instance-v1.schema.json",
     schema: WorksheetInstanceV1Schema,
     runtimeInvariants: WORKSHEET_INSTANCE_V1_RUNTIME_INVARIANTS,
+  },
+  {
+    fileUrl: new URL(
+      "../json-schema/worksheet-instance-v2.schema.json",
+      import.meta.url,
+    ),
+    id: "https://exercisebook.app/schemas/worksheet-instance-v2.schema.json",
+    schema: WorksheetInstanceV2Schema,
+    runtimeInvariants: WORKSHEET_INSTANCE_V2_RUNTIME_INVARIANTS,
   },
 ];
 

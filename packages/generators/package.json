@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@exercisebook/domain": "workspace:*",
+    "@exercisebook/planner": "workspace:*",
     "@exercisebook/schemas": "workspace:*",
     "zod": "4.4.3"
   },

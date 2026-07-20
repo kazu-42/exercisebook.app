@@ -7,3 +7,5 @@
  */
 export { projectWorksheetForStudentWithCanonicalAnswers } from "./worksheet-instance-v1.js";
 export type { StudentWorksheetProjectionV1 } from "./worksheet-instance-v1.js";
+export { projectWorksheetV2ForStudentWithCanonicalAnswers } from "./student-worksheet-delivery-v2.js";
+export type { StudentWorksheetProjectionV2 } from "./student-worksheet-delivery-v2.js";

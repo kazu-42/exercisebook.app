@@ -208,3 +208,142 @@ variants. Existing generated worksheet, Web, and print bytes retain their
 versioned identities. A source whose projected answer-key prose exceeds the Web
 DTO bound now fails closed instead of returning an invalid object; the source
 and target text-bound reconciliation remains explicit follow-up work.
+
+## 2026-07-19 - Version instance-bound presentation beside V1
+
+**Context**: V1 commits generated practice and content references but not the
+exact lesson explanation or worked example shown by Web and print.
+
+**Decision**: Add a parallel V2 content/instance/delivery/Web/Print lane. Policy
+v3 pins the exact content identity, selected node IDs, and ordered
+`[left, right, result]` tuple; `WorksheetInstanceV2` embeds the renderer-neutral
+selected presentation before hashing. Preserve the complete V1 execution path
+for history and rollback.
+
+**Impact**: Lesson, worksheet, and print can prove semantic parity without
+renderer-time content lookup. Disable policy v3 to roll new work back to V1;
+never reinterpret or overwrite historical V1/V2 artifacts. See
+[ADR-0003](docs/decisions/0003-instance-bound-presentation.md).
+
+## 2026-07-19 18:40 - Backend - V2 boundary validation
+
+**Context**: Independent review of the content-derived presentation foundation
+found several cases where structurally invalid authoring or registry data could
+bypass the intended canonical boundary or escape as a raw arithmetic error.
+
+**Decision**: New V2 rational boundaries apply a bounded lexical strict-object
+gate before the shared semantic `RationalJsonSchema`. Compiler-v2 presentation
+normalization uses `Unicode White_Space` plus U+FEFF, rejects GFM delimiter rows
+including one-column forms, and validates exact balanced `:::` container closing
+fences from raw normalized source before Markdown parser recovery.
+
+**Impact**: Do not directly apply the historical rational refinement to hostile
+V2 strings, and do not rely on a permissive Markdown parser to define canonical
+source syntax. The current source/content hashes remain unchanged. P17-003 is
+complete only at the planner-policy layer; response-v2 and strict HTTP dispatch
+remain separate wire-integration evidence.
+
+## 2026-07-20 - Authorize detached V2 student delivery
+
+**Context**: `WorksheetInstanceV2` adds a complete learner-facing presentation,
+so answer disclosure can occur in explanation, example, attribution, or
+practice roles even when the instance hash is valid. A coordinated mutation
+could also make a canonical answer, scoring rule, and final solution agree with
+each other while disagreeing with the prompt arithmetic. Trusted APIs exposed
+from mixed schema source modules could be imported directly or re-exported
+through a browser dependency barrel.
+
+**Decision**: Project `StudentWorksheetDeliveryV2` from one safe-data-checked,
+detached pre-await snapshot and compare its canonical bytes and SHA-256 before
+authorization. Accept a canonical practice answer only when bounded exact
+cross-multiplication proves it equals the prompt sum. Scan global,
+presentation, and practice roles separately, reconstruct all three displayed
+worked-example intermediate rationals, and keep canonical answers only on the
+server-only trusted subpath. Use the pinned Vite/Oxc AST parser for import
+policy: browser/renderer code and protected workspace barrels cannot reach the
+trusted subpath or mixed implementation modules, computed module loads fail
+closed, and Worker code remains the explicit server exception.
+
+**Impact**: V2 student delivery can be reused by Web and print projectors
+without exposing seeds, answers, scoring, solution traces, or misconceptions.
+Hash-correct but semantically wrong or answer-bearing instances fail before
+student delivery. V1 canonical bytes and Web/print artifacts remain unchanged;
+final Web and PrintDocumentV2 scans remain downstream P17-006/P17-007 work.
+
+## 2026-07-21 - Close compiler partition and client build-graph gaps
+
+**Context**: Successive exact reviews found two different classes of guard
+failure. Raw closing-fence validation could interpret valid YAML block-scalar
+data as Markdown. Separately, future browser changes could make trusted or
+Worker source reachable through module re-exports, Vite loaders and plugins,
+package entry metadata, package-manager resolution, HTML asset attributes, or
+CSS imports even though the current production graph was clean. Real Vite 8.1.5
+builds proved the material resolver and asset paths before each class was
+closed.
+
+**Decision**: Partition one exact initial YAML frontmatter block before every
+Markdown fence scan while hashing the complete normalized source. Parse
+JavaScript and TypeScript with the pinned Vite/Oxc AST, reject computed loads
+and every production Vite glob, and confine browser module/asset edges to
+reviewed roots. Reject backslash-bearing load specifiers and unreviewed
+production dependencies. Treat root and browser manifests, execution scripts,
+the complete lockfile, pnpm workspace resolution, Vite and Wrangler
+configuration, nested package scopes, the absence of a Vite public directory,
+the HTML entry/asset surface, and the browser CSS asset surface as
+exact-current review gates. CI runs a built-in-only digest check before package
+installation, and the policy checks the lock before dynamically importing the
+pinned Vite/Oxc parser. Production code cannot enter test/spec modules; the
+trusted projector, Worker, and print roots retain only their documented
+server-side exceptions.
+
+**Impact**: Valid author metadata remains YAML data, and a routine config,
+manifest, HTML, CSS, or loader change cannot silently make canonical-answer
+context client-reachable. The real-repository check also requires the lockfile,
+workspace, root and reviewed browser package manifests, HTML entrypoint,
+Wrangler entrypoint, and exactly one reviewed Vite config; only isolated tests
+opt into partial-repository mode. Legitimate upgrades or new
+asset/plugin/package surfaces must update the policy and regression fixtures in
+the same review. The built-in-only pre-install gate pins all current workspace
+manifests as well as the root manifest, workspace configuration, and lockfile;
+it runs before the first pnpm setup/cache/CLI operation and rejects
+unknown/missing workspace manifests, repository-local `.npmrc`/`.pnpmfile.*`
+inputs, and direct `*.gyp` entries before installation. The browser build
+boundary also rejects every implicit PostCSS configuration location searched by
+the pinned Vite stack, scans every browser-safe package root, and fails closed
+on unreviewed Vite style languages, CSS Modules, and ICSS dependency forms.
+Executable source roots also reject extensionless regular files and unreviewed
+extensions that Vite could parse as JavaScript, while the pinned static-asset,
+JSON, and inspected style surfaces remain explicit exceptions. The boundary
+suite passes 58/58 plus the live scan; TypeScript 7.0.2, all 945 Vitest tests,
+production builds, and unchanged V1/V2 content and V1 output identities provide
+the branch evidence.
+
+The compiler's raw Markdown classifier now rejects every directive-shaped line
+whose fence is altered by punctuation, noncanonical indentation, Unicode
+whitespace, control, format, or default-ignorable characters while leaving YAML
+block-scalar data untouched. The shared student-delivery string scan computes a
+deduplicated closure over NFKC, form-space, common outer URI-wrapper,
+percent-collapse, and URI-decode states. Provably canonical common outer
+wrappers compress at the same round while preserving relative percent depth;
+the current value and its independently percent-collapsed derivative then
+remain separate decode candidates. This prevents collapse-first decoding from
+destroying an answer-bearing intermediate such as the `39/35` exposed from
+`%2539%2F35`. Composed URI-to-NFKC-to-URI forms receive at most three decode
+rounds and a 24-state cap, with either limit failing closed. The scan detects
+mixed ASCII and fullwidth forms such as `%25%32%46` and continues after
+valid-byte fallback when malformed percent text or truncated UTF-8 exposes
+another encoded layer. Compiler tests pass 222/222 and schema tests pass
+278/278 without changing either reviewed content hash.
+
+The dedicated V2 materializer now consumes one complete detached
+`DailyPlanPreviewV2`, reruns the pinned planner with the final V2 registry, and
+canonical-compares the entire plan before content hashing or generation. This
+binds the ID, seed, budget, item count, reasons, selected nodes, exclusion tuple,
+content, policy, graph, and evidence values to a real planner output rather
+than accepting independently assembled claims. Its fixed 12-minute instance
+hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
+generic standalone instance validation remains version-shaped rather than
+policy-specific. Generator-package entry locking and narrower trusted Worker
+graph allowlists remain explicit defense-in-depth follow-up rather than a
+claimed browser-boundary prerequisite.

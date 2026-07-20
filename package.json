@@ -11,7 +11,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "check": "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:sample",
-    "check:boundaries": "node scripts/check-import-boundaries.mjs",
+    "check:boundaries": "node --test scripts/check-import-boundaries.test.mjs && node scripts/check-import-boundaries.mjs",
     "content:check": "pnpm --filter @exercisebook/content-compiler content:check",
     "content:generate": "pnpm --filter @exercisebook/content-compiler content:generate",
     "dev": "pnpm --filter @exercisebook/web dev",
