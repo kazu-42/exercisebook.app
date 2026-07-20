@@ -269,3 +269,81 @@ without exposing seeds, answers, scoring, solution traces, or misconceptions.
 Hash-correct but semantically wrong or answer-bearing instances fail before
 student delivery. V1 canonical bytes and Web/print artifacts remain unchanged;
 final Web and PrintDocumentV2 scans remain downstream P17-006/P17-007 work.
+
+## 2026-07-21 - Close compiler partition and client build-graph gaps
+
+**Context**: Successive exact reviews found two different classes of guard
+failure. Raw closing-fence validation could interpret valid YAML block-scalar
+data as Markdown. Separately, future browser changes could make trusted or
+Worker source reachable through module re-exports, Vite loaders and plugins,
+package entry metadata, package-manager resolution, HTML asset attributes, or
+CSS imports even though the current production graph was clean. Real Vite 8.1.5
+builds proved the material resolver and asset paths before each class was
+closed.
+
+**Decision**: Partition one exact initial YAML frontmatter block before every
+Markdown fence scan while hashing the complete normalized source. Parse
+JavaScript and TypeScript with the pinned Vite/Oxc AST, reject computed loads
+and every production Vite glob, and confine browser module/asset edges to
+reviewed roots. Reject backslash-bearing load specifiers and unreviewed
+production dependencies. Treat root and browser manifests, execution scripts,
+the complete lockfile, pnpm workspace resolution, Vite and Wrangler
+configuration, nested package scopes, the absence of a Vite public directory,
+the HTML entry/asset surface, and the browser CSS asset surface as
+exact-current review gates. CI runs a built-in-only digest check before package
+installation, and the policy checks the lock before dynamically importing the
+pinned Vite/Oxc parser. Production code cannot enter test/spec modules; the
+trusted projector, Worker, and print roots retain only their documented
+server-side exceptions.
+
+**Impact**: Valid author metadata remains YAML data, and a routine config,
+manifest, HTML, CSS, or loader change cannot silently make canonical-answer
+context client-reachable. The real-repository check also requires the lockfile,
+workspace, root and reviewed browser package manifests, HTML entrypoint,
+Wrangler entrypoint, and exactly one reviewed Vite config; only isolated tests
+opt into partial-repository mode. Legitimate upgrades or new
+asset/plugin/package surfaces must update the policy and regression fixtures in
+the same review. The built-in-only pre-install gate pins all current workspace
+manifests as well as the root manifest, workspace configuration, and lockfile;
+it runs before the first pnpm setup/cache/CLI operation and rejects
+unknown/missing workspace manifests, repository-local `.npmrc`/`.pnpmfile.*`
+inputs, and direct `*.gyp` entries before installation. The browser build
+boundary also rejects every implicit PostCSS configuration location searched by
+the pinned Vite stack, scans every browser-safe package root, and fails closed
+on unreviewed Vite style languages, CSS Modules, and ICSS dependency forms.
+Executable source roots also reject extensionless regular files and unreviewed
+extensions that Vite could parse as JavaScript, while the pinned static-asset,
+JSON, and inspected style surfaces remain explicit exceptions. The boundary
+suite passes 58/58 plus the live scan; TypeScript 7.0.2, all 945 Vitest tests,
+production builds, and unchanged V1/V2 content and V1 output identities provide
+the branch evidence.
+
+The compiler's raw Markdown classifier now rejects every directive-shaped line
+whose fence is altered by punctuation, noncanonical indentation, Unicode
+whitespace, control, format, or default-ignorable characters while leaving YAML
+block-scalar data untouched. The shared student-delivery string scan computes a
+deduplicated closure over NFKC, form-space, common outer URI-wrapper,
+percent-collapse, and URI-decode states. Provably canonical common outer
+wrappers compress at the same round while preserving relative percent depth;
+the current value and its independently percent-collapsed derivative then
+remain separate decode candidates. This prevents collapse-first decoding from
+destroying an answer-bearing intermediate such as the `39/35` exposed from
+`%2539%2F35`. Composed URI-to-NFKC-to-URI forms receive at most three decode
+rounds and a 24-state cap, with either limit failing closed. The scan detects
+mixed ASCII and fullwidth forms such as `%25%32%46` and continues after
+valid-byte fallback when malformed percent text or truncated UTF-8 exposes
+another encoded layer. Compiler tests pass 222/222 and schema tests pass
+278/278 without changing either reviewed content hash.
+
+The dedicated V2 materializer now consumes one complete detached
+`DailyPlanPreviewV2`, reruns the pinned planner with the final V2 registry, and
+canonical-compares the entire plan before content hashing or generation. This
+binds the ID, seed, budget, item count, reasons, selected nodes, exclusion tuple,
+content, policy, graph, and evidence values to a real planner output rather
+than accepting independently assembled claims. Its fixed 12-minute instance
+hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
+generic standalone instance validation remains version-shaped rather than
+policy-specific. Generator-package entry locking and narrower trusted Worker
+graph allowlists remain explicit defense-in-depth follow-up rather than a
+claimed browser-boundary prerequisite.

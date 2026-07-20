@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,8 +8,354 @@ import {
   extractModuleSpecifiers,
   findImportBoundaryViolations,
 } from "./import-boundary-policy.mjs";
+import { checkReviewedInstallInputs } from "./check-reviewed-install-inputs.mjs";
+import { assertReviewedInstallInputs } from "./reviewed-install-inputs.mjs";
 
 const actualRepositoryRoot = path.resolve(import.meta.dirname, "..");
+const reviewedRootPackage = await readFile(
+  path.join(actualRepositoryRoot, "package.json"),
+  "utf8",
+);
+const reviewedPnpmLock = await readFile(
+  path.join(actualRepositoryRoot, "pnpm-lock.yaml"),
+  "utf8",
+);
+const reviewedWorkspace = await readFile(
+  path.join(actualRepositoryRoot, "pnpm-workspace.yaml"),
+  "utf8",
+);
+const reviewedWorkspaceManifestFiles = [
+  "apps/web/package.json",
+  "packages/content-compiler/package.json",
+  "packages/domain/package.json",
+  "packages/generators/package.json",
+  "packages/planner/package.json",
+  "packages/print-document/package.json",
+  "packages/schemas/package.json",
+  "packages/test-fixtures/package.json",
+  "packages/web-renderer/package.json",
+];
+const reviewedWorkspaceManifests = Object.fromEntries(
+  await Promise.all(
+    reviewedWorkspaceManifestFiles.map(async (relativeFile) => [
+      relativeFile,
+      await readFile(path.join(actualRepositoryRoot, relativeFile), "utf8"),
+    ]),
+  ),
+);
+const reviewedInstallInputs = {
+  "package.json": reviewedRootPackage,
+  "pnpm-lock.yaml": reviewedPnpmLock,
+  "pnpm-workspace.yaml": reviewedWorkspace,
+  ...reviewedWorkspaceManifests,
+};
+const installPolicyRoots = [
+  ".",
+  "apps",
+  "packages",
+  ...reviewedWorkspaceManifestFiles.map((relativeFile) =>
+    path.posix.dirname(relativeFile),
+  ),
+];
+const reviewedInstallPackageRoots = [
+  ".",
+  ...reviewedWorkspaceManifestFiles.map((relativeFile) =>
+    path.posix.dirname(relativeFile),
+  ),
+];
+const forbiddenInstallConfigFiles = installPolicyRoots.flatMap((relativeRoot) =>
+  [".npmrc", ".pnpmfile.cjs", ".pnpmfile.mjs"].map((fileName) =>
+    relativeRoot === "." ? fileName : path.posix.join(relativeRoot, fileName),
+  ),
+);
+const postcssConfigFileNames = [
+  ".postcssrc",
+  ".postcssrc.json",
+  ".postcssrc.yaml",
+  ".postcssrc.yml",
+  ".postcssrc.ts",
+  ".postcssrc.cts",
+  ".postcssrc.mts",
+  ".postcssrc.js",
+  ".postcssrc.cjs",
+  ".postcssrc.mjs",
+  "postcss.config.ts",
+  "postcss.config.cts",
+  "postcss.config.mts",
+  "postcss.config.js",
+  "postcss.config.cjs",
+  "postcss.config.mjs",
+];
+const implicitPostcssConfigFiles = [".", "apps", "apps/web"].flatMap((relativeRoot) =>
+  postcssConfigFileNames.map((fileName) =>
+    relativeRoot === "." ? fileName : path.posix.join(relativeRoot, fileName),
+  ),
+);
+const reviewedRootScripts = {
+  build: "pnpm -r --if-present build",
+  check:
+    "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:sample",
+  "check:boundaries":
+    "node --test scripts/check-import-boundaries.test.mjs && node scripts/check-import-boundaries.mjs",
+  "content:check": "pnpm --filter @exercisebook/content-compiler content:check",
+  "content:generate": "pnpm --filter @exercisebook/content-compiler content:generate",
+  dev: "pnpm --filter @exercisebook/web dev",
+  format: "prettier --write . --ignore-unknown",
+  "format:check": "prettier --check . --ignore-unknown",
+  preview: "pnpm --filter @exercisebook/web preview",
+  "schema:check": "pnpm --filter @exercisebook/schemas schema:check",
+  test: "vitest run",
+  "test:watch": "vitest",
+  typecheck:
+    "node scripts/check-typescript-version.mjs && tsc -p tsconfig.json --noEmit",
+  "worksheet:sample":
+    "pnpm content:check && pnpm --filter @exercisebook/web worksheet:sample && pnpm --filter @exercisebook/print-document render:sample -- ../../output/print-sample && pnpm worksheet:verify",
+  "worksheet:verify": "node scripts/verify-sample-artifacts.mjs",
+};
+const reviewedRootManifest = {
+  name: "exercisebook",
+  version: "0.0.0",
+  private: true,
+  description: "A new exercise book, every day.",
+  type: "module",
+  packageManager: "pnpm@11.8.0",
+  engines: {
+    node: ">=24",
+  },
+  scripts: reviewedRootScripts,
+  devDependencies: {
+    "@cloudflare/vitest-pool-workers": "0.18.6",
+    "@types/node": "26.1.1",
+    "fast-check": "4.9.0",
+    prettier: "3.9.5",
+    typescript: "7.0.2",
+    vite: "8.1.5",
+    vitest: "4.1.10",
+    wrangler: "4.112.0",
+  },
+};
+const reviewedWebScripts = {
+  build: "vite build",
+  dev: "vite",
+  preview: "vite preview",
+  test: "vitest run",
+  typecheck: "tsc -p tsconfig.json --noEmit",
+  "worksheet:sample": "tsx --tsconfig tsconfig.json scripts/write-sample.ts",
+};
+const reviewedWebManifest = {
+  name: "@exercisebook/web",
+  version: "0.0.0",
+  private: true,
+  type: "module",
+  scripts: reviewedWebScripts,
+  dependencies: {
+    "@exercisebook/domain": "workspace:*",
+    "@exercisebook/generators": "workspace:*",
+    "@exercisebook/planner": "workspace:*",
+    "@exercisebook/schemas": "workspace:*",
+    "@exercisebook/web-renderer": "workspace:*",
+    hono: "4.12.30",
+    react: "19.2.7",
+    "react-dom": "19.2.7",
+  },
+  devDependencies: {
+    "@cloudflare/vite-plugin": "1.45.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/jest-axe": "3.5.9",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "jest-axe": "10.0.0",
+    jsdom: "29.1.1",
+    tsx: "4.21.1",
+  },
+};
+const reviewedDomainManifest = {
+  name: "@exercisebook/domain",
+  version: "0.0.0",
+  private: true,
+  type: "module",
+  exports: { ".": "./src/index.ts" },
+  scripts: {
+    test: "vitest run --root ../.. packages/domain/src",
+    typecheck: "tsc -p tsconfig.json --noEmit",
+  },
+};
+const reviewedPlannerManifest = {
+  name: "@exercisebook/planner",
+  version: "0.0.0",
+  private: true,
+  type: "module",
+  exports: { ".": "./src/index.ts" },
+  scripts: {
+    test: "vitest run --root ../.. packages/planner/src",
+    typecheck: "tsc -p tsconfig.json --noEmit",
+  },
+  dependencies: {
+    "@exercisebook/domain": "workspace:*",
+    "@exercisebook/schemas": "workspace:*",
+    zod: "4.4.3",
+  },
+  devDependencies: {
+    "fast-check": "4.9.0",
+  },
+};
+const reviewedSchemasManifest = {
+  name: "@exercisebook/schemas",
+  version: "0.0.0",
+  private: true,
+  type: "module",
+  exports: {
+    ".": "./src/index.ts",
+    "./trusted-student-projection": "./src/trusted-student-projection.ts",
+    "./json-schema/content-document-v1":
+      "./json-schema/content-document-v1.schema.json",
+    "./json-schema/content-document-v2":
+      "./json-schema/content-document-v2.schema.json",
+    "./json-schema/worksheet-instance-v1":
+      "./json-schema/worksheet-instance-v1.schema.json",
+    "./json-schema/worksheet-instance-v2":
+      "./json-schema/worksheet-instance-v2.schema.json",
+  },
+  scripts: {
+    "schema:check": "tsx scripts/generate-json-schema.ts --check",
+    "schema:generate": "tsx scripts/generate-json-schema.ts",
+    test: "vitest run --root ../.. packages/schemas/src",
+    typecheck: "tsc -p tsconfig.json --noEmit",
+  },
+  dependencies: {
+    "@exercisebook/domain": "workspace:*",
+    zod: "4.4.3",
+  },
+  devDependencies: {
+    "@types/node": "26.1.1",
+    prettier: "3.9.5",
+    tsx: "4.21.1",
+  },
+};
+const reviewedWebRendererManifest = {
+  name: "@exercisebook/web-renderer",
+  version: "0.0.0",
+  private: true,
+  type: "module",
+  exports: {
+    ".": "./src/index.ts",
+    "./fixtures": "./src/fixtures.ts",
+    "./styles.css": "./src/styles.css",
+  },
+  scripts: {
+    test: "vitest run",
+    typecheck: "tsc -p tsconfig.json --noEmit",
+  },
+  peerDependencies: {
+    react: "19.2.7",
+    "react-dom": "19.2.7",
+  },
+  dependencies: {
+    zod: "4.4.3",
+  },
+  devDependencies: {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/jest-axe": "3.5.9",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "jest-axe": "10.0.0",
+    jsdom: "29.1.1",
+    react: "19.2.7",
+    "react-dom": "19.2.7",
+  },
+};
+const reviewedViteConfig = `
+  import { cloudflare } from "@cloudflare/vite-plugin";
+  import react from "@vitejs/plugin-react";
+  import { defineConfig } from "vite";
+
+  export default defineConfig({
+    plugins: [react(), cloudflare()],
+    build: {
+      sourcemap: false,
+      target: "es2024",
+    },
+  });
+`;
+const reviewedHtmlEntrypoint = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A local-first exercise book" />
+    <meta name="theme-color" content="#142d42" />
+    <link rel="canonical" href="https://exercisebook.app/" />
+    <title>Exercise Book</title>
+  </head>
+  <body>
+    <div id="root">
+      <header class="static-header">
+        <a href="/" aria-label='Exercise &quot; > Book home'>Exercise Book</a>
+      </header>
+      <main class="static-fallback">
+        <p>Free, focused, and made to be worked on.</p>
+        <h1>A new exercise book, every day.</h1>
+        <p>Learn from a short explanation.</p>
+        <p>
+          <a href="/lessons/fractions/add-unlike-denominators">Try the lesson</a>
+        </p>
+        <section aria-labelledby="static-fraction-title">
+          <h2 id="static-fraction-title">Fraction-bar fallback</h2>
+          <p>Equivalent fractions use the same whole.</p>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/react-app/main.tsx"></script>
+  </body>
+</html>
+`;
+const reviewedPnpmWorkspace = `packages:
+  - apps/*
+  - packages/*
+
+overrides:
+  esbuild: 0.28.1
+
+allowBuilds:
+  esbuild@0.28.1: true
+  sharp@0.34.5: true
+  workerd@1.20260714.1: true
+
+minimumReleaseAge: 1440
+`;
+const reviewedWranglerConfig = `{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "exercisebook-app",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-07-14",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": {
+    "enabled": true,
+  },
+}
+`;
+const reviewedStrictRepositoryFiles = {
+  "package.json": JSON.stringify(reviewedRootManifest),
+  "pnpm-lock.yaml": reviewedPnpmLock,
+  "pnpm-workspace.yaml": reviewedPnpmWorkspace,
+  "apps/web/package.json": JSON.stringify(reviewedWebManifest),
+  "apps/web/index.html": reviewedHtmlEntrypoint,
+  "apps/web/vite.config.mjs": reviewedViteConfig,
+  "apps/web/wrangler.jsonc": reviewedWranglerConfig,
+  "packages/domain/package.json": JSON.stringify(reviewedDomainManifest),
+  "packages/planner/package.json": JSON.stringify(reviewedPlannerManifest),
+  "packages/schemas/package.json": JSON.stringify(reviewedSchemasManifest),
+  "packages/web-renderer/package.json": JSON.stringify(reviewedWebRendererManifest),
+};
 
 async function withRepositoryFixture(files, run) {
   const repositoryRoot = await mkdtemp(
@@ -24,7 +370,11 @@ async function withRepositoryFixture(files, run) {
         await writeFile(absoluteFile, source, "utf8");
       }),
     );
-    await run(repositoryRoot);
+    await run(repositoryRoot, () =>
+      findImportBoundaryViolations(repositoryRoot, {
+        allowPartialRepository: true,
+      }),
+    );
   } finally {
     await rm(repositoryRoot, { recursive: true, force: true });
   }
@@ -70,8 +420,8 @@ test("rejects trusted server imports from every browser-reachable source root", 
       "packages/web-renderer/src/escaped.ts":
         'const trusted = import("@exercisebook/schemas/trusted-student-projec\\u0074ion");',
     },
-    async (repositoryRoot) => {
-      const violations = await findImportBoundaryViolations(repositoryRoot);
+    async (repositoryRoot, findFixtureViolations) => {
+      const violations = await findFixtureViolations();
 
       assert.equal(violations.length, 18);
       for (const relativeFile of [
@@ -132,6 +482,27 @@ test("extracts static, re-exported, dynamic, and required module specifiers", ()
   );
 });
 
+test("extracts static Vite glob and globEager module specifiers", () => {
+  assert.deepEqual(
+    extractModuleSpecifiers(`
+      const literal = import.meta.glob("./literal/*.ts");
+      const template = import.meta.glob(\`./template/*.ts\`);
+      const multiple = import.meta.glob([
+        "./first/*.ts",
+        \`./second/*.tsx\`,
+      ]);
+      const eager = import.meta.globEager("./eager/*.ts");
+    `),
+    [
+      "./literal/*.ts",
+      "./template/*.ts",
+      "./first/*.ts",
+      "./second/*.tsx",
+      "./eager/*.ts",
+    ],
+  );
+});
+
 test("fails closed with a deterministic diagnostic when a source cannot parse", () => {
   assert.throws(
     () => extractModuleSpecifiers("import {", "broken.ts"),
@@ -154,10 +525,638 @@ test("fails closed on computed dynamic imports and require calls", () => {
       "Non-static require() is not allowed in computed-require.ts at offset 8.",
     ),
   );
+  assert.throws(
+    () =>
+      extractModuleSpecifiers(
+        "new Worker(new URL(workerPath, import.meta.url), { type: 'module' });",
+        "computed-worker-url.ts",
+      ),
+    new Error(
+      "Non-static new URL(..., import.meta.url) is not allowed in computed-worker-url.ts at offset 19.",
+    ),
+  );
+});
+
+test("fails closed on backslash-containing module, glob, and asset specifiers", () => {
+  for (const [sourceFile, source] of [
+    [
+      "backslash-import.ts",
+      'import value from "..\\\\worker\\\\web-worksheet-projector.ts";',
+    ],
+    [
+      "backslash-export.ts",
+      'export { value } from "..\\\\worker\\\\web-worksheet-projector.ts";',
+    ],
+    [
+      "backslash-worker-url.ts",
+      'new URL("..\\\\worker\\\\web-worksheet-projector.ts", import.meta.url);',
+    ],
+    [
+      "backslash-root-url.ts",
+      'new URL("..\\\\..\\\\..\\\\..\\\\package.json", import.meta.url);',
+    ],
+    ["backslash-glob.ts", 'import.meta.glob("..\\\\worker\\\\*.ts");'],
+  ]) {
+    assert.throws(
+      () => extractModuleSpecifiers(source, sourceFile),
+      new RegExp(
+        `Backslashes are not allowed in static module or asset specifiers in ${sourceFile.replaceAll(".", "\\.")} at offset \\d+\\.`,
+        "u",
+      ),
+    );
+  }
+});
+
+test("fails closed on non-static Vite glob and globEager patterns", () => {
+  assert.throws(
+    () =>
+      extractModuleSpecifiers("import.meta.glob(modulePattern);", "computed-glob.ts"),
+    new Error(
+      "Non-static import.meta.glob() is not allowed in computed-glob.ts at offset 17.",
+    ),
+  );
+  assert.throws(
+    () =>
+      extractModuleSpecifiers(
+        'import.meta.glob(["./safe.ts", modulePattern]);',
+        "computed-glob-array.ts",
+      ),
+    new Error(
+      "Non-static import.meta.glob() is not allowed in computed-glob-array.ts at offset 31.",
+    ),
+  );
+  assert.throws(
+    () =>
+      extractModuleSpecifiers(
+        "import.meta.globEager(`./${moduleName}.ts`);",
+        "computed-glob-eager.ts",
+      ),
+    new Error(
+      "Non-static import.meta.globEager() is not allowed in computed-glob-eager.ts at offset 22.",
+    ),
+  );
+});
+
+test("extracts Vite glob patterns without reproducing option semantics", () => {
+  assert.deepEqual(
+    extractModuleSpecifiers(`
+      const based = import.meta.glob("./trusted-*.ts", {
+        base: "../../../../packages/schemas/src",
+        eager: true,
+        import: "default",
+        caseSensitive: true,
+      });
+      const unsafeOptionsAreStillDetected = import.meta.glob("./other-*.ts", {
+        base: moduleBase,
+        caseSensitive: false,
+        ...globOptions,
+      });
+    `),
+    ["./trusted-*.ts", "./other-*.ts"],
+  );
 });
 
 test("parses every configured source in the current repository", async () => {
   assert.deepEqual(await findImportBoundaryViolations(actualRepositoryRoot), []);
+});
+
+test("requires every reviewed repository input by default", async () => {
+  await withRepositoryFixture(reviewedStrictRepositoryFiles, async (repositoryRoot) => {
+    assert.deepEqual(await findImportBoundaryViolations(repositoryRoot), []);
+  });
+
+  for (const [missingFile, expectedMessage] of [
+    [
+      "pnpm-workspace.yaml",
+      "pnpm-workspace.yaml is required for complete import boundary analysis.",
+    ],
+    [
+      "pnpm-lock.yaml",
+      "pnpm-lock.yaml is required for complete import boundary analysis.",
+    ],
+    ["package.json", "package.json is required for complete import boundary analysis."],
+    [
+      "apps/web/package.json",
+      "apps/web/package.json is required for complete import boundary analysis.",
+    ],
+    [
+      "packages/domain/package.json",
+      "packages/domain/package.json is required for complete import boundary analysis.",
+    ],
+    [
+      "packages/planner/package.json",
+      "packages/planner/package.json is required for complete import boundary analysis.",
+    ],
+    [
+      "packages/schemas/package.json",
+      "packages/schemas/package.json is required for complete import boundary analysis.",
+    ],
+    [
+      "packages/web-renderer/package.json",
+      "packages/web-renderer/package.json is required for complete import boundary analysis.",
+    ],
+    [
+      "apps/web/index.html",
+      "apps/web/index.html is required for complete import boundary analysis.",
+    ],
+    [
+      "apps/web/vite.config.mjs",
+      "apps/web must contain exactly one reviewed Vite configuration.",
+    ],
+    [
+      "apps/web/wrangler.jsonc",
+      "apps/web/wrangler.jsonc is required for complete import boundary analysis.",
+    ],
+  ]) {
+    const files = { ...reviewedStrictRepositoryFiles };
+    delete files[missingFile];
+    await withRepositoryFixture(
+      files,
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findImportBoundaryViolations(repositoryRoot),
+          new Error(expectedMessage),
+        );
+        assert.deepEqual(await findFixtureViolations(), []);
+      },
+    );
+  }
+});
+
+test("preflights reviewed install inputs without loading workspace dependencies", () => {
+  assert.doesNotThrow(() => assertReviewedInstallInputs(reviewedInstallInputs));
+
+  for (const relativeFile of Object.keys(reviewedInstallInputs)) {
+    assert.throws(
+      () =>
+        assertReviewedInstallInputs({
+          ...reviewedInstallInputs,
+          [relativeFile]: `${reviewedInstallInputs[relativeFile]}\n`,
+        }),
+      new Error(
+        `${relativeFile} must exactly match the reviewed pre-install dependency input.`,
+      ),
+    );
+    assert.throws(
+      () =>
+        assertReviewedInstallInputs(
+          Object.fromEntries(
+            Object.entries(reviewedInstallInputs).filter(
+              ([candidate]) => candidate !== relativeFile,
+            ),
+          ),
+        ),
+      new Error(
+        `${relativeFile} is required for reviewed pre-install dependency verification.`,
+      ),
+    );
+  }
+
+  for (const relativeFile of reviewedWorkspaceManifestFiles) {
+    const manifest = JSON.parse(reviewedInstallInputs[relativeFile]);
+    assert.throws(
+      () =>
+        assertReviewedInstallInputs({
+          ...reviewedInstallInputs,
+          [relativeFile]: JSON.stringify({
+            ...manifest,
+            scripts: {
+              ...manifest.scripts,
+              postinstall: "node ./scripts/unreviewed-postinstall.mjs",
+            },
+          }),
+        }),
+      new Error(
+        `${relativeFile} must exactly match the reviewed pre-install dependency input.`,
+      ),
+    );
+  }
+
+  for (const relativeFile of forbiddenInstallConfigFiles) {
+    assert.throws(
+      () =>
+        assertReviewedInstallInputs({
+          ...reviewedInstallInputs,
+          [relativeFile]: "unreviewed install configuration",
+        }),
+      new Error(
+        `${relativeFile} must be absent during reviewed pre-install dependency verification.`,
+      ),
+    );
+  }
+
+  for (const relativeRoot of reviewedInstallPackageRoots) {
+    for (const fileName of ["binding.gyp", "native-addon.gyp", "NATIVE.GYP"]) {
+      const relativeFile =
+        relativeRoot === "." ? fileName : path.posix.join(relativeRoot, fileName);
+      assert.throws(
+        () =>
+          assertReviewedInstallInputs({
+            ...reviewedInstallInputs,
+            [relativeFile]: "present",
+          }),
+        new Error(
+          `${relativeFile} must be absent during reviewed pre-install dependency verification.`,
+        ),
+      );
+    }
+  }
+
+  assert.throws(
+    () =>
+      assertReviewedInstallInputs({
+        ...reviewedInstallInputs,
+        "packages/unreviewed/package.json": JSON.stringify({
+          name: "@exercisebook/unreviewed",
+          private: true,
+        }),
+      }),
+    new TypeError(
+      "Unknown reviewed pre-install dependency input: packages/unreviewed/package.json",
+    ),
+  );
+});
+
+test("discovers unknown, missing, and forbidden workspace install inputs", async () => {
+  await withRepositoryFixture(reviewedInstallInputs, async (repositoryRoot) => {
+    await assert.doesNotReject(() => checkReviewedInstallInputs(repositoryRoot));
+  });
+
+  const missingManifestFiles = { ...reviewedInstallInputs };
+  delete missingManifestFiles["packages/test-fixtures/package.json"];
+  await withRepositoryFixture(missingManifestFiles, async (repositoryRoot) => {
+    await assert.rejects(
+      () => checkReviewedInstallInputs(repositoryRoot),
+      new Error(
+        "packages/test-fixtures/package.json is required for reviewed pre-install dependency verification.",
+      ),
+    );
+  });
+
+  await withRepositoryFixture(
+    {
+      ...reviewedInstallInputs,
+      "packages/unreviewed/package.json": JSON.stringify({
+        name: "@exercisebook/unreviewed",
+        private: true,
+      }),
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => checkReviewedInstallInputs(repositoryRoot),
+        new TypeError(
+          "Unknown reviewed pre-install dependency input: packages/unreviewed/package.json",
+        ),
+      );
+    },
+  );
+
+  for (const relativeFile of forbiddenInstallConfigFiles) {
+    await withRepositoryFixture(
+      {
+        ...reviewedInstallInputs,
+        [relativeFile]: "unreviewed install configuration",
+      },
+      async (repositoryRoot) => {
+        await assert.rejects(
+          () => checkReviewedInstallInputs(repositoryRoot),
+          new Error(
+            `${relativeFile} must be absent during reviewed pre-install dependency verification.`,
+          ),
+        );
+      },
+    );
+  }
+
+  for (const relativeRoot of reviewedInstallPackageRoots) {
+    const relativeFile =
+      relativeRoot === "."
+        ? "binding.gyp"
+        : path.posix.join(relativeRoot, "binding.gyp");
+    await withRepositoryFixture(
+      {
+        ...reviewedInstallInputs,
+        [relativeFile]: "{}",
+      },
+      async (repositoryRoot) => {
+        await assert.rejects(
+          () => checkReviewedInstallInputs(repositoryRoot),
+          new Error(
+            `${relativeFile} must be absent during reviewed pre-install dependency verification.`,
+          ),
+        );
+      },
+    );
+  }
+
+  for (const [relativeFile, kind] of [
+    ["native-addon.gyp", "directory"],
+    ["packages/domain/linked-addon.gyp", "symlink"],
+  ]) {
+    await withRepositoryFixture(reviewedInstallInputs, async (repositoryRoot) => {
+      const absoluteFile = path.join(repositoryRoot, relativeFile);
+      if (kind === "directory") {
+        await mkdir(absoluteFile, { recursive: true });
+      } else {
+        await symlink("missing-reviewed-gyp-target", absoluteFile);
+      }
+      await assert.rejects(
+        () => checkReviewedInstallInputs(repositoryRoot),
+        new Error(
+          `${relativeFile} must be absent during reviewed pre-install dependency verification.`,
+        ),
+      );
+    });
+  }
+
+  await withRepositoryFixture(
+    {
+      ...reviewedInstallInputs,
+      "packages/unreviewed/package.json": JSON.stringify({
+        name: "@exercisebook/unreviewed",
+        private: true,
+      }),
+      "packages/unreviewed/binding.gyp": "{}",
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => checkReviewedInstallInputs(repositoryRoot),
+        new Error(
+          "packages/unreviewed/binding.gyp must be absent during reviewed pre-install dependency verification.",
+        ),
+      );
+    },
+  );
+});
+
+test("runs the built-in-only dependency preflight before install and invokes boundaries directly in CI", async () => {
+  const workflow = await readFile(
+    path.join(actualRepositoryRoot, ".github/workflows/ci.yml"),
+    "utf8",
+  );
+  const preflightCommand = "run: node scripts/check-reviewed-install-inputs.mjs";
+  const installCommand = "run: pnpm install --frozen-lockfile";
+  const directBoundaryCommands = [
+    "node --test scripts/check-import-boundaries.test.mjs",
+    "node scripts/check-import-boundaries.mjs",
+  ];
+  const checkoutIndex = workflow.indexOf("uses: actions/checkout@");
+  const firstNodeSetupIndex = workflow.indexOf("uses: actions/setup-node@");
+  const preflightIndex = workflow.indexOf(preflightCommand);
+  const pnpmSetupIndex = workflow.indexOf("uses: pnpm/action-setup@");
+  const pnpmCacheIndex = workflow.indexOf("cache: pnpm");
+  const installIndex = workflow.indexOf(installCommand);
+
+  assert.notEqual(checkoutIndex, -1, "CI must check out the repository");
+  assert.notEqual(firstNodeSetupIndex, -1, "CI must set up the reviewed Node runtime");
+  assert.notEqual(preflightIndex, -1, "CI must invoke the built-in-only preflight");
+  assert.notEqual(pnpmSetupIndex, -1, "CI must set up the pinned pnpm runtime");
+  assert.notEqual(pnpmCacheIndex, -1, "CI must configure pnpm caching");
+  assert.notEqual(installIndex, -1, "CI must use the frozen workspace install");
+  assert.ok(
+    checkoutIndex < firstNodeSetupIndex && firstNodeSetupIndex < preflightIndex,
+    "CI must check out sources and set up Node before the built-in-only preflight",
+  );
+  assert.doesNotMatch(
+    workflow.slice(0, preflightIndex),
+    /\b(?:bun|corepack|npm|npx|pnpm|yarn)\b/iu,
+    "CI may not initialize a package manager, package-manager caching, or a package-manager CLI before the built-in-only preflight",
+  );
+  assert.ok(
+    preflightIndex < pnpmSetupIndex &&
+      pnpmSetupIndex < pnpmCacheIndex &&
+      pnpmCacheIndex < installIndex,
+    "CI must validate reviewed inputs before pnpm setup, then configure caching before package installation",
+  );
+  for (const directBoundaryCommand of directBoundaryCommands) {
+    assert.ok(
+      workflow.includes(directBoundaryCommand),
+      "CI must invoke the boundary tests and live scan without a package-script bootstrap",
+    );
+  }
+});
+
+test("rejects duplicate reviewed Vite configurations", async () => {
+  await withRepositoryFixture(
+    {
+      ...reviewedStrictRepositoryFiles,
+      "apps/web/vite.config.js": reviewedViteConfig,
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => findImportBoundaryViolations(repositoryRoot),
+        new Error("apps/web must contain exactly one reviewed Vite configuration."),
+      );
+    },
+  );
+});
+
+test("rejects every implicit PostCSS configuration in complete and partial repositories", async () => {
+  for (const relativeFile of implicitPostcssConfigFiles) {
+    const expectedError = new Error(
+      `${relativeFile} may not alter the reviewed browser CSS build configuration.`,
+    );
+    await withRepositoryFixture(
+      {
+        [relativeFile]: "export default { plugins: [] };\n",
+      },
+      async (_repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(() => findFixtureViolations(), expectedError);
+      },
+    );
+    await withRepositoryFixture(
+      {
+        ...reviewedStrictRepositoryFiles,
+        [relativeFile]: "export default { plugins: [] };\n",
+      },
+      async (repositoryRoot) => {
+        await assert.rejects(
+          () => findImportBoundaryViolations(repositoryRoot),
+          expectedError,
+        );
+      },
+    );
+  }
+
+  for (const [relativeFile, reviewedManifest] of [
+    ["package.json", reviewedRootManifest],
+    ["apps/web/package.json", reviewedWebManifest],
+    ["apps/package.json", {}],
+  ]) {
+    const expectedError = new Error(
+      `${relativeFile} may not alter the reviewed browser CSS build configuration.`,
+    );
+    for (const repositoryFiles of [{}, reviewedStrictRepositoryFiles]) {
+      await withRepositoryFixture(
+        {
+          ...repositoryFiles,
+          [relativeFile]: JSON.stringify({
+            ...reviewedManifest,
+            postcss: { plugins: [] },
+          }),
+        },
+        async (repositoryRoot, findFixtureViolations) => {
+          await assert.rejects(
+            () =>
+              repositoryFiles === reviewedStrictRepositoryFiles
+                ? findImportBoundaryViolations(repositoryRoot)
+                : findFixtureViolations(),
+            expectedError,
+          );
+        },
+      );
+    }
+  }
+});
+
+test("requires the exact reviewed Cloudflare Worker entrypoint configuration", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/wrangler.jsonc": reviewedWranglerConfig,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  const alternateJsonFormatting = JSON.stringify({
+    $schema: "../../node_modules/wrangler/config-schema.json",
+    name: "exercisebook-app",
+    main: "./src/worker/index.ts",
+    compatibility_date: "2026-07-14",
+    assets: {
+      not_found_handling: "single-page-application",
+      run_worker_first: ["/api/*"],
+    },
+    observability: {
+      enabled: true,
+    },
+  });
+  for (const wranglerConfig of [
+    reviewedWranglerConfig.replace(
+      '"../../node_modules/wrangler/config-schema.json"',
+      '"../../node_modules/wrangler/alternate-schema.json"',
+    ),
+    reviewedWranglerConfig.replace(
+      '"name": "exercisebook-app"',
+      '"name": "exercisebook-preview"',
+    ),
+    reviewedWranglerConfig.replace(
+      '"main": "./src/worker/index.ts"',
+      '"main": "./src/react-app/main.tsx"',
+    ),
+    reviewedWranglerConfig.replace(
+      '"compatibility_date": "2026-07-14"',
+      '"compatibility_date": "2026-07-15"',
+    ),
+    reviewedWranglerConfig.replace(
+      '"not_found_handling": "single-page-application"',
+      '"not_found_handling": "404-page"',
+    ),
+    reviewedWranglerConfig.replace(
+      '"run_worker_first": ["/api/*"]',
+      '"run_worker_first": true',
+    ),
+    reviewedWranglerConfig.replace('"enabled": true', '"enabled": false'),
+    reviewedWranglerConfig.replace(
+      '  "name": "exercisebook-app",',
+      '  "name": "exercisebook-app",\n  "routes": [],',
+    ),
+    reviewedWranglerConfig.replace(
+      '  "name": "exercisebook-app",',
+      '  // The reviewed application name.\n  "name": "exercisebook-app",',
+    ),
+    alternateJsonFormatting,
+  ]) {
+    await withRepositoryFixture(
+      {
+        "apps/web/wrangler.jsonc": wranglerConfig,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            "apps/web/wrangler.jsonc must exactly match the reviewed Cloudflare entrypoint configuration.",
+          ),
+        );
+      },
+    );
+  }
+
+  for (const alternateConfig of ["apps/web/wrangler.json", "apps/web/wrangler.toml"]) {
+    for (const files of [
+      {
+        [alternateConfig]: reviewedWranglerConfig,
+      },
+      {
+        ...reviewedStrictRepositoryFiles,
+        [alternateConfig]: reviewedWranglerConfig,
+      },
+    ]) {
+      await withRepositoryFixture(
+        files,
+        async (repositoryRoot, findFixtureViolations) => {
+          const findViolations =
+            Object.keys(files).length === 1
+              ? findFixtureViolations
+              : () => findImportBoundaryViolations(repositoryRoot);
+          await assert.rejects(
+            () => findViolations(),
+            new Error(
+              `${alternateConfig} may not replace or augment the reviewed apps/web/wrangler.jsonc configuration.`,
+            ),
+          );
+        },
+      );
+    }
+  }
+});
+
+test("rejects every Vite public directory entry in complete and partial repositories", async () => {
+  for (const files of [
+    {
+      "apps/web/public/unreviewed.js": "globalThis.unreviewed = true;",
+    },
+    {
+      ...reviewedStrictRepositoryFiles,
+      "apps/web/public/unreviewed.js": "globalThis.unreviewed = true;",
+    },
+  ]) {
+    await withRepositoryFixture(
+      files,
+      async (repositoryRoot, findFixtureViolations) => {
+        const findViolations =
+          Object.keys(files).length === 1
+            ? findFixtureViolations
+            : () => findImportBoundaryViolations(repositoryRoot);
+        await assert.rejects(
+          () => findViolations(),
+          new Error(
+            "apps/web/public must be absent because Vite copies it outside the reviewed module graph.",
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      "apps/web/unreviewed-public/asset.txt": "unreviewed",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await symlink(
+        "./unreviewed-public",
+        path.join(repositoryRoot, "apps/web/public"),
+        "dir",
+      );
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "apps/web/public must be absent because Vite copies it outside the reviewed module graph.",
+        ),
+      );
+    },
+  );
 });
 
 test("keeps direct trusted imports available to the Worker server boundary", async () => {
@@ -173,11 +1172,250 @@ test("keeps direct trusted imports available to the Worker server boundary", asy
         'export { trusted } from "../../../../packages/schemas/src/trusted-student-projection.js";',
       "apps/web/src/worker/v2-implementation.ts":
         'import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "../../../../packages/schemas/src/student-worksheet-delivery-v2.js";',
-      "apps/web/src/worker/computed.ts":
-        "const trusted = import(moduleSpecifier); const required = require(moduleSpecifier);",
     },
-    async (repositoryRoot) => {
-      assert.deepEqual(await findImportBoundaryViolations(repositoryRoot), []);
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+});
+
+test("fails closed on computed production Worker module loads", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/worker/computed.ts": "const trusted = import(moduleSpecifier);",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "Non-static import() is not allowed in apps/web/src/worker/computed.ts at offset 23.",
+        ),
+      );
+    },
+  );
+});
+
+test("rejects trusted modules loaded through Vite glob APIs in browser code", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/glob.ts":
+        'const trusted = import.meta.glob("../../../../packages/schemas/src/trusted-*.ts");',
+      "packages/web-renderer/src/glob-eager.ts":
+        "const trusted = import.meta.globEager(`../../schemas/src/student-worksheet-delivery-v2.ts`);",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/glob.ts uses forbidden production Vite module load "../../../../packages/schemas/src/trusted-*.ts"',
+        'packages/web-renderer/src/glob-eager.ts uses forbidden production Vite module load "../../schemas/src/student-worksheet-delivery-v2.ts"',
+      ]);
+    },
+  );
+});
+
+test("forbids Vite glob APIs in every production source boundary", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/content-compiler/src/glob.ts":
+        'const content = import.meta.glob("./*.ts");',
+      "packages/planner/src/allowed.test.ts":
+        'const fixtures = import.meta.glob("./*.ts");',
+      "packages/print-document/src/glob.ts":
+        'const templates = import.meta.glob("./*.ts");',
+      "apps/web/src/react-app/allowed.test.ts":
+        'const fixtures = import.meta.glob("./*.ts");',
+      "apps/web/src/worker/glob.ts": 'const handlers = import.meta.glob("./*.ts");',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/content-compiler/src/glob.ts uses forbidden production Vite module load "./*.ts"',
+        'apps/web/src/worker/glob.ts uses forbidden production Vite module load "./*.ts"',
+        'packages/print-document/src/glob.ts uses forbidden production Vite module load "./*.ts"',
+      ]);
+    },
+  );
+});
+
+test("forbids historical Vite glob and root-absolute escape patterns", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/base-glob.ts":
+        'const trusted = import.meta.glob("./trusted-*.ts", { base: "../../../../packages/schemas/src", eager: true });',
+      "apps/web/src/react-app/root-base-glob.ts":
+        'const trusted = import.meta.glob("./trusted-*.ts", { base: "/../../packages/schemas/src" });',
+      "apps/web/src/react-app/positive-negative-glob.ts":
+        'const trusted = import.meta.glob(["../../../../packages/schemas/src/trusted-*.ts", "!./safe/*.ts"]);',
+      "apps/web/src/react-app/conservative-negative-glob.ts":
+        'const trusted = import.meta.glob(["../../../../packages/schemas/src/trusted-*.ts", "!../../../../packages/schemas/src/trusted-*.ts"]);',
+      "apps/web/src/react-app/question-wildcard-glob.ts":
+        'const trusted = import.meta.glob("../../../../packages/schemas/src/trusted?student-projection.ts");',
+      "apps/web/src/react-app/root-absolute-glob.ts":
+        'const trusted = import.meta.glob("/../../packages/schemas/src/trusted-*.ts");',
+      "apps/web/src/react-app/root-absolute-import.ts":
+        'import { trusted } from "/../../packages/schemas/src/trusted-student-projection.ts";',
+      "apps/web/src/react-app/static-query-import.ts":
+        'import { trusted } from "../../../../packages/schemas/src/trusted-student-projection.ts?raw";',
+      "packages/schemas/src/trusted-student-projection.ts":
+        "export const trusted = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/base-glob.ts uses forbidden production Vite module load "./trusted-*.ts"',
+        'apps/web/src/react-app/conservative-negative-glob.ts uses forbidden production Vite module load "../../../../packages/schemas/src/trusted-*.ts"',
+        'apps/web/src/react-app/conservative-negative-glob.ts uses forbidden production Vite module load "!../../../../packages/schemas/src/trusted-*.ts"',
+        'apps/web/src/react-app/positive-negative-glob.ts uses forbidden production Vite module load "../../../../packages/schemas/src/trusted-*.ts"',
+        'apps/web/src/react-app/positive-negative-glob.ts uses forbidden production Vite module load "!./safe/*.ts"',
+        'apps/web/src/react-app/question-wildcard-glob.ts uses forbidden production Vite module load "../../../../packages/schemas/src/trusted?student-projection.ts"',
+        'apps/web/src/react-app/root-absolute-glob.ts uses forbidden production Vite module load "/../../packages/schemas/src/trusted-*.ts"',
+        'apps/web/src/react-app/root-absolute-import.ts uses forbidden production Vite module load "/../../packages/schemas/src/trusted-student-projection.ts"',
+        'apps/web/src/react-app/root-base-glob.ts uses forbidden production Vite module load "./trusted-*.ts"',
+        'apps/web/src/react-app/static-query-import.ts imports outside its browser source root "../../../../packages/schemas/src/trusted-student-projection.ts?raw"',
+      ]);
+    },
+  );
+});
+
+test("rejects browser loads of server-only workspace packages and source paths", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/content-compiler.ts":
+        'const compiler = import("@exercisebook/content-compiler/internal");',
+      "apps/web/src/react-app/generators.ts":
+        'import { generate } from "@exercisebook/generators";',
+      "apps/web/src/react-app/print-document.ts":
+        'export * from "@exercisebook/print-document";',
+      "apps/web/src/react-app/print-document-relative.ts":
+        'import { project } from "../../../../packages/print-document/src/project.js";',
+      "apps/web/src/react-app/print-document-glob.ts":
+        'const projects = import.meta.glob("../../../../packages/print-document/src/proj?ct.ts");',
+      "apps/web/src/react-app/print-document-root.ts":
+        'const project = new URL("/../../packages/print-document/src/project.ts", import.meta.url);',
+      "packages/content-compiler/src/index.ts": "export const compile = true;",
+      "packages/generators/src/index.ts": "export const generate = true;",
+      "packages/print-document/src/project.ts": "export const project = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/content-compiler.ts imports non-allowlisted browser workspace dependency "@exercisebook/content-compiler/internal"',
+        'apps/web/src/react-app/generators.ts imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
+        'apps/web/src/react-app/print-document-glob.ts uses forbidden production Vite module load "../../../../packages/print-document/src/proj?ct.ts"',
+        'apps/web/src/react-app/print-document-relative.ts imports outside its browser source root "../../../../packages/print-document/src/project.js"',
+        'apps/web/src/react-app/print-document-root.ts uses forbidden production Vite module load "/../../packages/print-document/src/project.ts"',
+        'apps/web/src/react-app/print-document.ts imports non-allowlisted browser workspace dependency "@exercisebook/print-document"',
+      ]);
+    },
+  );
+});
+
+test("allows only reviewed runtime dependencies in production package sources", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/allowed-runtime.ts": `
+        import React from "react";
+        import { createRoot } from "react-dom/client";
+        import { value as domain } from "@exercisebook/domain";
+        import { value as planner } from "@exercisebook/planner";
+        import { value as schemas } from "@exercisebook/schemas";
+        import { value as renderer } from "@exercisebook/web-renderer";
+        void React;
+        void createRoot;
+        void domain;
+        void planner;
+        void schemas;
+        void renderer;
+      `,
+      "apps/web/src/react-app/dev-library.ts":
+        'import { render } from "@testing-library/react";',
+      "apps/web/src/react-app/undeclared.ts": 'import leftPad from "left-pad";',
+      "apps/web/src/react-app/dev-library.test.ts":
+        'import { render } from "@testing-library/react"; void render;',
+      "apps/web/src/worker/allowed-runtime.ts": `
+        import { Hono } from "hono";
+        import { generate } from "@exercisebook/generators";
+        void Hono;
+        void generate;
+      `,
+      "packages/planner/src/allowed-runtime.ts": `
+        import { z } from "zod";
+        import { value as domain } from "@exercisebook/domain";
+        import { value as schemas } from "@exercisebook/schemas";
+        void z;
+        void domain;
+        void schemas;
+      `,
+      "packages/schemas/src/allowed-runtime.ts": `
+        import { z } from "zod";
+        import { value as domain } from "@exercisebook/domain";
+        void z;
+        void domain;
+      `,
+      "packages/web-renderer/src/allowed-runtime.ts": `
+        import React from "react";
+        import { createRoot } from "react-dom/client";
+        import { z } from "zod";
+        void React;
+        void createRoot;
+        void z;
+      `,
+      "packages/web-renderer/src/dev-library.ts":
+        'import { render } from "@testing-library/react";',
+      "packages/web-renderer/src/dev-library.test.ts":
+        'import { render } from "@testing-library/react"; void render;',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/dev-library.ts imports non-runtime external dependency "@testing-library/react"',
+        'apps/web/src/react-app/undeclared.ts imports non-runtime external dependency "left-pad"',
+        'packages/web-renderer/src/dev-library.ts imports non-runtime external dependency "@testing-library/react"',
+      ]);
+    },
+  );
+});
+
+test("blocks server-only packages from browser-safe workspace package roots", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/planner/src/leak.ts":
+        'export { generate } from "@exercisebook/generators";',
+      "packages/generators/src/index.ts": "export const generate = true;",
+      "apps/web/src/react-app/planner.ts":
+        'import { plan } from "@exercisebook/planner";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/planner/src/leak.ts imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
+      ]);
+    },
+  );
+});
+
+test("preserves the intentionally browser-safe workspace package surface", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/safe-workspaces.ts": `
+        import {
+          projectWorksheetV2ForStudent,
+          StudentWorksheetDeliveryV2Schema,
+          validateStudentWorksheetDeliveryV2,
+        } from "@exercisebook/schemas";
+        import {
+          DailyPlanV2Schema,
+          validateDailyPlanV2,
+        } from "@exercisebook/planner";
+        import { SkillIdSchema } from "@exercisebook/domain";
+        import { renderWorksheet } from "@exercisebook/web-renderer";
+        export {
+          DailyPlanV2Schema,
+          projectWorksheetV2ForStudent,
+          renderWorksheet,
+          SkillIdSchema,
+          StudentWorksheetDeliveryV2Schema,
+          validateDailyPlanV2,
+          validateStudentWorksheetDeliveryV2,
+        };
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
     },
   );
 });
@@ -190,10 +1428,1453 @@ test("rejects a trusted re-export through a protected workspace package", async 
       "apps/web/src/react-app/leak.ts":
         'import { trusted } from "@exercisebook/generators";',
     },
-    async (repositoryRoot) => {
-      assert.deepEqual(await findImportBoundaryViolations(repositoryRoot), [
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
         'packages/generators/src/index.ts imports trusted server-only dependency "@exercisebook/schemas/trusted-student-projection"',
+        'apps/web/src/react-app/leak.ts imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
       ]);
+    },
+  );
+});
+
+test("allows isolated tests to use trusted code but rejects production loads of test modules", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/generators/src/index.ts": 'export * from "./leak.test.js";',
+      "packages/generators/src/leak.test.ts":
+        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const wrapped = trusted;',
+      "packages/generators/src/ordinary.test.ts":
+        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const isolated = trusted;',
+      "packages/print-document/src/index.ts": 'export * from "./project.test.js";',
+      "packages/print-document/src/project.test.ts": "export const testProject = true;",
+      "apps/web/src/react-app/glob-tests.ts":
+        'const tests = import.meta.glob("../../../../packages/generators/src/*.{test,spec}.ts");',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/generators/src/index.ts imports test-only module "./leak.test.js"',
+        'apps/web/src/react-app/glob-tests.ts uses forbidden production Vite module load "../../../../packages/generators/src/*.{test,spec}.ts"',
+        'packages/print-document/src/index.ts imports test-only module "./project.test.js"',
+      ]);
+    },
+  );
+});
+
+test("restricts the trusted projection module to its schema entrypoint and tests", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/index.ts":
+        'export { trusted } from "./trusted-student-projection.js";',
+      "packages/schemas/src/internal-projector.ts":
+        'import { trusted } from "./trusted-student-projection.js";',
+      "packages/schemas/src/internal-projector.test.ts":
+        'import { trusted } from "./trusted-student-projection.js";',
+      "packages/schemas/src/trusted-student-projection.ts":
+        'export { projectWorksheetV2ForStudentWithCanonicalAnswers } from "./student-worksheet-delivery-v2.js";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/schemas/src/index.ts imports trusted server-only dependency "./trusted-student-projection.js"',
+        'packages/schemas/src/internal-projector.ts imports trusted server-only dependency "./trusted-student-projection.js"',
+      ]);
+    },
+  );
+});
+
+test("rejects trusted named bindings from mixed modules at the public schemas barrel", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/index.ts": `
+        export {
+          projectWorksheetV2ForStudentWithCanonicalAnswers as harmlessProjector,
+          assertPresentationIntermediatesDoNotMatchCanonicalAnswers,
+          StudentWorksheetDeliveryV2Schema,
+        } from "./student-worksheet-delivery-v2.js";
+        export type {
+          StudentWorksheetProjectionV2 as HarmlessProjectionV2,
+          StudentWorksheetDeliveryV2,
+        } from "./student-worksheet-delivery-v2.js";
+        import {
+          projectWorksheetForStudentWithCanonicalAnswers as harmlessV1Projector,
+          WorksheetInstanceV1Schema,
+        } from "./worksheet-instance-v1.js";
+        export { WorksheetInstanceV1Schema };
+        export type {
+          StudentWorksheetProjectionV1 as HarmlessProjectionV1,
+          WorksheetInstanceV1,
+        } from "./worksheet-instance-v1.js";
+        type SafeImportedType =
+          import("./worksheet-instance-v1.js").WorksheetInstanceV1;
+        type ForbiddenImportedType =
+          import("./worksheet-instance-v1.js").StudentWorksheetProjectionV1;
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/schemas/src/index.ts exports trusted server-only binding "projectWorksheetV2ForStudentWithCanonicalAnswers" from "./student-worksheet-delivery-v2.js"',
+        'packages/schemas/src/index.ts exports trusted server-only binding "assertPresentationIntermediatesDoNotMatchCanonicalAnswers" from "./student-worksheet-delivery-v2.js"',
+        'packages/schemas/src/index.ts exports trusted server-only binding "StudentWorksheetProjectionV2" from "./student-worksheet-delivery-v2.js"',
+        'packages/schemas/src/index.ts imports trusted server-only binding "projectWorksheetForStudentWithCanonicalAnswers" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/index.ts exports trusted server-only binding "StudentWorksheetProjectionV1" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/index.ts loads trusted server-only binding "StudentWorksheetProjectionV1" from "./worksheet-instance-v1.js"',
+      ]);
+    },
+  );
+});
+
+test("allows only direct reviewed bindings from mixed schema modules", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/a-import-alias.ts":
+        'import { WorksheetInstanceV1Schema as AlternateSchema } from "./worksheet-instance-v1.js";',
+      "packages/schemas/src/b-export-alias.ts":
+        'export { StudentWorksheetDeliveryV2Schema as AlternateDeliverySchema } from "./student-worksheet-delivery-v2.js";',
+      "packages/schemas/src/c-default.ts":
+        'import WorksheetInstance from "./worksheet-instance-v1.js";',
+      "packages/schemas/src/d-namespace.ts":
+        'import * as Delivery from "./student-worksheet-delivery-v2.js";',
+      "packages/schemas/src/e-new-binding.ts":
+        'export { NewlyIntroducedProjection } from "./worksheet-instance-v1.js";',
+      "packages/schemas/src/f-default-export.ts":
+        'export { default as WorksheetInstance } from "./worksheet-instance-v1.js";',
+      "packages/schemas/src/g-side-effect.ts":
+        'import "./student-worksheet-delivery-v2.js";',
+      "packages/schemas/src/h-reviewed.ts": `
+        import {
+          WorksheetInstanceV1Schema,
+          projectWorksheetForStudent,
+        } from "./worksheet-instance-v1.js";
+        export type {
+          WorksheetInstanceV1,
+        } from "./worksheet-instance-v1.js";
+        export {
+          StudentWorksheetDeliveryV2Schema,
+          validateStudentWorksheetDeliveryV2,
+        } from "./student-worksheet-delivery-v2.js";
+        export type {
+          StudentWorksheetDeliveryV2,
+        } from "./student-worksheet-delivery-v2.js";
+        void WorksheetInstanceV1Schema;
+        void projectWorksheetForStudent;
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/schemas/src/a-import-alias.ts imports trusted server-only binding "WorksheetInstanceV1Schema" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/b-export-alias.ts exports trusted server-only binding "StudentWorksheetDeliveryV2Schema" from "./student-worksheet-delivery-v2.js"',
+        'packages/schemas/src/c-default.ts imports trusted server-only binding "default" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/d-namespace.ts imports trusted server-only binding "*" from "./student-worksheet-delivery-v2.js"',
+        'packages/schemas/src/e-new-binding.ts exports trusted server-only binding "NewlyIntroducedProjection" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/f-default-export.ts exports trusted server-only binding "default" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/g-side-effect.ts imports trusted server-only binding "*" from "./student-worksheet-delivery-v2.js"',
+      ]);
+    },
+  );
+});
+
+test("rejects a transitive trusted binding re-export inside the schemas package", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/index.ts": 'export * from "./leaky.js";',
+      "packages/schemas/src/leaky.ts":
+        'export { projectWorksheetV2ForStudentWithCanonicalAnswers as apparentlySafe } from "./student-worksheet-delivery-v2.js";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/schemas/src/leaky.ts exports trusted server-only binding "projectWorksheetV2ForStudentWithCanonicalAnswers" from "./student-worksheet-delivery-v2.js"',
+      ]);
+    },
+  );
+});
+
+test("rejects browser imports and globs that cross into the Worker server root", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/direct-worker.ts":
+        'import { project } from "../worker/web-worksheet-projector.js";',
+      "apps/web/src/react-app/constructor-worker.ts":
+        'const worker = new Worker(new URL("../worker/web-worksheet-projector.ts", import.meta.url), { type: "module" });',
+      "apps/web/src/react-app/glob-worker.ts":
+        'const projectors = import.meta.glob("../worker/*.ts");',
+      "apps/web/src/react-app/base-glob-worker.ts":
+        'const projectors = import.meta.glob("./*.ts", { base: "../worker" });',
+      "apps/web/src/react-app/asset-url-worker.ts":
+        'const asset = new URL("../worker/web-worksheet-projector.ts", import.meta.url);',
+      "apps/web/src/react-app/brace-glob-worker.ts":
+        'const projectors = import.meta.glob("../{worker,safe}/*.ts");',
+      "apps/web/src/react-app/globstar-worker.ts":
+        'const projectors = import.meta.glob("**/worker/*.ts");',
+      "apps/web/src/react-app/question-glob-worker.ts":
+        'const projectors = import.meta.glob("../w?rker/*.ts");',
+      "apps/web/src/react-app/positive-negative-worker.ts":
+        'const projectors = import.meta.glob(["../worker/*.ts", "!../worker/safe.ts"]);',
+      "apps/web/src/react-app/root-absolute-worker.ts":
+        'import { project } from "/src/worker/web-worksheet-projector.js";',
+      "apps/web/src/react-app/root-absolute-glob-worker.ts":
+        'const projectors = import.meta.glob("/src/worker/*.ts");',
+      "apps/web/src/react-app/shared-constructor-worker.ts":
+        "const worker = new SharedWorker(new URL(`../worker/web-worksheet-projector.ts`, import.meta.url));",
+      "apps/web/src/worker/web-worksheet-projector.ts":
+        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const project = trusted;',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/asset-url-worker.ts imports Worker server-only dependency "../worker/web-worksheet-projector.ts"',
+        'apps/web/src/react-app/base-glob-worker.ts uses forbidden production Vite module load "./*.ts"',
+        'apps/web/src/react-app/brace-glob-worker.ts uses forbidden production Vite module load "../{worker,safe}/*.ts"',
+        'apps/web/src/react-app/constructor-worker.ts imports Worker server-only dependency "../worker/web-worksheet-projector.ts"',
+        'apps/web/src/react-app/direct-worker.ts imports Worker server-only dependency "../worker/web-worksheet-projector.js"',
+        'apps/web/src/react-app/glob-worker.ts uses forbidden production Vite module load "../worker/*.ts"',
+        'apps/web/src/react-app/globstar-worker.ts uses forbidden production Vite module load "**/worker/*.ts"',
+        'apps/web/src/react-app/positive-negative-worker.ts uses forbidden production Vite module load "../worker/*.ts"',
+        'apps/web/src/react-app/positive-negative-worker.ts uses forbidden production Vite module load "!../worker/safe.ts"',
+        'apps/web/src/react-app/question-glob-worker.ts uses forbidden production Vite module load "../w?rker/*.ts"',
+        'apps/web/src/react-app/root-absolute-glob-worker.ts uses forbidden production Vite module load "/src/worker/*.ts"',
+        'apps/web/src/react-app/root-absolute-worker.ts uses forbidden production Vite module load "/src/worker/web-worksheet-projector.js"',
+        'apps/web/src/react-app/shared-constructor-worker.ts imports Worker server-only dependency "../worker/web-worksheet-projector.ts"',
+      ]);
+    },
+  );
+});
+
+test("fails closed on symlinks under protected and browser source roots", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/domain/target.ts": "export const target = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      const link = path.join(repositoryRoot, "packages/domain/src/leak.ts");
+      await mkdir(path.dirname(link), { recursive: true });
+      await symlink("../target.ts", link);
+
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "Symbolic links are not allowed in import boundary source roots: packages/domain/src/leak.ts",
+        ),
+      );
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      "apps/web/src/worker/secret.ts": "export const secret = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      const link = path.join(repositoryRoot, "apps/web/src/react-app/leak.ts");
+      await mkdir(path.dirname(link), { recursive: true });
+      await symlink("../worker/secret.ts", link);
+
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "Symbolic links are not allowed in import boundary source roots: apps/web/src/react-app/leak.ts",
+        ),
+      );
+    },
+  );
+});
+
+test("fails closed when an explicit module path traverses an external directory symlink", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/leak.ts":
+        'import { trusted } from "../../../../packages/schema-alias/trusted-student-projection.ts";',
+      "packages/schemas/src/trusted-student-projection.ts":
+        "export const trusted = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await symlink(
+        "schemas/src",
+        path.join(repositoryRoot, "packages/schema-alias"),
+        "dir",
+      );
+
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          'apps/web/src/react-app/leak.ts module load "../../../../packages/schema-alias/trusted-student-projection.ts" traverses symbolic link "packages/schema-alias"',
+        ),
+      );
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/leak.ts":
+        'import { trusted } from "../../node_modules/@exercisebook/schemas/src/trusted-student-projection.ts";',
+      "packages/schemas/src/trusted-student-projection.ts":
+        "export const trusted = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      const packageLink = path.join(
+        repositoryRoot,
+        "apps/web/node_modules/@exercisebook/schemas",
+      );
+      await mkdir(path.dirname(packageLink), { recursive: true });
+      await symlink("../../../../packages/schemas", packageLink, "dir");
+
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          'apps/web/src/react-app/leak.ts module load "../../node_modules/@exercisebook/schemas/src/trusted-student-projection.ts" traverses symbolic link "apps/web/node_modules/@exercisebook/schemas"',
+        ),
+      );
+    },
+  );
+});
+
+test("rejects wildcard glob paths before they can traverse workspace symlinks", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/leak.ts":
+        'const leaked = import.meta.glob("../../node_modules/@exercisebook/*/src/trusted-student-projection.ts", { exhaustive: true });',
+      "packages/schemas/src/trusted-student-projection.ts":
+        "export const trusted = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      const packageLink = path.join(
+        repositoryRoot,
+        "apps/web/node_modules/@exercisebook/schemas",
+      );
+      await mkdir(path.dirname(packageLink), { recursive: true });
+      await symlink("../../../../packages/schemas", packageLink, "dir");
+
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/leak.ts uses forbidden production Vite module load "../../node_modules/@exercisebook/*/src/trusted-student-projection.ts"',
+      ]);
+    },
+  );
+});
+
+test("keeps production browser paths inside their declared source roots", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/planner/src/bridge.ts":
+        'export { wrapped } from "../../bridge/src/index.js";',
+      "packages/planner/src/root-generator.ts":
+        'const generator = new URL("/../../packages/generators/src/index.ts", import.meta.url);',
+      "packages/planner/src/root-worker.ts":
+        'import worker from "/src/worker/index.ts";',
+      "packages/bridge/src/index.ts":
+        'export { generate as wrapped } from "@exercisebook/generators";',
+      "packages/generators/src/index.ts": "export const generate = true;",
+      "apps/web/src/react-app/bridge.ts":
+        'import { wrapped } from "../../../../packages/bridge/src/index.js";',
+      "apps/web/src/react-app/planner.ts":
+        'import { plan } from "@exercisebook/planner";',
+      "apps/web/src/worker/index.ts": "export default {};",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/planner/src/bridge.ts imports outside its browser-safe source root "../../bridge/src/index.js"',
+        'packages/planner/src/root-generator.ts uses forbidden production Vite module load "/../../packages/generators/src/index.ts"',
+        'packages/planner/src/root-worker.ts uses forbidden production Vite module load "/src/worker/index.ts"',
+        'apps/web/src/react-app/bridge.ts imports outside its browser source root "../../../../packages/bridge/src/index.js"',
+      ]);
+    },
+  );
+});
+
+test("fails closed when browser module or asset paths escape the repository", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/leak.ts":
+        'import value from "../../../../../outside.ts";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          'apps/web/src/react-app/leak.ts module load "../../../../../outside.ts" resolves outside repository root',
+        ),
+      );
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/leak.ts":
+        'const value = new URL("../../../../../outside.ts", import.meta.url);',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          'apps/web/src/react-app/leak.ts module load "../../../../../outside.ts" resolves outside repository root',
+        ),
+      );
+    },
+  );
+});
+
+test("keeps test fixtures available to tests but unreachable from production", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/allowed.test.ts":
+        'import { fixture } from "@exercisebook/web-renderer/fixtures"; import { shared } from "@exercisebook/test-fixtures";',
+      "apps/web/src/react-app/leak-fixture.ts":
+        'import { fixture } from "@exercisebook/web-renderer/fixtures";',
+      "apps/web/src/react-app/leak-test-package.ts":
+        'import { shared } from "@exercisebook/test-fixtures";',
+      "apps/web/src/worker/allowed.test.ts":
+        'import { fixture } from "@exercisebook/web-renderer/fixtures";',
+      "apps/web/src/worker/helper.test.ts": "export const helper = true;",
+      "apps/web/src/worker/leak-fixture.ts":
+        'import { fixture } from "@exercisebook/web-renderer/fixtures";',
+      "apps/web/src/worker/leak-test-module.ts":
+        'import { helper } from "./helper.test.js";',
+      "packages/test-fixtures/src/index.ts": "export const shared = true;",
+      "packages/web-renderer/src/fixtures.ts":
+        "export const fixture = { canonicalAnswer: 42 };",
+      "packages/web-renderer/src/index.ts": 'export * from "./fixtures.js";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/leak-fixture.ts imports test-only module "@exercisebook/web-renderer/fixtures"',
+        'apps/web/src/react-app/leak-test-package.ts imports test-only module "@exercisebook/test-fixtures"',
+        'packages/web-renderer/src/index.ts imports test-only module "./fixtures.js"',
+        'apps/web/src/worker/leak-fixture.ts imports test-only module "@exercisebook/web-renderer/fixtures"',
+        'apps/web/src/worker/leak-test-module.ts imports test-only module "./helper.test.js"',
+      ]);
+    },
+  );
+});
+
+test("classifies direct test and spec paths before source-root enumeration", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/domain/src/leak.ts":
+        'import { hidden } from "../../bridge/src/Hidden.SPEC.JS";',
+      "packages/planner/src/leak.ts":
+        'export { hidden } from "../../bridge/src/__TESTS__/helper.js";',
+      "apps/web/src/worker/leak.ts":
+        'const hidden = new URL("../../../../packages/bridge/src/Hidden.TEST.JS", import.meta.url);',
+      "packages/bridge/src/Hidden.SPEC.ts": "export const hidden = true;",
+      "packages/bridge/src/__TESTS__/helper.ts": "export const hidden = true;",
+      "packages/bridge/src/Hidden.TEST.ts": "export const hidden = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/domain/src/leak.ts imports test-only module "../../bridge/src/Hidden.SPEC.JS"',
+        'packages/planner/src/leak.ts imports test-only module "../../bridge/src/__TESTS__/helper.js"',
+        'apps/web/src/worker/leak.ts imports test-only module "../../../../packages/bridge/src/Hidden.TEST.JS"',
+      ]);
+    },
+  );
+});
+
+test("allows __tests__ sources to use trusted code but rejects production edges into them", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/domain/src/index.ts":
+        'export { helper } from "./__tests__/trusted-helper.js";',
+      "packages/domain/src/__tests__/trusted-helper.ts":
+        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const helper = trusted;',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/domain/src/index.ts imports test-only module "./__tests__/trusted-helper.js"',
+      ]);
+    },
+  );
+});
+
+test("rejects extensionless files in executable source roots", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/main.tsx":
+        'import { bridge } from "./bridge"; export { bridge };',
+      "apps/web/src/react-app/bridge":
+        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const bridge = trusted;',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "Extensionless regular files are not allowed in import boundary source roots: apps/web/src/react-app/bridge",
+        ),
+      );
+    },
+  );
+
+  for (const [relativeFile, source] of [
+    [
+      "packages/domain/src/bridge",
+      'import React from "react"; export const bridge = React;',
+    ],
+    [
+      "apps/web/src/worker/bridge",
+      'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const bridge = trusted;',
+    ],
+    ["packages/print-document/src/bridge", 'export * from "../../../outside.js";'],
+    [
+      "packages/test-fixtures/src/bridge",
+      'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const bridge = trusted;',
+    ],
+  ]) {
+    await withRepositoryFixture(
+      { [relativeFile]: source },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `Extensionless regular files are not allowed in import boundary source roots: ${relativeFile}`,
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("allows pinned assets but rejects unreviewed executable extensions", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/main.tsx": `
+        import "./styles.css";
+        import iconUrl from "./icon.svg";
+        import notesUrl from "./notes.txt";
+        export { iconUrl, notesUrl };
+      `,
+      "apps/web/src/react-app/styles.css": ".safe { color: navy; }",
+      "apps/web/src/react-app/icon.svg":
+        '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+      "apps/web/src/react-app/notes.txt": "Static notes",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  for (const extension of [".astro", ".custom", ".mdx", ".svelte", ".vue"]) {
+    const relativeFile = `apps/web/src/react-app/bridge${extension}`;
+    await withRepositoryFixture(
+      {
+        [relativeFile]:
+          'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const bridge = trusted;',
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `Unreviewed regular file extensions are not allowed in import boundary source roots: ${relativeFile}`,
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("scans source extensions case-insensitively", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/domain/src/a.TS": 'import React from "react";',
+      "packages/domain/src/b.Ts": 'import api from "hono";',
+      "packages/planner/src/c.TSX":
+        'export { generate } from "@exercisebook/generators";',
+      "packages/schemas/src/d.jS":
+        'export { generate } from "@exercisebook/generators";',
+      "apps/web/src/react-app/e.JS":
+        'import { generate } from "@exercisebook/generators";',
+      "apps/web/src/react-app/f.MJS":
+        'import document from "@exercisebook/print-document";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/domain/src/a.TS imports forbidden dependency "react"',
+        'packages/domain/src/b.Ts imports forbidden dependency "hono"',
+        'packages/planner/src/c.TSX imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
+        'packages/schemas/src/d.jS imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
+        'apps/web/src/react-app/e.JS imports non-allowlisted browser workspace dependency "@exercisebook/generators"',
+        'apps/web/src/react-app/f.MJS imports non-allowlisted browser workspace dependency "@exercisebook/print-document"',
+      ]);
+    },
+  );
+});
+
+test("locks the HTML entrypoint, CSS asset graph, and Vite resolver configuration", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/index.html": reviewedHtmlEntrypoint,
+      "apps/web/vite.config.mjs": reviewedViteConfig,
+      "apps/web/src/react-app/styles.css": `/* @import url('../worker/comment-only.ts'); */
+        .safe::before { content: "@import url(image-set('ignored.png'))"; }
+        .safe { color: navy; }`,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      "apps/web/index.html":
+        '<script type="module" src="/src/react-app/main.tsx"></script><script type="module" src="/src/worker/index.ts"></script>',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          'apps/web/index.html must contain exactly one module script "/src/react-app/main.tsx" and no additional local asset references.',
+        ),
+      );
+    },
+  );
+
+  for (const viteConfig of [
+    reviewedViteConfig.replace('from "vite"', 'from "./vite-wrapper.js"'),
+    reviewedViteConfig.replace(
+      "export default defineConfig(",
+      "const reviewed = defineConfig; export default reviewed(",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), cloudflare()]",
+      "plugins: [react(), { config() {} }, cloudflare()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), cloudflare()]",
+      "plugins: [react(), ...extraPlugins, cloudflare()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), cloudflare()]",
+      'plugins: [react({ jsxRuntime: "classic" }), cloudflare()]',
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), cloudflare()]",
+      "plugins: [cloudflare(), react()]",
+    ),
+    reviewedViteConfig.replace("build: {", '["build"]: {'),
+  ]) {
+    await withRepositoryFixture(
+      {
+        "apps/web/vite.config.mjs": viteConfig,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            "apps/web/vite.config.mjs must exactly match the reviewed defineConfig/react/cloudflare configuration shape.",
+          ),
+        );
+      },
+    );
+  }
+
+  for (const [relativeFile, css] of [
+    [
+      "apps/web/src/react-app/styles.css",
+      ".leak { background: url('../worker/index.ts'); }",
+    ],
+    [
+      "packages/web-renderer/src/styles.css",
+      ".leak { background: u\\72l('../worker/index.ts'); }",
+    ],
+    ["apps/web/src/react-app/import.css", "@import '../worker/trusted.css';"],
+    [
+      "apps/web/src/react-app/image-set.css",
+      ".leak { background: image-set('trusted.png' 1x); }",
+    ],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: css,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `${relativeFile} may not use CSS @import or asset functions from browser-reachable styles.`,
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("fails closed on every unreviewed Vite style language in browser-safe roots", async () => {
+  const browserStyleRoots = [
+    "apps/web/src/react-app",
+    "packages/web-renderer/src",
+    "packages/domain/src",
+    "packages/planner/src",
+    "packages/schemas/src",
+  ];
+  const unreviewedStyleExtensions = [
+    ".less",
+    ".sass",
+    ".scss",
+    ".styl",
+    ".stylus",
+    ".pcss",
+    ".postcss",
+    ".sss",
+  ];
+
+  for (const relativeRoot of browserStyleRoots) {
+    for (const extension of unreviewedStyleExtensions) {
+      const relativeFile = `${relativeRoot}/unreviewed${extension}`;
+      await withRepositoryFixture(
+        {
+          [relativeFile]: ".safe { color: navy; }",
+        },
+        async (repositoryRoot, findFixtureViolations) => {
+          await assert.rejects(
+            () => findFixtureViolations(),
+            new Error(
+              `${relativeFile} may not use unreviewed Vite style language ${JSON.stringify(extension)} in browser-safe source roots.`,
+            ),
+          );
+        },
+      );
+    }
+  }
+});
+
+test("rejects CSS Modules and ICSS dependency constructs across browser-safe roots", async () => {
+  for (const [relativeFile, css] of [
+    ["apps/web/src/react-app/styles.module.css", ".local { color: navy; }"],
+    [
+      "packages/web-renderer/src/composes.css",
+      ".local { c\\6fmposes: base from './base.css'; }",
+    ],
+    [
+      "packages/domain/src/compose-with.css",
+      ".local { compose-with: base from global; }",
+    ],
+    ["packages/planner/src/icits.css", ':import("./tokens.css") { imported: token; }'],
+    ["packages/schemas/src/value.css", '@v\\61lue token from "./tokens.css";'],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: css,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            relativeFile.endsWith(".module.css")
+              ? `${relativeFile} may not use CSS Modules in browser-safe source roots.`
+              : `${relativeFile} may not use CSS Modules or ICSS dependency constructs.`,
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      "packages/domain/src/safe.css": `
+        /* composes: base from "./comment.css"; */
+        .safe::before {
+          content: ':import("./string.css") @value token from "./string.css"';
+        }
+      `,
+      "packages/planner/src/also-safe.css":
+        '.safe::before { content: "compose-with: base from global"; }',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+});
+
+test("rejects unreviewed Vite style module loads even when the target is absent", async () => {
+  for (const [relativeFile, specifier] of [
+    ["apps/web/src/react-app/load.ts", "./theme.pcss"],
+    ["packages/web-renderer/src/load.ts", "./theme.postcss?inline"],
+    ["packages/domain/src/load.ts", "./theme.scss"],
+    ["packages/planner/src/load.ts", "./theme.less"],
+    ["packages/schemas/src/load.ts", "./theme.module.css"],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: `import ${JSON.stringify(specifier)};`,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        assert.deepEqual(await findFixtureViolations(), [
+          `${relativeFile} imports unreviewed Vite style module ${JSON.stringify(specifier)}`,
+        ]);
+      },
+    );
+  }
+});
+
+test("rejects local HTML asset-bearing edges after entity and path normalization", async () => {
+  for (const assetMarkup of [
+    "<link rel=icon href='/src/react-app/../worker/index.ts'>",
+    '<img src="/src/worker/index.ts">',
+    '<img srcset="/src/worker/a.ts 1x, /src/worker/b.ts 2x">',
+    '<video poster="/src/worker/a.ts"></video>',
+    '<svg><use href="/src/worker/a.ts"></use></svg>',
+    '<svg><use xlink:href="/src/worker/a.ts"></use></svg>',
+    '<div style="background: url(&sol;src&sol;worker&sol;a.ts)"></div>',
+    `<div style='background: image-set("/src/worker/a.png" 1x)'></div>`,
+    "<style>@import '/src/worker/a.css';</style>",
+    '<object data="/src/worker/index.ts"></object>',
+    '<link rel="preload" imagesrcset="/src/worker/a.ts 1x">',
+    '<meta property="og:image" content="/src/worker/a.ts">',
+    '<meta name="twitter:image" content="/src/worker/a.ts">',
+    '<img src="/src/worker/a.ts" src="https://example.test/safe.png">',
+    '<link rel=icon title=">" href="/src/worker/index.ts">',
+    '<img/src="/src/worker/index.ts">',
+    '<link/href="/src/worker/index.ts">',
+    '<object/data="/src/worker/index.ts">',
+    '<img///src="/src/worker/index.ts">',
+    '<link rel=icon title="&quot; >" href="/src/worker/index.ts">',
+    '<link rel=icon title="&#34; >" href="/src/worker/index.ts">',
+    '<link rel=icon title="&#x22; >" href="/src/worker/index.ts">',
+    '<link rel=icon href="&sol;src&sol;react-app&sol;&period;&period;&sol;worker&sol;index.ts">',
+    '<link rel=icon href="&#47;src&#47;react-app&#47;&#46;&#46;&#47;worker&#47;index.ts">',
+    '<link title="<!--" href="/src/worker/index.ts"> -->">',
+    '<iframe srcdoc="&lt;script src=&quot;/src/worker/index.ts&quot;&gt;&lt;/script&gt;"></iframe>',
+    '<iframe src="https://example.test/frame"></iframe>',
+    '<object data="https://example.test/object"></object>',
+    '<embed src="https://example.test/embed">',
+    '<base href="https://example.test/">',
+    '<link rel="icon" href="https://example.test/icon.svg">',
+    '<meta http-equiv="refresh" content="0; url=/src/worker/index.ts">',
+    '<a href="javascript:alert(1)">Unsafe</a>',
+    '<a href="java&#x73;cript&colon;alert(1)">Unsafe</a>',
+    '<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">Unsafe</a>',
+    '<a href="blob:https://exercisebook.app/unsafe">Unsafe</a>',
+    '<a href="file:///src/worker/index.ts">Unsafe</a>',
+    '<a href="vbscript:msgbox(1)">Unsafe</a>',
+    '<a href="https://exercisebook.app/lessons/fractions/add-unlike-denominators">Not local</a>',
+    '<a href="/unreviewed-path">Unreviewed</a>',
+  ]) {
+    await withRepositoryFixture(
+      {
+        "apps/web/index.html": `${reviewedHtmlEntrypoint}${assetMarkup}`,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            'apps/web/index.html must contain exactly one module script "/src/react-app/main.tsx" and no additional local asset references.',
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("locks browser package resolver metadata to reviewed public entrypoints", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/package.json": JSON.stringify(reviewedWebManifest),
+      "packages/domain/package.json": JSON.stringify(reviewedDomainManifest),
+      "packages/planner/package.json": JSON.stringify(reviewedPlannerManifest),
+      "packages/schemas/package.json": JSON.stringify(reviewedSchemasManifest),
+      "packages/web-renderer/package.json": JSON.stringify(reviewedWebRendererManifest),
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  for (const [relativeFile, manifest] of [
+    [
+      "apps/web/package.json",
+      {
+        name: "@exercisebook/web",
+        scripts: reviewedWebScripts,
+        imports: { "#trusted": "../../packages/schemas/src/worksheet-instance-v1.ts" },
+      },
+    ],
+    [
+      "packages/domain/package.json",
+      {
+        name: "@exercisebook/domain",
+        exports: {
+          ".": "../schemas/src/trusted-student-projection.ts",
+        },
+      },
+    ],
+    [
+      "packages/planner/package.json",
+      {
+        name: "@exercisebook/planner",
+        exports: {
+          ".": {
+            browser: "../schemas/src/trusted-student-projection.ts",
+            default: "./src/index.ts",
+          },
+        },
+      },
+    ],
+    [
+      "packages/web-renderer/package.json",
+      {
+        name: "@exercisebook/web-renderer",
+        exports: {
+          ".": "./src/index.ts",
+          "./fixtures": "./src/fixtures.ts",
+          "./styles.css": ["./src/styles.css"],
+        },
+      },
+    ],
+    [
+      "packages/schemas/package.json",
+      {
+        name: "@exercisebook/schemas",
+        exports: {
+          ".": "./src/index.ts",
+          "./trusted-student-projection": "./src/trusted-student-projection.ts",
+          "./json-schema/content-document-v1":
+            "./json-schema/content-document-v1.schema.json",
+          "./json-schema/content-document-v2":
+            "./json-schema/content-document-v2.schema.json",
+          "./json-schema/worksheet-instance-v1":
+            "./json-schema/worksheet-instance-v1.schema.json",
+          "./json-schema/worksheet-instance-v2":
+            "./json-schema/worksheet-instance-v2.schema.json",
+        },
+        browser: "./src/trusted-student-projection.ts",
+      },
+    ],
+    [
+      "packages/domain/package.json",
+      {
+        name: "@exercisebook/domain",
+        exports: { ".": "./src/index.ts" },
+        main: "../schemas/src/trusted-student-projection.ts",
+      },
+    ],
+    [
+      "packages/planner/package.json",
+      {
+        name: "@exercisebook/planner",
+        exports: { ".": "./src/index.ts" },
+        module: "../schemas/src/trusted-student-projection.ts",
+      },
+    ],
+    [
+      "packages/domain/package.json",
+      {
+        name: "@exercisebook/domain",
+        exports: { ".": "./src/index.ts" },
+        "jsnext:main": "../schemas/src/trusted-student-projection.ts",
+      },
+    ],
+    [
+      "packages/planner/package.json",
+      {
+        name: "@exercisebook/planner",
+        exports: { ".": "./src/index.ts" },
+        jsnext: "../schemas/src/trusted-student-projection.ts",
+      },
+    ],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: JSON.stringify(manifest),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `${relativeFile} must match the reviewed browser resolver metadata policy.`,
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("locks web package scripts to reviewed Vite and worksheet commands", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/package.json": JSON.stringify(reviewedWebManifest),
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  const mutatedScriptPolicies = [
+    {},
+    {
+      ...reviewedWebScripts,
+      build: "vite build --config ./src/worker/vite.config.mjs",
+    },
+    {
+      ...reviewedWebScripts,
+      build: "vite build --root ./src/worker",
+    },
+    {
+      ...reviewedWebScripts,
+      dev: "NODE_OPTIONS=--require=./src/worker/bootstrap.cjs vite",
+    },
+    {
+      ...reviewedWebScripts,
+      test: "sh -c 'node ./src/worker/bootstrap.js && vitest run'",
+    },
+    {
+      ...reviewedWebScripts,
+      postinstall: "node ./src/worker/bootstrap.js",
+    },
+    Object.fromEntries(
+      Object.entries(reviewedWebScripts).filter(
+        ([scriptName]) => scriptName !== "build",
+      ),
+    ),
+  ];
+  for (const scripts of mutatedScriptPolicies) {
+    await withRepositoryFixture(
+      {
+        "apps/web/package.json": JSON.stringify({
+          ...reviewedWebManifest,
+          scripts,
+        }),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            "apps/web/package.json must match the reviewed web scripts policy.",
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      ...reviewedStrictRepositoryFiles,
+      "apps/web/package.json": JSON.stringify({
+        ...JSON.parse(reviewedStrictRepositoryFiles["apps/web/package.json"]),
+        scripts: {
+          ...reviewedWebScripts,
+          build: "vite build --config ./src/worker/vite.config.mjs",
+        },
+      }),
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => findImportBoundaryViolations(repositoryRoot),
+        new Error("apps/web/package.json must match the reviewed web scripts policy."),
+      );
+    },
+  );
+});
+
+test("pins every reviewed browser package manifest to its exact runtime surface", async () => {
+  for (const [relativeFile, reviewedManifest] of [
+    ["apps/web/package.json", reviewedWebManifest],
+    ["packages/domain/package.json", reviewedDomainManifest],
+    ["packages/planner/package.json", reviewedPlannerManifest],
+    ["packages/schemas/package.json", reviewedSchemasManifest],
+    ["packages/web-renderer/package.json", reviewedWebRendererManifest],
+  ]) {
+    const unreviewedDependencyManifest = {
+      ...reviewedManifest,
+      dependencies: {
+        ...reviewedManifest.dependencies,
+        "opaque-bridge": "1.0.0",
+      },
+    };
+    await withRepositoryFixture(
+      {
+        [relativeFile]: JSON.stringify(unreviewedDependencyManifest),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `${relativeFile} must match the reviewed dependency resolution policy.`,
+          ),
+        );
+      },
+    );
+  }
+
+  const movedRuntimeDependency = {
+    ...reviewedPlannerManifest,
+    dependencies: Object.fromEntries(
+      Object.entries(reviewedPlannerManifest.dependencies).filter(
+        ([packageName]) => packageName !== "zod",
+      ),
+    ),
+    devDependencies: {
+      ...reviewedPlannerManifest.devDependencies,
+      zod: "4.4.3",
+    },
+  };
+  await withRepositoryFixture(
+    {
+      "packages/planner/package.json": JSON.stringify(movedRuntimeDependency),
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "packages/planner/package.json must match the reviewed dependency resolution policy.",
+        ),
+      );
+    },
+  );
+
+  for (const appsWebManifest of [
+    {
+      ...reviewedWebManifest,
+      devDependencies: {
+        ...reviewedWebManifest.devDependencies,
+        vite: "9.0.0",
+      },
+    },
+    {
+      ...reviewedWebManifest,
+      dependencies: {
+        ...reviewedWebManifest.dependencies,
+        "@exercisebook/opaque-bridge": "workspace:*",
+      },
+    },
+  ]) {
+    await withRepositoryFixture(
+      {
+        ...reviewedStrictRepositoryFiles,
+        "apps/web/package.json": JSON.stringify(appsWebManifest),
+        "packages/opaque-bridge/package.json": JSON.stringify({
+          name: "@exercisebook/opaque-bridge",
+          version: "0.0.0",
+          private: true,
+          type: "module",
+          exports: { ".": "./src/index.ts" },
+        }),
+        "packages/opaque-bridge/src/index.ts":
+          'export * from "@exercisebook/schemas/trusted-student-projection";',
+      },
+      async (repositoryRoot) => {
+        await assert.rejects(
+          () => findImportBoundaryViolations(repositoryRoot),
+          new Error(
+            "apps/web/package.json must match the reviewed dependency resolution policy.",
+          ),
+        );
+      },
+    );
+  }
+});
+
+test("locks browser dependency specifiers and build tooling to reviewed versions", async () => {
+  for (const [relativeFile, manifest] of [
+    [
+      "apps/web/package.json",
+      {
+        name: "@exercisebook/web",
+        scripts: reviewedWebScripts,
+        dependencies: {
+          "@exercisebook/domain": "file:../../packages/bridge",
+        },
+      },
+    ],
+    [
+      "apps/web/package.json",
+      {
+        name: "@exercisebook/web",
+        scripts: reviewedWebScripts,
+        dependencies: {
+          react: "npm:preact@10.27.2",
+        },
+      },
+    ],
+    [
+      "apps/web/package.json",
+      {
+        name: "@exercisebook/web",
+        scripts: reviewedWebScripts,
+        devDependencies: {
+          "@vitejs/plugin-react": "file:../../packages/bridge",
+        },
+      },
+    ],
+    [
+      "apps/web/package.json",
+      {
+        name: "@exercisebook/web",
+        scripts: reviewedWebScripts,
+        dependencies: {
+          "innocent-alias": "npm:@exercisebook/domain@1.0.0",
+        },
+      },
+    ],
+    [
+      "packages/planner/package.json",
+      {
+        name: "@exercisebook/planner",
+        exports: { ".": "./src/index.ts" },
+        dependencies: {
+          "@exercisebook/domain": "npm:@exercisebook/bridge@1.0.0",
+        },
+      },
+    ],
+    [
+      "packages/schemas/package.json",
+      {
+        name: "@exercisebook/schemas",
+        exports: {
+          ".": "./src/index.ts",
+          "./trusted-student-projection": "./src/trusted-student-projection.ts",
+          "./json-schema/content-document-v1":
+            "./json-schema/content-document-v1.schema.json",
+          "./json-schema/content-document-v2":
+            "./json-schema/content-document-v2.schema.json",
+          "./json-schema/worksheet-instance-v1":
+            "./json-schema/worksheet-instance-v1.schema.json",
+          "./json-schema/worksheet-instance-v2":
+            "./json-schema/worksheet-instance-v2.schema.json",
+        },
+        dependencies: {
+          "@exercisebook/domain": "file:../bridge",
+        },
+      },
+    ],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: JSON.stringify(manifest),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `${relativeFile} must match the reviewed dependency resolution policy.`,
+          ),
+        );
+      },
+    );
+  }
+
+  for (const rootManifest of [
+    {
+      name: "exercisebook",
+      overrides: {
+        "@exercisebook/domain": "file:packages/bridge",
+      },
+    },
+    {
+      name: "exercisebook",
+      resolutions: {
+        vite: "npm:malicious-vite@8.1.5",
+      },
+    },
+    {
+      name: "exercisebook",
+      packageManager: "pnpm@11.8.1",
+    },
+    {
+      name: "exercisebook",
+      devDependencies: {
+        vite: "npm:malicious-vite@8.1.5",
+      },
+    },
+    {
+      name: "exercisebook",
+      dependencies: {
+        "innocent-alias": "file:packages/bridge",
+      },
+    },
+  ]) {
+    await withRepositoryFixture(
+      {
+        "package.json": JSON.stringify(rootManifest),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            "package.json must match the reviewed root dependency resolution policy.",
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      "pnpm-workspace.yaml": reviewedPnpmWorkspace.replace(
+        "overrides:\n  esbuild: 0.28.1",
+        "overrides:\n  @exercisebook/domain: file:packages/bridge\n  esbuild: 0.28.1",
+      ),
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      await assert.rejects(
+        () => findFixtureViolations(),
+        new Error(
+          "pnpm-workspace.yaml must match the reviewed dependency resolution policy.",
+        ),
+      );
+    },
+  );
+
+  for (const [relativeFile, source] of [
+    [".pnpmfile.cjs", "module.exports = { hooks: {} };"],
+    [".pnpmfile.mjs", "export const hooks = {};"],
+    [".npmrc", "pnpmfile=./dependency-rewriter.cjs\n"],
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: source,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(`${relativeFile} may not alter reviewed dependency resolution.`),
+        );
+      },
+    );
+  }
+});
+
+test("locks root execution scripts so the reviewed boundary gate cannot be bypassed", async () => {
+  const mutatedRootScripts = [
+    {
+      ...reviewedRootScripts,
+      build: "pnpm --filter @exercisebook/opaque-bridge build",
+    },
+    {
+      ...reviewedRootScripts,
+      check: "pnpm test",
+    },
+    {
+      ...reviewedRootScripts,
+      "check:boundaries": "node scripts/check-import-boundaries.mjs || true",
+    },
+    {
+      ...reviewedRootScripts,
+      prebuild: "node scripts/replace-vite-config.mjs",
+    },
+    Object.fromEntries(
+      Object.entries(reviewedRootScripts).filter(
+        ([scriptName]) => scriptName !== "check:boundaries",
+      ),
+    ),
+  ];
+  for (const scripts of mutatedRootScripts) {
+    await withRepositoryFixture(
+      {
+        "package.json": JSON.stringify({
+          name: "exercisebook",
+          scripts,
+        }),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            "package.json must match the reviewed root execution scripts policy.",
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      ...reviewedStrictRepositoryFiles,
+      "package.json": JSON.stringify({
+        ...JSON.parse(reviewedStrictRepositoryFiles["package.json"]),
+        scripts: {
+          ...reviewedRootScripts,
+          postinstall: "node scripts/replace-vite-config.mjs",
+        },
+      }),
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => findImportBoundaryViolations(repositoryRoot),
+        new Error(
+          "package.json must match the reviewed root execution scripts policy.",
+        ),
+      );
+    },
+  );
+});
+
+test("locks the complete root manifest and pnpm lockfile in complete repositories", async () => {
+  await withRepositoryFixture(
+    {
+      ...reviewedStrictRepositoryFiles,
+      "package.json": JSON.stringify({
+        ...reviewedRootManifest,
+        devDependencies: {
+          ...reviewedRootManifest.devDependencies,
+          "vite-wrapper": "1.0.0",
+        },
+      }),
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => findImportBoundaryViolations(repositoryRoot),
+        new Error("package.json must exactly match the reviewed root manifest."),
+      );
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      ...reviewedStrictRepositoryFiles,
+      "pnpm-lock.yaml": `${reviewedPnpmLock}\n# unreviewed resolution`,
+    },
+    async (repositoryRoot) => {
+      await assert.rejects(
+        () => findImportBoundaryViolations(repositoryRoot),
+        new Error(
+          "pnpm-lock.yaml must exactly match the reviewed dependency resolution.",
+        ),
+      );
+    },
+  );
+
+  await withRepositoryFixture(
+    {
+      "package.json": JSON.stringify({
+        name: "isolated-fixture",
+        scripts: reviewedRootScripts,
+      }),
+    },
+    async (_repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+});
+
+test("rejects nested package resolver scopes under browser-reachable source roots", async () => {
+  for (const relativeFile of [
+    "apps/web/src/react-app/package.json",
+    "apps/web/src/worker/package.json",
+    "packages/web-renderer/src/package.json",
+    "packages/domain/src/package.json",
+    "packages/planner/src/internal/package.json",
+    "packages/schemas/src/package.json",
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: JSON.stringify({
+          imports: {
+            "#trusted": "../../../../packages/schemas/src/worksheet-instance-v1.ts",
+          },
+        }),
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        await assert.rejects(
+          () => findFixtureViolations(),
+          new Error(
+            `${relativeFile} may not define a package resolver scope inside browser-reachable source roots.`,
+          ),
+        );
+      },
+    );
+  }
+
+  await withRepositoryFixture(
+    {
+      "packages/generators/src/package.json": JSON.stringify({
+        imports: { "#internal": "./internal.ts" },
+      }),
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
     },
   );
 });
@@ -204,12 +2885,19 @@ test("preserves framework import guards for protected domain packages", async ()
       "packages/domain/src/invalid.ts": 'import React from "react";',
       "packages/domain/src/cloudflare.ts":
         'import { env } from "@cloudflare/workers-types";',
+      "packages/domain/src/hono-query.ts": 'import api from "hono#url";',
       "packages/domain/src/valid.ts": 'import { value } from "./value.js";',
+      "packages/domain/src/react-query.ts": 'import React from "react?raw";',
+      "packages/domain/src/print-query.ts":
+        'import document from "@exercisebook/print-document?raw";',
     },
-    async (repositoryRoot) => {
-      assert.deepEqual(await findImportBoundaryViolations(repositoryRoot), [
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
         'packages/domain/src/cloudflare.ts imports forbidden dependency "@cloudflare/workers-types"',
+        'packages/domain/src/hono-query.ts imports forbidden dependency "hono#url"',
         'packages/domain/src/invalid.ts imports forbidden dependency "react"',
+        'packages/domain/src/print-query.ts imports forbidden dependency "@exercisebook/print-document?raw"',
+        'packages/domain/src/react-query.ts imports forbidden dependency "react?raw"',
       ]);
     },
   );
@@ -229,11 +2917,12 @@ test("ignores import-shaped text outside actual module loading syntax", async ()
         loader.import("@exercisebook/schemas/trusted-student-projection");
         loader.require("@exercisebook/schemas/trusted-student-projection");
         const documentation = \`import("@exercisebook/schemas/trusted-student-projection")\`;
-        import type { PublicProjection } from "@exercisebook/schemas/student-worksheet-delivery-v20";
+        const safeUrl = new URL("./safe-image.svg", import.meta.url);
+        import type { PublicProjection } from "@exercisebook/schemas";
       `,
     },
-    async (repositoryRoot) => {
-      assert.deepEqual(await findImportBoundaryViolations(repositoryRoot), []);
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
     },
   );
 });

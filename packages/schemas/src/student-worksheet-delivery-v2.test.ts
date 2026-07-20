@@ -19,6 +19,29 @@ import type {
   WorksheetInstanceV2,
 } from "./worksheet-instance-v2.js";
 
+const NORMALIZATION_COMPOSITION_ANSWER_CASES = [
+  ["NFKC-created percent escape", "The answer is 39%EF%BC%852F35."],
+  ["NFKC-created hexadecimal digits", "The answer is 39%25%EF%BC%92%EF%BC%A635."],
+  [
+    "decoded fullwidth plus and percent",
+    "The%EF%BC%8Banswer%EF%BC%8Bis%EF%BC%8B39%EF%BC%852F35.",
+  ],
+  [
+    "decoded ASCII/fullwidth plus and percent",
+    "The%2Banswer%EF%BC%8Bis%2B39%EF%BC%852F35.",
+  ],
+  ["malformed URI fallback", "The answer is 39%EF%BC%852F35%ZZ"],
+] as const;
+
+const BENIGN_NORMALIZATION_COMPOSITION_CASES = [
+  ["NFKC-created slash", "Use%EF%BC%852Fto compare fractions."],
+  ["decoded fullwidth plus", "Review%EF%BC%8Bequivalent%EF%BC%8Bfractions."],
+  ["decoded ASCII/fullwidth plus", "Review%2Bequivalent%EF%BC%8Bfractions."],
+  ["malformed URI fallback", "Use%EF%BC%852Fto compare fractions.%ZZ"],
+  ["different rational value", "The answer is 38%EF%BC%852F35."],
+  ["leading encoded percent before a different rational", "The answer is %2538%2F35."],
+] as const;
+
 describe("StudentWorksheetDeliveryV2", () => {
   it("projects one strict answer-free delivery with the committed presentation", async () => {
     const materialized = await materializeWorksheetV2Fixture();
@@ -386,6 +409,87 @@ describe("StudentWorksheetDeliveryV2", () => {
     },
   );
 
+  it.each(NORMALIZATION_COMPOSITION_ANSWER_CASES)(
+    "rejects %s through the V2 student projector",
+    async (_case, text) => {
+      const materialized = await materializeWorksheetV2Fixture();
+      const instance = structuredClone(materialized.instance);
+      instance.presentation.lesson.paragraphs[0] = text;
+
+      await expect(
+        projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+      ).rejects.toThrow("canonical-answer");
+    },
+  );
+
+  it("rejects a raw-vs-collapsed URI answer through the V2 student projector", async () => {
+    const materialized = await materializeWorksheetV2Fixture();
+    const instance = structuredClone(materialized.instance);
+    instance.presentation.lesson.paragraphs[0] = "The answer is %2539%2F35.";
+
+    await expect(
+      projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it.each(BENIGN_NORMALIZATION_COMPOSITION_CASES)(
+    "allows benign %s through the V2 student projector",
+    async (_case, text) => {
+      const materialized = await materializeWorksheetV2Fixture();
+      const instance = structuredClone(materialized.instance);
+      instance.presentation.lesson.paragraphs[0] = text;
+
+      await expect(
+        projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+      ).resolves.toMatchObject({
+        presentation: {
+          lesson: {
+            paragraphs: [text],
+          },
+        },
+      });
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "rejects a compatibility-normalized answer through the V2 projector after %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetV2Fixture();
+      const instance = structuredClone(materialized.instance);
+      instance.presentation.lesson.paragraphs[0] = encodeUriComponentRepeatedly(
+        "The answer is 39％2F35.",
+        encodingDepth,
+      );
+
+      await expect(
+        projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+      ).rejects.toThrow("canonical-answer");
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "allows compatibility-normalized benign text through the V2 projector after %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetV2Fixture();
+      const instance = structuredClone(materialized.instance);
+      const text = encodeUriComponentRepeatedly(
+        "Use％2Fto compare fractions.",
+        encodingDepth,
+      );
+      instance.presentation.lesson.paragraphs[0] = text;
+
+      await expect(
+        projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+      ).resolves.toMatchObject({
+        presentation: {
+          lesson: {
+            paragraphs: [text],
+          },
+        },
+      });
+    },
+  );
+
   it.each([
     "The answer is 39/35",
     "The answer is 39 / 35",
@@ -403,6 +507,37 @@ describe("StudentWorksheetDeliveryV2", () => {
     await expect(
       projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
     ).rejects.toThrow("canonical-answer");
+  });
+
+  it.each([
+    "The answer is 39%25%32%46" + "35.",
+    "The answer is 39%25%32%46" + "35%ZZ",
+    "The answer is 39%25%32%46" + "35%E0%A4%A",
+  ])("rejects a mixed URI-encoded answer in presentation prose: %s", async (text) => {
+    const materialized = await materializeWorksheetV2Fixture();
+    const instance = structuredClone(materialized.instance);
+    instance.presentation.lesson.paragraphs[0] = text;
+
+    await expect(
+      projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it("allows benign mixed URI-encoded presentation prose", async () => {
+    const materialized = await materializeWorksheetV2Fixture();
+    const instance = structuredClone(materialized.instance);
+    instance.presentation.lesson.paragraphs[0] =
+      "Use%25%32%46to compare numerator and denominator.";
+
+    await expect(
+      projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+    ).resolves.toMatchObject({
+      presentation: {
+        lesson: {
+          paragraphs: ["Use%25%32%46to compare numerator and denominator."],
+        },
+      },
+    });
   });
 
   it("allows a prompt operand equal to another slot's canonical answer", async () => {
@@ -453,6 +588,30 @@ describe("StudentWorksheetDeliveryV2", () => {
       projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
     ).rejects.toThrow("canonical-answer");
   });
+
+  it("rejects another slot's raw-vs-collapsed URI answer", async () => {
+    const materialized = await materializeWorksheetV2Fixture(true);
+    const instance = structuredClone(materialized.instance);
+    instance.attributions[0]!.sourceUrl = "https://exercisebook.app/%25113%2F70";
+
+    await expect(
+      projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+    ).rejects.toThrow("canonical-answer");
+  });
+
+  it.each([3, 32])(
+    "rejects another slot's answer in a global attribution URL after %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetV2Fixture(true);
+      const instance = structuredClone(materialized.instance);
+      const encodedAnswer = encodeUriComponentRepeatedly("113/70", encodingDepth);
+      instance.attributions[0]!.sourceUrl = `https://exercisebook.app/${encodedAnswer}`;
+
+      await expect(
+        projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+      ).rejects.toThrow("canonical-answer");
+    },
+  );
 
   it("fails closed when answer-bearing text is placed in strict provenance", async () => {
     const materialized = await materializeWorksheetV2Fixture(true);
@@ -510,6 +669,14 @@ async function materializeWorksheetV2Fixture(
   return rematerializeWorksheetV2Fixture(
     worksheetInstanceV2Fixture(includeCrossSlotCollision),
   );
+}
+
+function encodeUriComponentRepeatedly(value: string, depth: number): string {
+  let encoded = value;
+  for (let layer = 0; layer < depth; layer += 1) {
+    encoded = encodeURIComponent(encoded);
+  }
+  return encoded;
 }
 
 async function rematerializeWorksheetV2Fixture(

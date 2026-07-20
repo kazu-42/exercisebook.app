@@ -77,6 +77,8 @@ const FORBIDDEN_DIRECTIVE_ATTRIBUTE_NAMES = new Set([
   "constructor",
   "prototype",
 ]);
+const DIRECTIVE_FENCE_CANDIDATE_PATTERN =
+  /^[\p{White_Space}\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]*:{2,}/u;
 const PHASE_1_GENERATORS: ReadonlyMap<
   string,
   ReadonlyMap<string, GeneratorRevisionContract>
@@ -297,12 +299,14 @@ export async function compileContentSourceV2(
   }
 
   const normalizedSource = normalizeSource(source);
-  assertCanonicalDirectiveHeaders(normalizedSource, {
+  const sourcePartition = partitionV2RawSource(normalizedSource);
+  assertCanonicalDirectiveHeaders(sourcePartition.markdownBody, {
     containerDirectives: CONTENT_V2_CONTAINER_DIRECTIVES,
     enforceTypedWorkedExampleRationalSource: true,
+    rejectWhitespaceSeparatedOpenings: true,
   });
   assertCanonicalContainerDirectiveClosingFences(
-    normalizedSource,
+    sourcePartition.markdownBody,
     CONTENT_V2_CONTAINER_DIRECTIVES,
   );
   let tree: Root;
@@ -320,7 +324,7 @@ export async function compileContentSourceV2(
       "Exactly one YAML frontmatter block must be the first node",
     );
   }
-  const yamlSource = yamlNodes[0]?.value ?? "";
+  const yamlSource = sourcePartition.yamlSource;
   if (new TextEncoder().encode(yamlSource).byteLength > MAX_YAML_BYTES) {
     throw new ContentCompilationError(
       "yaml-bytes-limit",
@@ -368,17 +372,65 @@ function normalizeSource(source: string): string {
   return withoutBom.replace(/\r\n?/g, "\n");
 }
 
+function partitionV2RawSource(source: string): Readonly<{
+  yamlSource: string;
+  markdownBody: string;
+}> {
+  const lines = source.split("\n");
+  if (lines[0] !== "---") {
+    if (/^---[ \t]+$/u.test(lines[0] ?? "")) {
+      throw new ContentCompilationError(
+        "frontmatter-fence-syntax",
+        "V2 YAML frontmatter opening fence must be an exact --- line",
+      );
+    }
+    throw new ContentCompilationError(
+      "frontmatter",
+      "Exactly one YAML frontmatter block must be the first node",
+    );
+  }
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!/^---[ \t]*$/u.test(line)) {
+      continue;
+    }
+    if (line !== "---") {
+      throw new ContentCompilationError(
+        "frontmatter-fence-syntax",
+        "V2 YAML frontmatter closing fence must be an exact --- line",
+      );
+    }
+    return {
+      yamlSource: lines.slice(1, index).join("\n"),
+      markdownBody: lines.slice(index + 1).join("\n"),
+    };
+  }
+
+  throw new ContentCompilationError(
+    "frontmatter",
+    "Initial YAML frontmatter requires an exact --- closing fence",
+  );
+}
+
 function assertCanonicalDirectiveHeaders(
   source: string,
   options: Readonly<{
     containerDirectives?: ReadonlySet<string>;
     enforceTypedWorkedExampleRationalSource?: boolean;
+    rejectWhitespaceSeparatedOpenings?: boolean;
   }> = {},
 ): void {
   const containerDirectives =
     options.containerDirectives ?? PHASE_1_CONTAINER_DIRECTIVES;
   for (const line of source.split("\n")) {
-    if (!/^(?: {0,3}):{2,}[A-Za-z]/u.test(line)) {
+    if (
+      !/^(?: {0,3}):{2,}[A-Za-z]/u.test(line) &&
+      !(
+        options.rejectWhitespaceSeparatedOpenings === true &&
+        /^(?: {0,3}):{2,}[\p{White_Space}\uFEFF]+[A-Za-z][A-Za-z0-9-]*\{/u.test(line)
+      )
+    ) {
       continue;
     }
     const match = /^(?: {0,3})(:{2,3})([A-Za-z][A-Za-z0-9-]*)\{(.*)\}[ \t]*$/u.exec(
@@ -500,15 +552,23 @@ function assertCanonicalContainerDirectiveClosingFences(
   let openContainerCount = 0;
 
   for (const line of source.split("\n")) {
-    const opening = /^(?: {0,3}):::([A-Za-z][A-Za-z0-9-]*)\{/u.exec(line);
-    if (opening !== null && containerDirectives.has(opening[1] ?? "")) {
-      openContainerCount += 1;
+    if (!DIRECTIVE_FENCE_CANDIDATE_PATTERN.test(line)) {
       continue;
     }
 
-    if (!/^(?: {0,3}):{2,}(?:[ \t].*)?$/u.test(line)) {
+    const opening = /^(?: {0,3})(:{2,3})([A-Za-z][A-Za-z0-9-]*)\{.*\}[ \t]*$/u.exec(
+      line,
+    );
+    const fence = opening?.[1] ?? "";
+    const directiveName = opening?.[2] ?? "";
+    if (fence === ":::" && containerDirectives.has(directiveName)) {
+      openContainerCount += 1;
       continue;
     }
+    if (fence === "::" && PHASE_1_LEAF_DIRECTIVES.has(directiveName)) {
+      continue;
+    }
+
     if (line !== ":::") {
       throw new ContentCompilationError(
         "directive-closing-syntax",

@@ -570,15 +570,20 @@ function assertStringsDoNotContainCanonicalAnswers(
   visibleStrings: readonly string[],
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
-  for (const answer of canonicalAnswers) {
-    const patterns = canonicalAnswerPatterns(answer);
-    for (const visibleString of visibleStrings) {
-      for (const normalized of normalizedStringVariants(visibleString)) {
-        if (patterns.some((pattern) => pattern.test(normalized))) {
-          throw new Error(
-            "Student projection contains a recognized canonical-answer representation",
-          );
-        }
+  const answerPatterns = canonicalAnswers.map(canonicalAnswerPatterns);
+  if (answerPatterns.length === 0) {
+    return;
+  }
+  for (const visibleString of visibleStrings) {
+    for (const normalized of normalizedStringVariants(visibleString)) {
+      if (
+        answerPatterns.some((patterns) =>
+          patterns.some((pattern) => pattern.test(normalized)),
+        )
+      ) {
+        throw new Error(
+          "Student projection contains a recognized canonical-answer representation",
+        );
       }
     }
   }
@@ -600,27 +605,155 @@ function collectStringLeaves(value: unknown): readonly string[] {
   return strings;
 }
 
+const NESTED_URI_ENCODED_PERCENT_PATTERN = /%(?:25)+(?=[0-9a-f]{2})/giu;
+const URI_ENCODED_BYTE_WITH_PERCENT_LAYERS_PATTERN = /%((?:25)+)([0-9a-f]{2})/giu;
+const URI_COMPONENT_UNESCAPED_ASCII_PATTERN = /^[a-z0-9\-_.!~*'()]*$/iu;
+const URI_ENCODED_BYTE_RUN_PATTERN = /(?:%[0-9a-f]{2})+/giu;
+const UTF8_REPLACEMENT_DECODER = new TextDecoder("utf-8", { fatal: false });
+const MAX_URI_COMPATIBILITY_DECODE_ROUNDS = 3;
+const MAX_STUDENT_VISIBLE_NORMALIZATION_STATES = 24;
+
+interface StudentVisibleNormalizationState {
+  readonly value: string;
+  readonly uriDecodeRound: number;
+}
+
 function normalizedStringVariants(value: string): readonly string[] {
   const variants = new Set<string>();
-  let current = value;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    variants.add(current);
-    variants.add(current.normalize("NFKC"));
+  const pending: StudentVisibleNormalizationState[] = [];
+  const scheduledRoundsByValue = new Map<string, number>();
+  let scheduledStateCount = 0;
 
-    const formEncoded = current.replaceAll("+", " ");
-    variants.add(formEncoded);
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(formEncoded);
-    } catch {
+  const schedule = (candidate: string, uriDecodeRound: number): void => {
+    const roundBit = 1 << uriDecodeRound;
+    const scheduledRounds = scheduledRoundsByValue.get(candidate) ?? 0;
+    if ((scheduledRounds & roundBit) !== 0) {
+      return;
+    }
+    if (scheduledStateCount >= MAX_STUDENT_VISIBLE_NORMALIZATION_STATES) {
+      throw new Error(
+        `Student projection canonical-answer normalization exceeds ${MAX_STUDENT_VISIBLE_NORMALIZATION_STATES} states`,
+      );
+    }
+    scheduledRoundsByValue.set(candidate, scheduledRounds | roundBit);
+    scheduledStateCount += 1;
+    pending.push({ value: candidate, uriDecodeRound });
+  };
+
+  schedule(value, 0);
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) {
       break;
     }
-    if (decoded === current) {
-      break;
+    variants.add(current.value);
+
+    // Re-enqueue every same-round transform until the deduplicated worklist
+    // reaches its local fixed point. NFKC and form-style plus normalization
+    // are not assumed to commute.
+    schedule(current.value.normalize("NFKC"), current.uriDecodeRound);
+    schedule(current.value.replaceAll("+", " "), current.uriDecodeRound);
+
+    if (!current.value.includes("%")) {
+      continue;
     }
-    current = decoded;
+
+    // Standard encodeURIComponent wrapping only adds one common `25` layer
+    // to every encoded byte. Compress all but one provably common outer layer
+    // at the same round. Keeping one layer preserves the first potentially
+    // ambiguous intermediate, while the strict whole-string eligibility check
+    // prevents mixed or malformed input from taking this shortcut.
+    const commonLayerCollapsed = collapseCommonUriPercentEncodingLayers(current.value);
+    if (commonLayerCollapsed !== current.value) {
+      schedule(commonLayerCollapsed, current.uriDecodeRound);
+      continue;
+    }
+
+    // Repeated encodeURIComponent calls only add another `25` after each
+    // encoded percent. Collapse that finite run in one linear scan so the
+    // amount of work is independent of the encoding depth.
+    const collapsed = current.value.replace(NESTED_URI_ENCODED_PERCENT_PATTERN, "%");
+    schedule(collapsed, current.uriDecodeRound);
+
+    // Decode both the current state and its independently collapsed form.
+    // Collapsing first can reinterpret answer-leading digits as one encoded
+    // byte (for example, `%2539` becomes `%39`) and destroy an intermediate
+    // that an ordinary URI decode would expose.
+    for (const decodeInput of new Set([current.value, collapsed])) {
+      const decoded = decodeUriComponentWithoutThrowing(decodeInput);
+      if (decoded === decodeInput) {
+        continue;
+      }
+      if (current.uriDecodeRound >= MAX_URI_COMPATIBILITY_DECODE_ROUNDS) {
+        throw new Error(
+          `Student projection canonical-answer normalization exceeds ${MAX_URI_COMPATIBILITY_DECODE_ROUNDS} URI decode rounds`,
+        );
+      }
+      schedule(decoded, current.uriDecodeRound + 1);
+    }
   }
+
   return [...variants];
+}
+
+function collapseCommonUriPercentEncodingLayers(value: string): string {
+  const encodedBytes = [
+    ...value.matchAll(URI_ENCODED_BYTE_WITH_PERCENT_LAYERS_PATTERN),
+  ];
+  if (encodedBytes.length === 0) {
+    return value;
+  }
+
+  let cursor = 0;
+  let commonLayerCount = Number.POSITIVE_INFINITY;
+  for (const encodedByte of encodedBytes) {
+    if (
+      encodedByte.index === undefined ||
+      !URI_COMPONENT_UNESCAPED_ASCII_PATTERN.test(
+        value.slice(cursor, encodedByte.index),
+      )
+    ) {
+      return value;
+    }
+    commonLayerCount = Math.min(commonLayerCount, (encodedByte[1]?.length ?? 0) / 2);
+    cursor = encodedByte.index + encodedByte[0].length;
+  }
+  if (
+    !URI_COMPONENT_UNESCAPED_ASCII_PATTERN.test(value.slice(cursor)) ||
+    commonLayerCount <= 1
+  ) {
+    return value;
+  }
+
+  const removableLayerLength = (commonLayerCount - 1) * 2;
+  return value.replace(
+    URI_ENCODED_BYTE_WITH_PERCENT_LAYERS_PATTERN,
+    (_match, percentLayers: string, encodedByte: string) =>
+      `%${percentLayers.slice(removableLayerLength)}${encodedByte}`,
+  );
+}
+
+function decodeUriComponentWithoutThrowing(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Decode valid byte runs independently so malformed URI text cannot hide
+    // a valid encoded answer and decoder exceptions never escape.
+    return decodeValidUriByteRuns(value);
+  }
+}
+
+function decodeValidUriByteRuns(value: string): string {
+  return value.replace(URI_ENCODED_BYTE_RUN_PATTERN, (encodedBytes) => {
+    const bytes = new Uint8Array(encodedBytes.length / 3);
+    for (let offset = 0; offset < encodedBytes.length; offset += 3) {
+      bytes[offset / 3] = Number.parseInt(
+        encodedBytes.slice(offset + 1, offset + 3),
+        16,
+      );
+    }
+    return UTF8_REPLACEMENT_DECODER.decode(bytes);
+  });
 }
 
 function canonicalAnswerPatterns(answer: {

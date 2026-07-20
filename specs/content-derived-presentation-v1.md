@@ -216,6 +216,19 @@ Add the numerators and reduce if needed.
 The v2 `worked-example` accepts exactly `id`, `title`, `model`, `left`, `right`,
 and `result`. `model` must equal `fraction-addition`.
 
+Raw container-fence validation applies only to the Markdown body after the
+initial exact `---` YAML frontmatter block. A frontmatter string or block-scalar
+value that happens to contain `:::`, `::::`, or directive-shaped text remains
+YAML data; it is not a Markdown container fence. The complete normalized source,
+including that frontmatter, remains part of the source hash.
+Every Markdown-body line beginning with a canonical fence prefix or with only
+Unicode whitespace, control, format, or default-ignorable characters before
+two or more colons is classified before parser recovery. Openings retain the
+canonical zero-to-three ASCII-space indentation and closes remain the exact
+unindented `:::` line. Punctuation suffixes, invisible prefixes, deeper
+indentation, and other non-exact opening or closing delimiters fail before YAML
+or Markdown parser recovery can reinterpret them.
+
 The selected explanation and worked-example body each contain 1 through 8
 non-empty paragraphs. For presentation v1, each paragraph contains plain text
 only. Inline math, emphasis, strong text, links, images, directives, HTML,
@@ -509,6 +522,15 @@ is invalid and must be rejected, not rehashed as another v1 value. If a future
 policy/presentation version permits a different selected ID, that valid new
 identity will necessarily produce different canonical bytes.
 
+The V2 fraction materializer accepts the complete `DailyPlanPreviewV2` as its
+only planning input. Before content hashing or problem generation, it detaches
+and validates that snapshot, reconstructs the V2 request from its
+request-defining fields, reruns the pinned planner with the final registry, and
+canonical-compares the entire expected and supplied plans. It does not merge
+separately supplied assignment, seed, count, reason, content, or selection
+claims. The current frozen 12-minute output has instance hash
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
+
 ### Data flow
 
 ```mermaid
@@ -519,7 +541,9 @@ flowchart LR
   D --> R
   R --> V[WorksheetPresentationV1]
   V --> L[WebLesson v1]
-  P --> M[V2 fraction materializer]
+  P --> Q[Complete DailyPlanPreviewV2]
+  Q --> X[Replan and canonical compare]
+  X --> M[V2 fraction materializer]
   D --> M
   V --> M
   M --> I[WorksheetInstanceV2 canonical bytes and hash]
@@ -568,8 +592,29 @@ numerator and denominator property values as unrelated strings.
 All explanation titles, paragraphs, worked-example titles, steps, structured
 model values, exercise instruction, source identity fields, attributions, and
 final Web/print projection fields are checked against every practice answer.
-String recognition remains defense in depth, not a claim that arbitrary prose
-obfuscation is computable.
+The shared string scan computes a deduplicated closure over raw and NFKC forms,
+form-style `+` spacing, common outer URI-wrapper layers, percent-collapse
+states, and URI-decode states. A whole string that is provably a canonical
+`encodeURIComponent` wrapper has all but one common outer layer compressed at
+the same round, preserving relative percent depth. At every remaining URI
+compatibility round, the current state and its independently percent-collapsed
+derivative are decoded as separate candidates; the collapsed value also
+remains available for same-round transformations. Neither decode branch
+subsumes the other: decoding `%2539%2F35` directly exposes `%39/35`, while
+collapse-first decoding can reinterpret `%39` as one encoded byte. Every
+derived state is eligible for subsequent transformations, including URI decode
+followed by NFKC followed by another URI decode. Mixed compatibility forms
+receive at most three URI-decode rounds, and the worklist admits at most 24
+value-and-round states. Exceeding either limit rejects the delivery rather than
+treating a partial closure as safe, so the fixed-state work remains linear
+under the existing string bounds. The compatibility rounds detect forms that
+encode the percent sign and hexadecimal digits separately, such as
+`%25%32%46`, including fullwidth percent, hexadecimal, and plus characters
+exposed by an earlier decode. If a malformed percent suffix makes whole-string
+URI decoding fail, valid percent-byte runs are still decoded and newly exposed
+states receive the remaining bounded transformations without surfacing a
+decoder exception. String recognition remains defense in depth, not a claim
+that arbitrary prose obfuscation is computable.
 
 ## 13. Web worksheet and standalone lesson
 
@@ -673,6 +718,7 @@ different bytes.
 | V2 source uses the v1 schema literal, or vice versa | Compile failure |
 | Explanation has a missing/extra attribute or unsupported body node | Compile failure |
 | Worked example has a missing/extra attribute or unknown model | Compile failure |
+| A V2 directive-shaped line uses punctuation, noncanonical indentation, Unicode whitespace, control, format, or default-ignorable characters to alter the exact opening/closing syntax | Raw-body compile failure before Markdown parser recovery |
 | Rational syntax is noncanonical, oversized, unreduced, or has a nonpositive denominator | Compile failure before hashing |
 | Declared result differs from exact `left + right` | Compile and runtime validation failure |
 | V2 registry content ID, revision, source hash, content hash, or compiler differs from policy v3 | `goal-unavailable`; no content resolution or generation |
@@ -680,11 +726,13 @@ different bytes.
 | Matched reviewed content has a selected node missing, duplicated, or of the wrong type | Typed trusted resolution error, sanitized `503`; no fallback |
 | Selected exercise is not `fractions.add@1` or lacks eight reviewed items | Fail before materialization |
 | Ordered policy tuple differs in value, order, or length from `[left,right,result]` | Fail before generation |
+| Materialization input is not byte-semantically equal to the complete result of rerunning the pinned V2 planner for its request-defining fields | Typed invalid-assignment failure before content hashing or generation |
 | A generated answer equals an example operand or result | Deterministic retry; bounded exhaustion fails typed |
 | Materialized presentation differs from resolved presentation | Instance validation failure |
 | Slot instruction/provenance differs from selected exercise/content | Instance validation failure |
 | Caller mutates content/materialization while an async hash is pending | Continue from one detached pre-await snapshot or fail; never mix snapshots |
 | Student presentation contains a recognized practice answer | Fail before student Web or print delivery |
+| Raw URI decoding and collapse-before-decode expose different answer-bearing intermediates, including under repeated wrappers or malformed percent/UTF-8 suffixes | Preserve relative percent depth, explore both bounded decode branches, and detect the answer or fail closed before student Web or print delivery |
 | Student DTO contains seed, answer, scoring, misconception, or solution fields | Strict DTO validation/leak gate failure |
 | Lesson independently reconstructs different presentation copy | Parity test failure |
 | Lesson response is malformed, duplicate-key, invalid UTF-8, oversized, or indefinitely streaming | Bounded decoder cancellation and sanitized failure |
@@ -732,6 +780,13 @@ different bytes.
   requests, logs containing payloads, or durable writes.
 - Author text remains typed data; it is never concatenated as raw HTML, TeX,
   Typst, code, filesystem paths, or URLs.
+- The browser build runs only after a built-in-only CI preflight verifies the
+  reviewed root manifest, workspace configuration, and complete lockfile.
+  Browser source/package/config/HTML/CSS edges then pass the pinned AST boundary
+  scan. Executable source roots reject extensionless files and extensions
+  outside the reviewed source, static-asset, JSON, and style surfaces. Worker
+  and print roots remain explicit trusted-server import exceptions while still
+  participating in this source-file enumeration rule.
 
 ## 18. Acceptance criteria
 

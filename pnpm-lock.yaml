@@ -153,6 +153,9 @@ importers:
       '@exercisebook/domain':
         specifier: workspace:*
         version: link:../domain
+      '@exercisebook/planner':
+        specifier: workspace:*
+        version: link:../planner
       '@exercisebook/schemas':
         specifier: workspace:*
         version: link:../schemas

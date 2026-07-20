@@ -23,6 +23,7 @@ import {
   WORKSHEET_INSTANCE_V1_RUNTIME_INVARIANTS,
   WorksheetInstanceV1Schema,
   assertSafeDataObjectGraph,
+  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionAccessibilitySummary,
   deriveFractionAdditionPromptAccessibleText,
   derivePhase1MathAccessibleText,
@@ -56,6 +57,38 @@ const fixtures: readonly SchemaFixture[] = [
     runtimeInvariants: WORKSHEET_INSTANCE_V1_RUNTIME_INVARIANTS,
   },
 ];
+
+const CANONICAL_ANSWER_39_OVER_35 = [{ numerator: "39", denominator: "35" }] as const;
+
+const NORMALIZATION_COMPOSITION_ANSWER_CASES = [
+  ["NFKC-created percent escape", "The answer is 39%EF%BC%852F35."],
+  ["NFKC-created hexadecimal digits", "The answer is 39%25%EF%BC%92%EF%BC%A635."],
+  [
+    "decoded fullwidth plus and percent",
+    "The%EF%BC%8Banswer%EF%BC%8Bis%EF%BC%8B39%EF%BC%852F35.",
+  ],
+  [
+    "decoded ASCII/fullwidth plus and percent",
+    "The%2Banswer%EF%BC%8Bis%2B39%EF%BC%852F35.",
+  ],
+  ["malformed URI fallback", "The answer is 39%EF%BC%852F35%ZZ"],
+] as const;
+
+const RAW_VS_COLLAPSED_URI_ANSWER_CASES = [
+  ["single-layer leading encoded percent", "The answer is %2539%2F35."],
+  ["nested leading encoded percent", "The answer is %252539%252F35."],
+  ["malformed URI suffix", "The answer is %2539%2F35%ZZ"],
+  ["malformed UTF-8 suffix", "The answer is %2539%2F35%E0%A4%A"],
+] as const;
+
+const BENIGN_NORMALIZATION_COMPOSITION_CASES = [
+  ["NFKC-created slash", "Use%EF%BC%852Fto compare fractions."],
+  ["decoded fullwidth plus", "Review%EF%BC%8Bequivalent%EF%BC%8Bfractions."],
+  ["decoded ASCII/fullwidth plus", "Review%2Bequivalent%EF%BC%8Bfractions."],
+  ["malformed URI fallback", "Use%EF%BC%852Fto compare fractions.%ZZ"],
+  ["different rational value", "The answer is 38%EF%BC%852F35."],
+  ["leading encoded percent before a different rational", "The answer is %2538%2F35."],
+] as const;
 
 describe("structural JSON Schema and normative Zod runtime contracts", () => {
   it.each([null, 42, ["1"], new String("1")])(
@@ -473,6 +506,170 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
     ).toBe(false);
   });
 
+  it.each(NORMALIZATION_COMPOSITION_ANSWER_CASES)(
+    "rejects %s in the shared student-visible answer scanner",
+    (_case, visibleText) => {
+      expect(() =>
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          { visibleText },
+          CANONICAL_ANSWER_39_OVER_35,
+        ),
+      ).toThrow("canonical-answer");
+    },
+  );
+
+  it.each(RAW_VS_COLLAPSED_URI_ANSWER_CASES)(
+    "rejects raw-vs-collapsed URI case %s in the shared student-visible answer scanner",
+    (_case, visibleText) => {
+      expect(() =>
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          { visibleText },
+          CANONICAL_ANSWER_39_OVER_35,
+        ),
+      ).toThrow("canonical-answer");
+    },
+  );
+
+  it.each(BENIGN_NORMALIZATION_COMPOSITION_CASES)(
+    "allows benign %s in the shared student-visible answer scanner",
+    (_case, visibleText) => {
+      expect(() =>
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          { visibleText },
+          CANONICAL_ANSWER_39_OVER_35,
+        ),
+      ).not.toThrow();
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "rejects a compatibility-normalized answer in the shared scanner after %i URI-encoding layers",
+    (encodingDepth) => {
+      const visibleText = encodeUriComponentRepeatedly(
+        "The answer is 39％2F35.",
+        encodingDepth,
+      );
+
+      expect(() =>
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          { visibleText },
+          CANONICAL_ANSWER_39_OVER_35,
+        ),
+      ).toThrow("canonical-answer");
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "allows compatibility-normalized benign text in the shared scanner after %i URI-encoding layers",
+    (encodingDepth) => {
+      const visibleText = encodeUriComponentRepeatedly(
+        "Use％2Fto compare fractions.",
+        encodingDepth,
+      );
+
+      expect(() =>
+        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+          { visibleText },
+          CANONICAL_ANSWER_39_OVER_35,
+        ),
+      ).not.toThrow();
+    },
+  );
+
+  it("fails closed when the normalization worklist exceeds its state cap", () => {
+    expect(() =>
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+        { visibleText: "Review ＋%25%EF%BC%92%EF%BC%A6+%252B" },
+        CANONICAL_ANSWER_39_OVER_35,
+      ),
+    ).toThrow("canonical-answer normalization exceeds 24 states");
+  });
+
+  it("fails closed when another URI decode remains after the round cap", () => {
+    const visibleText = encodeEveryAsciiCharacterRepeatedly("Review", 4);
+
+    expect(() =>
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+        { visibleText },
+        CANONICAL_ANSWER_39_OVER_35,
+      ),
+    ).toThrow("canonical-answer normalization exceeds 3 URI decode rounds");
+  });
+
+  it("rejects a million-code-unit scanner input before normalization", () => {
+    expect(() =>
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+        { visibleText: "x".repeat(MAX_SAFE_DATA_STRING_CODE_UNITS) },
+        CANONICAL_ANSWER_39_OVER_35,
+      ),
+    ).toThrow("string code units");
+  });
+
+  it.each(NORMALIZATION_COMPOSITION_ANSWER_CASES)(
+    "rejects %s through the V1 student projector",
+    async (_case, hintText) => {
+      const materialized = await materializeWorksheetFixture({ hintText });
+
+      await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+        "canonical-answer",
+      );
+    },
+  );
+
+  it.each(RAW_VS_COLLAPSED_URI_ANSWER_CASES)(
+    "rejects raw-vs-collapsed URI case %s through the V1 student projector",
+    async (_case, hintText) => {
+      const materialized = await materializeWorksheetFixture({ hintText });
+
+      await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+        "canonical-answer",
+      );
+    },
+  );
+
+  it.each(BENIGN_NORMALIZATION_COMPOSITION_CASES)(
+    "allows benign %s through the V1 student projector",
+    async (_case, hintText) => {
+      const materialized = await materializeWorksheetFixture({ hintText });
+
+      await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
+        slots: [{ id: "practice-01" }],
+      });
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "rejects a compatibility-normalized answer through the V1 projector after %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetFixture({
+        hintText: encodeUriComponentRepeatedly(
+          "The answer is 39％2F35.",
+          encodingDepth,
+        ),
+      });
+
+      await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+        "canonical-answer",
+      );
+    },
+  );
+
+  it.each([1, 2, 3, 32])(
+    "allows compatibility-normalized benign text through the V1 projector after %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetFixture({
+        hintText: encodeUriComponentRepeatedly(
+          "Use％2Fto compare fractions.",
+          encodingDepth,
+        ),
+      });
+
+      await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
+        slots: [{ id: "practice-01" }],
+      });
+    },
+  );
+
   it.each([
     "The answer is 39/35",
     "The answer is 39 / 35",
@@ -491,6 +688,84 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
       );
     },
   );
+
+  it.each([0, 1, 2, 3, 32])(
+    "rejects a canonical answer nested through %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetFixture({
+        hintText: encodeUriComponentRepeatedly("The answer is 39/35.", encodingDepth),
+      });
+
+      await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+        "canonical-answer",
+      );
+    },
+  );
+
+  it.each([0, 1, 2, 3, 32])(
+    "allows benign hint text nested through %i URI-encoding layers",
+    async (encodingDepth) => {
+      const materialized = await materializeWorksheetFixture({
+        hintText: encodeUriComponentRepeatedly(
+          "Review equivalent fractions before continuing.",
+          encodingDepth,
+        ),
+      });
+
+      await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
+        slots: [{ id: "practice-01" }],
+      });
+    },
+  );
+
+  it.each([
+    "Use+equivalent+fractions.",
+    "Review ２ over ５ before continuing.",
+    "Keep%studying",
+    "%E0%A4%A",
+  ])("allows benign normalization edge case: %s", async (hintText) => {
+    const materialized = await materializeWorksheetFixture({ hintText });
+
+    await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
+      slots: [{ id: "practice-01" }],
+    });
+  });
+
+  it.each([
+    "The+answer+is+39%2F35.",
+    "The answer is ３９／３５.",
+    "The%20answer%20is%2039%2F35%ZZ",
+    "The%20answer%20is%2039%2F35%E0%A4%A",
+    `${encodeURIComponent("The answer is ３９／３５.")}%ZZ`,
+  ])("preserves normalization answer detection: %s", async (hintText) => {
+    const materialized = await materializeWorksheetFixture({ hintText });
+
+    await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+      "canonical-answer",
+    );
+  });
+
+  it.each([
+    "The answer is 39%25%32%46" + "35.",
+    "The answer is 39%25%32%46" + "35%ZZ",
+    "The answer is 39%25%32%46" + "35%E0%A4%A",
+  ])("rejects a mixed URI-encoded canonical answer: %s", async (hintText) => {
+    const materialized = await materializeWorksheetFixture({ hintText });
+
+    await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+      "canonical-answer",
+    );
+  });
+
+  it("allows benign mixed URI-encoded hint text", async () => {
+    const materialized = await materializeWorksheetFixture({
+      hintText: "Use%25%32%46to compare numerator and denominator.",
+    });
+
+    await expect(projectWorksheetForStudent(materialized)).resolves.toMatchObject({
+      slots: [{ id: "practice-01" }],
+    });
+  });
 
   it("recursively scans accessibility and percent-decoded URL strings", async () => {
     const accessibilityLeak = await materializeWorksheetFixture({
@@ -788,6 +1063,25 @@ function nestedFractionSource(depth: number): string {
     source = String.raw`\frac{${source}}{2}`;
   }
   return source;
+}
+
+function encodeUriComponentRepeatedly(value: string, depth: number): string {
+  let encoded = value;
+  for (let layer = 0; layer < depth; layer += 1) {
+    encoded = encodeURIComponent(encoded);
+  }
+  return encoded;
+}
+
+function encodeEveryAsciiCharacterRepeatedly(value: string, depth: number): string {
+  let encoded = value;
+  for (let layer = 0; layer < depth; layer += 1) {
+    encoded = Array.from(
+      encoded,
+      (character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`,
+    ).join("");
+  }
+  return encoded;
 }
 
 function contentDirectiveFixture(id: string): unknown {

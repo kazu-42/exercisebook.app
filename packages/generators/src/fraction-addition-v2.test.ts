@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { canonicalizeJson, equalRationals, sha256Hex } from "@exercisebook/domain";
 import {
+  DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+  DAY_ONE_PREVIEW_REGISTRY_V2,
+  planDailyPreviewV2,
+  type DailyPlanPreviewV2,
+} from "@exercisebook/planner";
+import {
+  projectWorksheetV2ForStudent,
   validateContentDocumentV1,
   validateContentDocumentV2,
   validateWorksheetInstanceV2,
@@ -17,73 +24,223 @@ import {
 import {
   FractionAdditionV2MaterializationError,
   materializeFractionAdditionWorksheetFromContentV2,
-  type FractionAdditionAssignmentInputV2,
 } from "./fraction-addition-v2.js";
 import { PresentationResolutionError } from "./fraction-presentation-v1.js";
-
-const FINAL_SOURCE_HASH =
-  "456c8908debd52c7fcc5eba6e2e9a38434b5fcd8343e7a14a427faae34502523";
-const FINAL_CONTENT_HASH =
-  "944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd";
 
 const REVIEWED_FRACTION_LESSON_V1 = validateContentDocumentV1(compiledFractionLessonV1);
 const REVIEWED_FRACTION_LESSON_V2 = validateContentDocumentV2(compiledFractionLessonV2);
 
-const PRESENTATION_SELECTION = {
-  explanationNodeId: "lesson-explanation-01",
-  workedExampleNodeId: "worked-example-01",
-  exerciseNodeId: "practice-01",
-  excludedCanonicalAnswers: [
-    { numerator: "1", denominator: "2" },
-    { numerator: "1", denominator: "3" },
-    { numerator: "5", denominator: "6" },
-  ],
-} as const;
+interface MutablePlanProbe {
+  id: string;
+  localStudyDate: string;
+  timeZone: string;
+  locale: string;
+  requestedPracticeMinutes: number;
+  plannedPracticeMinutes: number;
+  policy: {
+    id: string;
+    version: number;
+  };
+  skillGraph: {
+    id: string;
+    revision: number;
+  };
+  generation: {
+    baseSeed: string;
+    seedVersion: string;
+  };
+  activities: Array<{
+    itemCount: number;
+    expectedMinutes: number;
+    selectionReasons: string[];
+    content: {
+      contentHash: string;
+    };
+    presentationSelection: {
+      explanationNodeId: string;
+      excludedCanonicalAnswers: unknown[];
+    };
+  }>;
+}
 
-const ASSIGNMENT_V2: FractionAdditionAssignmentInputV2 = {
-  assignmentId: "preview-p17-v2",
-  localStudyDate: "2026-07-19",
-  timeZone: "Asia/Tokyo",
-  locale: "en",
-  seed: "0123456789abcdef".repeat(4),
-  seedSecretVersion: "public-preview-v2",
-  requestedItemCount: 8,
-  plan: { id: "preview-p17-v2", version: 2 },
-  policy: { id: "day-one-fraction-preview", version: 3 },
-  skillGraph: { id: "phase-1-math", revision: 1 },
-  selectionReasons: ["current-frontier"],
-  content: {
-    id: "math.fractions.add-unlike-denominators",
-    revision: 2,
-    sourceHash: FINAL_SOURCE_HASH,
-    contentHash: FINAL_CONTENT_HASH,
-    compilerVersion: "exercisebook-content-compiler/2",
-  },
-  presentationSelection: PRESENTATION_SELECTION,
-};
+const PLAN_MUTATION_CASES = [
+  [
+    "regex-valid plan ID",
+    (plan: MutablePlanProbe) => {
+      plan.id = `preview-${"0".repeat(64)}`;
+    },
+  ],
+  [
+    "64-hex base seed",
+    (plan: MutablePlanProbe) => {
+      plan.generation.baseSeed = "0".repeat(64);
+    },
+  ],
+  [
+    "seed version",
+    (plan: MutablePlanProbe) => {
+      plan.generation.seedVersion = "public-preview-v1";
+    },
+  ],
+  [
+    "policy ID",
+    (plan: MutablePlanProbe) => {
+      plan.policy.id = "alternate-preview-policy";
+    },
+  ],
+  [
+    "policy version",
+    (plan: MutablePlanProbe) => {
+      plan.policy.version = 2;
+    },
+  ],
+  [
+    "skill graph ID",
+    (plan: MutablePlanProbe) => {
+      plan.skillGraph.id = "alternate-skill-graph";
+    },
+  ],
+  [
+    "skill graph revision",
+    (plan: MutablePlanProbe) => {
+      plan.skillGraph.revision = 2;
+    },
+  ],
+  [
+    "valid local study date",
+    (plan: MutablePlanProbe) => {
+      plan.localStudyDate = "2026-07-20";
+    },
+  ],
+  [
+    "valid time zone",
+    (plan: MutablePlanProbe) => {
+      plan.timeZone = "UTC";
+    },
+  ],
+  [
+    "locale",
+    (plan: MutablePlanProbe) => {
+      plan.locale = "ja";
+    },
+  ],
+  [
+    "content identity",
+    (plan: MutablePlanProbe) => {
+      plan.activities[0]!.content.contentHash = "0".repeat(64);
+    },
+  ],
+  [
+    "selection reason",
+    (plan: MutablePlanProbe) => {
+      plan.activities[0]!.selectionReasons = ["due-review"];
+    },
+  ],
+  [
+    "selected node",
+    (plan: MutablePlanProbe) => {
+      plan.activities[0]!.presentationSelection.explanationNodeId =
+        "alternate-explanation";
+    },
+  ],
+  [
+    "ordered exclusion tuple",
+    (plan: MutablePlanProbe) => {
+      plan.activities[0]!.presentationSelection.excludedCanonicalAnswers.reverse();
+    },
+  ],
+] as const;
 
 describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
-  it("materializes byte-identical validated instances and freezes the v2 vector", async () => {
-    const first = await materializeV2();
-    const second = await materializeV2();
+  it("derives the complete assignment and student delivery from one planner-owned snapshot", async () => {
+    const plan = await createRealPlanV2(12);
+    const activity = plan.activities[0];
+    const materialized = await materializeFractionAdditionWorksheetFromContentV2(
+      REVIEWED_FRACTION_LESSON_V2,
+      plan,
+    );
+    const delivery = await projectWorksheetV2ForStudent(materialized);
 
-    expect(validateWorksheetInstanceV2(first.instance)).toEqual(first.instance);
-    expect(first.canonicalJson).toBe(canonicalizeJson(first.instance));
-    expect(first.canonicalJson).toBe(second.canonicalJson);
-    expect(first.instanceHash).toBe(second.instanceHash);
-    expect(first.instanceHash).toMatch(/^[0-9a-f]{64}$/u);
-    expect(first.instanceHash).toBe(
-      "318c97a01880bf253ae3fb2c5ed58cfe9eb5111436e1a70555607788ace7c039",
+    expect(materialized.instance).toMatchObject({
+      assignmentId: plan.id,
+      localStudyDate: plan.localStudyDate,
+      timeZone: plan.timeZone,
+      locale: plan.locale,
+      expectedMinutes: plan.plannedPracticeMinutes,
+      plan: { id: plan.id, version: 2 },
+      policy: plan.policy,
+      skillGraph: plan.skillGraph,
+      rng: {
+        baseSeed: plan.generation.baseSeed,
+        seedSecretVersion: plan.generation.seedVersion,
+      },
+      content: [activity.content],
+    });
+    expect(materialized.instance.slots).toHaveLength(activity.itemCount);
+    expect(
+      materialized.instance.slots.every(
+        (slot) =>
+          slot.selectionReasons.length === activity.selectionReasons.length &&
+          slot.selectionReasons.every(
+            (reason, index) => reason === activity.selectionReasons[index],
+          ),
+      ),
+    ).toBe(true);
+    expect(delivery).toMatchObject({
+      assignmentId: plan.id,
+      instanceHash: materialized.instanceHash,
+      expectedMinutes: plan.plannedPracticeMinutes,
+    });
+    expect(JSON.stringify(delivery)).not.toMatch(
+      /baseSeed|seedSecretVersion|slotSeed|canonicalAnswer|scoringRule|solutionTrace|misconceptions/u,
     );
   });
 
-  it("keeps 4, 6, and 8 item materializations as stable slot prefixes", async () => {
+  it("keeps real 8, 12, and 20 minute plans deterministic and prefix-stable", async () => {
+    const [plan8, plan12, plan20] = await Promise.all([
+      createRealPlanV2(8),
+      createRealPlanV2(12),
+      createRealPlanV2(20),
+    ]);
     const [four, six, eight] = await Promise.all([
-      materializeV2({ requestedItemCount: 4 }),
-      materializeV2({ requestedItemCount: 6 }),
-      materializeV2({ requestedItemCount: 8 }),
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan8,
+      ),
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan12,
+      ),
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan20,
+      ),
+    ]);
+    const [fourReplay, sixReplay, eightReplay] = await Promise.all([
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan8,
+      ),
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan12,
+      ),
+      materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan20,
+      ),
     ]);
 
+    expect([four.instanceHash, six.instanceHash, eight.instanceHash]).toEqual([
+      fourReplay.instanceHash,
+      sixReplay.instanceHash,
+      eightReplay.instanceHash,
+    ]);
+    expect([four.canonicalJson, six.canonicalJson, eight.canonicalJson]).toEqual([
+      fourReplay.canonicalJson,
+      sixReplay.canonicalJson,
+      eightReplay.canonicalJson,
+    ]);
     expect(six.instance.slots.slice(0, 4)).toEqual(four.instance.slots);
     expect(eight.instance.slots.slice(0, 4)).toEqual(four.instance.slots);
     expect(eight.instance.slots.slice(0, 6)).toEqual(six.instance.slots);
@@ -94,38 +251,121 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
     ]).toEqual([8, 12, 16]);
   });
 
-  it("rejects requests beyond the eight reviewed exercise items", async () => {
-    await expect(materializeV2({ requestedItemCount: 9 })).rejects.toMatchObject({
+  it("freezes the planner-derived 12-minute V2 instance vector", async () => {
+    const plan = await createRealPlanV2(12);
+    const first = await materializeFractionAdditionWorksheetFromContentV2(
+      REVIEWED_FRACTION_LESSON_V2,
+      plan,
+    );
+    const second = await materializeFractionAdditionWorksheetFromContentV2(
+      REVIEWED_FRACTION_LESSON_V2,
+      plan,
+    );
+
+    expect(validateWorksheetInstanceV2(first.instance)).toEqual(first.instance);
+    expect(first.canonicalJson).toBe(canonicalizeJson(first.instance));
+    expect(first.canonicalJson).toBe(second.canonicalJson);
+    expect(first.instanceHash).toBe(second.instanceHash);
+    expect(first.instanceHash).toBe(
+      "934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02",
+    );
+  });
+
+  it.each(PLAN_MUTATION_CASES)(
+    "rejects a complete plan whose %s is mutated",
+    async (_name, mutate) => {
+      const plan = mutablePlanV2(await createRealPlanV2(12));
+      mutate(plan);
+
+      await expect(
+        materializeFractionAdditionWorksheetFromContentV2(
+          REVIEWED_FRACTION_LESSON_V2,
+          plan as unknown as DailyPlanPreviewV2,
+        ),
+      ).rejects.toMatchObject({
+        name: "FractionAdditionV2MaterializationError",
+        code: "invalid-assignment",
+      });
+    },
+  );
+
+  it.each([
+    [8, 6],
+    [12, 8],
+    [20, 4],
+  ] as const)(
+    "rejects a %i-minute plan whose item count is changed to %i",
+    async (practiceMinutes, itemCount) => {
+      const plan = mutablePlanV2(await createRealPlanV2(practiceMinutes));
+      plan.activities[0]!.itemCount = itemCount;
+
+      await expect(
+        materializeFractionAdditionWorksheetFromContentV2(
+          REVIEWED_FRACTION_LESSON_V2,
+          plan as unknown as DailyPlanPreviewV2,
+        ),
+      ).rejects.toMatchObject({
+        name: "FractionAdditionV2MaterializationError",
+        code: "invalid-assignment",
+      });
+    },
+  );
+
+  it("rejects independent assignment claims instead of merging them with the plan", async () => {
+    const plan = await createRealPlanV2(12);
+
+    await expect(
+      materializeFractionAdditionWorksheetFromContentV2(REVIEWED_FRACTION_LESSON_V2, {
+        ...plan,
+        assignmentId: plan.id,
+        seed: plan.generation.baseSeed,
+        requestedItemCount: plan.activities[0].itemCount,
+      } as never),
+    ).rejects.toMatchObject({
       name: "FractionAdditionV2MaterializationError",
       code: "invalid-assignment",
     });
   });
 
-  it("rejects unsupported and document-mismatched locales before hashing", async () => {
-    await expect(materializeV2({ locale: "ja" })).rejects.toMatchObject({
-      name: "FractionAdditionV2MaterializationError",
-      code: "locale-mismatch",
-    });
+  it("authorizes the complete plan before content hashing or generation", async () => {
+    const plan = mutablePlanV2(await createRealPlanV2(12));
+    plan.generation.baseSeed = "0".repeat(64);
+    const changedDocument = structuredClone(REVIEWED_FRACTION_LESSON_V2);
+    changedDocument.title = "Schema-valid but unreviewed title";
 
-    const mismatchedDocument = structuredClone(REVIEWED_FRACTION_LESSON_V2);
-    mismatchedDocument.locale = "ja";
     await expect(
       materializeFractionAdditionWorksheetFromContentV2(
-        mismatchedDocument,
-        ASSIGNMENT_V2,
+        changedDocument,
+        plan as unknown as DailyPlanPreviewV2,
       ),
+    ).rejects.toMatchObject({
+      name: "FractionAdditionV2MaterializationError",
+      code: "invalid-assignment",
+    });
+  });
+
+  it("rejects a document locale that differs from the authorized plan", async () => {
+    const plan = await createRealPlanV2(12);
+    const mismatchedDocument = structuredClone(REVIEWED_FRACTION_LESSON_V2);
+    mismatchedDocument.locale = "ja";
+
+    await expect(
+      materializeFractionAdditionWorksheetFromContentV2(mismatchedDocument, plan),
     ).rejects.toMatchObject({
       name: "FractionAdditionV2MaterializationError",
       code: "locale-mismatch",
     });
   });
 
-  it("excludes all worked-example operands and result across broad deterministic seeds", async () => {
-    const excluded = PRESENTATION_SELECTION.excludedCanonicalAnswers;
+  it("excludes all worked-example operands and result across broad planner-derived seeds", async () => {
     for (let seedIndex = 0; seedIndex < 128; seedIndex += 1) {
-      const materialized = await materializeV2({
-        seed: seedIndex.toString(16).padStart(64, "0"),
-      });
+      const plan = await createRealPlanV2(20, studyDateForIndex(seedIndex));
+      const materialized = await materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan,
+      );
+      const excluded =
+        plan.activities[0].presentationSelection.excludedCanonicalAnswers;
       for (const slot of materialized.instance.slots) {
         expect(
           excluded.some((value) => equalRationals(slot.canonicalAnswer.value, value)),
@@ -134,14 +374,19 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
     }
   }, 30_000);
 
-  it("derives instruction, provenance, title, skills, and attribution from one document", async () => {
-    const materialized = await materializeV2();
+  it("derives instruction, provenance, title, skills, and attribution from one document and plan", async () => {
+    const plan = await createRealPlanV2(20);
+    const activity = plan.activities[0];
+    const materialized = await materializeFractionAdditionWorksheetFromContentV2(
+      REVIEWED_FRACTION_LESSON_V2,
+      plan,
+    );
 
     expect(materialized.instance.title).toBe(REVIEWED_FRACTION_LESSON_V2.title);
     expect(materialized.instance.presentation.exercise.instruction).toBe(
       "Add each pair of fractions. Give every answer in lowest terms.",
     );
-    expect(materialized.instance.content).toEqual([ASSIGNMENT_V2.content]);
+    expect(materialized.instance.content).toEqual([activity.content]);
     expect(materialized.instance.attributions).toEqual([
       {
         title: REVIEWED_FRACTION_LESSON_V2.title,
@@ -159,14 +404,14 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
           slot.prompt.instruction ===
             materialized.instance.presentation.exercise.instruction &&
           slot.skillIds.length === 1 &&
-          slot.skillIds[0] === "math.fractions.add-unlike" &&
-          slot.provenance.contentId === ASSIGNMENT_V2.content.id &&
-          slot.provenance.contentRevision === ASSIGNMENT_V2.content.revision &&
-          slot.provenance.sourceHash === ASSIGNMENT_V2.content.sourceHash &&
-          slot.provenance.contentHash === ASSIGNMENT_V2.content.contentHash &&
-          slot.provenance.compilerVersion === ASSIGNMENT_V2.content.compilerVersion &&
-          slot.provenance.generatorId === "fractions.add" &&
-          slot.provenance.generatorVersion === "1" &&
+          slot.skillIds[0] === activity.skillId &&
+          slot.provenance.contentId === activity.content.id &&
+          slot.provenance.contentRevision === activity.content.revision &&
+          slot.provenance.sourceHash === activity.content.sourceHash &&
+          slot.provenance.contentHash === activity.content.contentHash &&
+          slot.provenance.compilerVersion === activity.content.compilerVersion &&
+          slot.provenance.generatorId === activity.generatorId &&
+          slot.provenance.generatorVersion === activity.generatorVersion &&
           slot.provenance.generationAttempt >= 0 &&
           slot.provenance.generationAttempt <= 127,
       ),
@@ -174,7 +419,11 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
   });
 
   it("includes the full presentation and pinned identity in canonical hash semantics", async () => {
-    const original = await materializeV2();
+    const plan = await createRealPlanV2(20);
+    const original = await materializeFractionAdditionWorksheetFromContentV2(
+      REVIEWED_FRACTION_LESSON_V2,
+      plan,
+    );
     const changedPresentation = validateWorksheetInstanceV2({
       ...original.instance,
       presentation: {
@@ -216,43 +465,20 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
     );
   });
 
-  it("rejects a changed fixed node selection before generating an instance", async () => {
-    await expect(
-      materializeV2({
-        presentationSelection: {
-          ...PRESENTATION_SELECTION,
-          explanationNodeId: "alternate-explanation",
-        },
-      }),
-    ).rejects.toMatchObject({
-      name: "PresentationResolutionError",
-      code: "invalid-selection",
-    });
-  });
-
-  it("uses one detached pre-await snapshot when callers mutate document and assignment", async () => {
+  it("uses one detached pre-await snapshot when callers mutate document and plan", async () => {
+    const sourcePlan = await createRealPlanV2(20);
     const baselineDocument = structuredClone(REVIEWED_FRACTION_LESSON_V2);
-    const baselineAssignment = structuredClone(ASSIGNMENT_V2);
+    const baselinePlan = structuredClone(sourcePlan);
     const baseline = await materializeFractionAdditionWorksheetFromContentV2(
       baselineDocument,
-      baselineAssignment,
+      baselinePlan,
     );
     const racedDocument = structuredClone(REVIEWED_FRACTION_LESSON_V2);
-    const racedAssignment = structuredClone(ASSIGNMENT_V2);
-    const mutableRacedAssignment = racedAssignment as unknown as {
-      seed: string;
-      assignmentId: string;
-      presentationSelection: {
-        excludedCanonicalAnswers: Array<{
-          numerator: string;
-          denominator: string;
-        }>;
-      };
-    };
+    const racedPlan = mutablePlanV2(sourcePlan);
 
     const pending = materializeFractionAdditionWorksheetFromContentV2(
       racedDocument,
-      racedAssignment,
+      racedPlan as unknown as DailyPlanPreviewV2,
     );
     racedDocument.title = "Caller-mutated title";
     racedDocument.authors[0] = { name: "Caller mutation", role: "author" };
@@ -260,9 +486,9 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
     if (explanation?.type === "explanation") {
       explanation.paragraphs[0] = "Caller-mutated paragraph";
     }
-    mutableRacedAssignment.seed = "f".repeat(64);
-    mutableRacedAssignment.assignmentId = "caller-mutated-assignment";
-    mutableRacedAssignment.presentationSelection.excludedCanonicalAnswers[0] = {
+    racedPlan.id = `preview-${"f".repeat(64)}`;
+    racedPlan.generation.baseSeed = "f".repeat(64);
+    racedPlan.activities[0]!.presentationSelection.excludedCanonicalAnswers[0] = {
       numerator: "9",
       denominator: "10",
     };
@@ -273,22 +499,23 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
   });
 
   it("rejects accessor-bearing caller data without invoking accessors", async () => {
+    const plan = await createRealPlanV2(12);
     let getterRan = false;
-    const hostileAssignment = {
-      ...structuredClone(ASSIGNMENT_V2),
+    const hostilePlan = {
+      ...structuredClone(plan),
     } as Record<string, unknown>;
-    Object.defineProperty(hostileAssignment, "seed", {
+    Object.defineProperty(hostilePlan, "generation", {
       enumerable: true,
       get() {
         getterRan = true;
-        return ASSIGNMENT_V2.seed;
+        return plan.generation;
       },
     });
 
     await expect(
       materializeFractionAdditionWorksheetFromContentV2(
         REVIEWED_FRACTION_LESSON_V2,
-        hostileAssignment as unknown as FractionAdditionAssignmentInputV2,
+        hostilePlan as unknown as DailyPlanPreviewV2,
       ),
     ).rejects.toMatchObject({
       name: "FractionAdditionV2MaterializationError",
@@ -303,63 +530,62 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
     { numerator: "9".repeat(129), denominator: "2" },
     { numerator: "2", denominator: "4" },
   ])(
-    "maps hostile selection rational $numerator/$denominator to a typed error",
+    "maps hostile plan selection rational $numerator/$denominator to a typed error",
     async (hostile) => {
-      const action = materializeV2({
-        presentationSelection: {
-          ...PRESENTATION_SELECTION,
-          excludedCanonicalAnswers: [
-            hostile,
-            PRESENTATION_SELECTION.excludedCanonicalAnswers[1],
-            PRESENTATION_SELECTION.excludedCanonicalAnswers[2],
-          ],
-        },
-      });
+      const plan = mutablePlanV2(await createRealPlanV2(12));
+      plan.activities[0]!.presentationSelection.excludedCanonicalAnswers[0] = hostile;
+      const action = materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan as unknown as DailyPlanPreviewV2,
+      );
 
-      await expect(action).rejects.toBeInstanceOf(PresentationResolutionError);
+      await expect(action).rejects.toBeInstanceOf(
+        FractionAdditionV2MaterializationError,
+      );
       await expect(action).rejects.not.toBeInstanceOf(SyntaxError);
       await expect(action).rejects.not.toBeInstanceOf(RangeError);
     },
   );
 
-  it("rejects a document whose computed hash differs from the pinned assignment", async () => {
+  it("rejects a document whose computed hash differs from the pinned plan content", async () => {
+    const plan = await createRealPlanV2(12);
     const changed = structuredClone(REVIEWED_FRACTION_LESSON_V2);
     changed.title = "Schema-valid but unreviewed title";
 
     await expect(
-      materializeFractionAdditionWorksheetFromContentV2(changed, ASSIGNMENT_V2),
+      materializeFractionAdditionWorksheetFromContentV2(changed, plan),
     ).rejects.toMatchObject({
       name: "PresentationResolutionError",
       code: "content-identity-mismatch",
     });
   });
 
-  it("maps opaque function and symbol selection values without leaking DataCloneError", async () => {
+  it("maps opaque function and symbol plan values without leaking DataCloneError", async () => {
     for (const hostile of [() => undefined, Symbol("opaque-selection")]) {
-      const action = materializeV2({
-        presentationSelection: {
-          ...PRESENTATION_SELECTION,
-          excludedCanonicalAnswers: [
-            hostile as never,
-            PRESENTATION_SELECTION.excludedCanonicalAnswers[1],
-            PRESENTATION_SELECTION.excludedCanonicalAnswers[2],
-          ],
-        },
-      });
+      const plan = mutablePlanV2(await createRealPlanV2(12));
+      plan.activities[0]!.presentationSelection.excludedCanonicalAnswers[0] = hostile;
+      const action = materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan as unknown as DailyPlanPreviewV2,
+      );
 
-      await expect(action).rejects.toMatchObject({
-        name: "PresentationResolutionError",
-        code: "invalid-selection",
-      });
+      await expect(action).rejects.toBeInstanceOf(
+        FractionAdditionV2MaterializationError,
+      );
       await expect(action).rejects.not.toBeInstanceOf(DOMException);
     }
   });
 
   it("returns fixed bounded materialization diagnostics without echoing caller data", async () => {
     const marker = "DO-NOT-ECHO-MATERIALIZER-CONTENT";
+    const plan = mutablePlanV2(await createRealPlanV2(12));
+    plan.id = marker;
     let captured: unknown;
     try {
-      await materializeV2({ assignmentId: marker as never });
+      await materializeFractionAdditionWorksheetFromContentV2(
+        REVIEWED_FRACTION_LESSON_V2,
+        plan as unknown as DailyPlanPreviewV2,
+      );
     } catch (error) {
       captured = error;
     }
@@ -393,14 +619,31 @@ describe("fractions.add@1 WorksheetInstanceV2 materializer", () => {
   });
 });
 
-async function materializeV2(
-  overrides: Partial<FractionAdditionAssignmentInputV2> = {},
-) {
-  return materializeFractionAdditionWorksheetFromContentV2(
-    REVIEWED_FRACTION_LESSON_V2,
+function mutablePlanV2(plan: DailyPlanPreviewV2): MutablePlanProbe {
+  return structuredClone(plan) as unknown as MutablePlanProbe;
+}
+
+async function createRealPlanV2(
+  practiceMinutes: 8 | 12 | 20,
+  localStudyDate = "2026-07-19",
+): Promise<DailyPlanPreviewV2> {
+  const result = await planDailyPreviewV2(
     {
-      ...ASSIGNMENT_V2,
-      ...overrides,
+      schema: DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+      goalId: "math.fractions.add-unlike",
+      practiceMinutes,
+      localStudyDate,
+      timeZone: "Asia/Tokyo",
+      locale: "en",
     },
+    DAY_ONE_PREVIEW_REGISTRY_V2,
   );
+  if (result.status !== "ready") {
+    throw new Error("The finalized V2 registry must produce a ready plan");
+  }
+  return result.plan;
+}
+
+function studyDateForIndex(index: number): string {
+  return new Date(Date.UTC(2026, 0, index + 1)).toISOString().slice(0, 10);
 }

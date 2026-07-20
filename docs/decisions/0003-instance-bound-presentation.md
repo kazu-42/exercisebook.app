@@ -134,6 +134,19 @@ typed example must be mathematically self-consistent, and its canonical
 generator treats all three tuple values as excluded canonical practice answers.
 Selection, tuple, or identity mismatch fails closed; the application does not
 substitute a default node, constant example, or alternate problem sequence.
+The dedicated V2 materializer accepts one complete `DailyPlanPreviewV2`, not a
+second flattened set of assignment claims. It validates and detaches that plan,
+reconstructs its request-defining inputs, reruns the pinned planner with the
+final V2 registry, and canonical-compares the complete supplied and expected
+plans before content hashing or generation. The comparison binds the plan ID,
+seed, requested and planned budgets, item count, selection reasons, content and
+node identities, ordered exclusion tuple, policy, skill graph, and evidence
+version to one real planner output. Every worksheet claim is then derived from
+that authorized snapshot.
+
+The standalone instance schema remains policy-agnostic enough to validate
+historical artifacts; exact current-policy provenance is enforced only at the
+materialization boundary that creates new instances.
 
 ### 4. Preserve one verified snapshot through every projection
 
@@ -148,11 +161,29 @@ only. Trusted canonical-answer context remains server-only. The role-sensitive
 student authorization scans the complete presentation, including structured
 example and intermediate rational forms and accessible text, plus every
 student-visible practice field including print fallbacks, against every
-generated practice answer. Before a slot answer enters that trusted context,
-the V2 instance validator proves by bounded exact rational arithmetic that it
-equals the sum of the prompt operands; matching scoring and solution fields are
-not sufficient by themselves. The final Web and Print student DTOs are
-independently validated and scanned after projection.
+generated practice answer. Its string normalization computes a deduplicated
+closure over raw and NFKC forms, form-style `+` spacing, common outer
+URI-wrapper layers, percent-collapse states, and URI-decode states. When a
+whole string is provably a canonical `encodeURIComponent` wrapper, all but one
+common outer layer is compressed at the same round while relative percent
+depth is preserved. At every remaining URI compatibility round, the current
+value and its independently percent-collapsed derivative are separate decode
+candidates. Neither branch subsumes the other: decoding `%2539%2F35` directly
+preserves an intermediate containing `39/35`, while collapse-first decoding
+can reinterpret `%39` as one encoded byte. Every resulting state remains
+eligible for the next transformation, so a URI decode that exposes a fullwidth
+percent sign or hexadecimal digit cannot escape a later NFKC and URI-decode
+pass. Mixed compatibility forms receive at most three URI-decode rounds and
+the worklist admits at most 24 value-and-round states. Exceeding either bound
+rejects the delivery rather than treating a partial closure as safe. These
+fixed limits keep work linear in the already validated string length. Mixed
+forms such as `%25%32%46`, malformed percent suffixes, and truncated UTF-8
+cannot suppress valid-byte fallback and later bounded normalization. Before a
+slot answer enters that trusted context, the V2 instance validator proves by
+bounded exact rational arithmetic that it equals the sum of the prompt
+operands; matching scoring and solution fields are not sufficient by
+themselves. The final Web and Print student DTOs are independently validated
+and scanned after projection.
 
 ```mermaid
 sequenceDiagram
@@ -166,7 +197,9 @@ sequenceDiagram
   Client->>Planner: Request preview
   Planner->>Selector: Policy v3 plus pinned content identity
   Selector-->>Planner: Exact selected presentation
-  Planner->>Materializer: Plan, tuple, presentation, generation inputs
+  Planner->>Materializer: Complete DailyPlanPreviewV2
+  Materializer->>Planner: Recompute with pinned registry
+  Planner-->>Materializer: Canonical expected plan
   Materializer-->>Boundary: Canonical WorksheetInstanceV2 and hash
   Boundary->>Boundary: Detach, validate, hash, authorize
   Boundary-->>Renderer: Answer-free delivery or trusted key snapshot
@@ -250,8 +283,36 @@ presentation growth.
 - A hash proves integrity but not safety; detached verification and final
   role-sensitive projection checks remain mandatory.
 - Browser-reachable source and protected workspace barrels cannot import or
-  re-export the trusted projection subpath or its mixed V1/V2 implementation
-  modules; the Worker and print server boundaries are explicit exceptions.
+  re-export the trusted projection subpath or trusted named bindings from its
+  mixed V1/V2 implementation modules. The pinned Vite/Oxc AST policy rejects
+  computed module loads and every production Vite glob, confines browser
+  module and asset edges, rejects backslash-normalization ambiguity, and
+  inspects transitive schema re-exports. Exact review gates also lock root and
+  browser-package manifests, execution scripts, production runtime
+  dependencies, the complete lockfile, pnpm workspace resolution, Vite and
+  Wrangler configuration, the absence of a Vite public directory, and the
+  reviewed HTML tag/attribute/URL and browser CSS asset surfaces. CI validates
+  the root manifest, workspace configuration, complete lockfile, and every
+  current workspace package manifest with a built-in-only pre-install check. It
+  runs after checkout and cache-free Node setup but before the first pnpm setup,
+  cache, or CLI invocation. It rejects unknown or missing workspace manifests,
+  repository-local `.npmrc`/`.pnpmfile.*` inputs, and every direct `*.gyp`
+  entry in the root or a workspace package before dependency installation. The
+  browser boundary also rejects every implicit PostCSS configuration filename
+  and `package.json` field searched by the pinned Vite/PostCSS loader from
+  `apps/web` through the workspace root. Style inspection covers the Web,
+  renderer, domain, planner, and schemas browser-safe roots. Only reviewed
+  plain CSS is accepted: CSS Modules, ICSS dependency forms, and Vite's other
+  style-language extensions fail closed. Every executable source root also
+  rejects extensionless regular files and unreviewed extensions that Vite could
+  parse as JavaScript; only the pinned Vite static-asset surface, JSON, and the
+  separately inspected style surface remain non-executable exceptions. The
+  policy validates the lock before dynamically loading Vite/Oxc. Missing
+  reviewed inputs fail closed. These are accidental-drift and review gates, not
+  a substitute for branch protection against a contributor who changes the
+  workflow and its tests together. Worker and print server boundaries remain
+  explicit import exceptions, but their source trees are still enumerated by
+  the executable-file rule.
 - Answer-key projection stays an explicit trusted variant. A loaded or pending
   answer key cannot be treated as a student DTO or reused in student state.
 - Source identities and public attribution may be delivered, but learner

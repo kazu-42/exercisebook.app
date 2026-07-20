@@ -13,6 +13,7 @@ import {
   ContentCompilationError,
   compileContentSource,
   compileContentSourceV2,
+  type ContentCompilerRegistry,
 } from "./compiler.js";
 import { normalizePresentationPlainTextParts } from "./presentation-normalization.js";
 
@@ -28,6 +29,49 @@ const v1ArtifactUrl = new URL(
   "../../../content/compiled/math.fractions.add-unlike-denominators.v1.json",
   import.meta.url,
 );
+
+// U+000A and U+000D terminate a line after source normalization. This covers every
+// other Unicode White_Space code point plus U+FEFF that can suffix a fence line.
+const directiveFenceSameLineWhitespaceCases = [
+  0x0009, 0x000b, 0x000c, 0x0020, 0x0085, 0x00a0, 0x1680, 0x2000, 0x2001, 0x2002,
+  0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028, 0x2029,
+  0x202f, 0x205f, 0x3000, 0xfeff,
+].map(
+  (codePoint) =>
+    [
+      `U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`,
+      String.fromCodePoint(codePoint),
+    ] as const,
+);
+
+const noncanonicalDirectiveFenceMarkerCases = [
+  ["number sign", "#"],
+  ["exclamation mark", "!"],
+  ["question mark", "?"],
+  ["hyphen", "-"],
+  ["underscore", "_"],
+  ["slash", "/"],
+  ["U+0000", "\u0000"],
+  ["U+200B", "\u200b"],
+  ["U+2060", "\u2060"],
+] as const;
+
+const noncanonicalDirectiveFencePrefixCases = [
+  ["four ASCII spaces", "    "],
+  ["eight ASCII spaces", "        "],
+  ["tab", "\t"],
+  ["U+00A0 NO-BREAK SPACE", "\u00a0"],
+  ["U+0000 NULL", "\u0000"],
+  ["U+001B ESCAPE", "\u001b"],
+  ["U+007F DELETE", "\u007f"],
+  ["U+00AD SOFT HYPHEN", "\u00ad"],
+  ["U+034F COMBINING GRAPHEME JOINER", "\u034f"],
+  ["U+200B ZERO WIDTH SPACE", "\u200b"],
+  ["U+2060 WORD JOINER", "\u2060"],
+  ["U+2066 LEFT-TO-RIGHT ISOLATE", "\u2066"],
+  ["U+FE0F VARIATION SELECTOR-16", "\ufe0f"],
+  ["mixed whitespace and default-ignorable characters", " \t\u200b"],
+] as const;
 
 describe("ContentDocumentV2 compiler", () => {
   it("compiles a normalized typed presentation with exact derived arithmetic", async () => {
@@ -145,6 +189,86 @@ describe("ContentDocumentV2 compiler", () => {
     expect(crlf.document.sourceHash).toBe(canonical.document.sourceHash);
     expect(crlf.canonicalJson).toBe(canonical.canonicalJson);
     expect(crlf.contentHash).toBe(canonical.contentHash);
+  });
+
+  it("normalizes a leading BOM and CRLF before v2 partitioning and hashing", async () => {
+    const source = validV2Source().replace("title: Test lesson", "title: |-\n :::");
+    const canonical = await compileContentSourceV2(source);
+    const transported = await compileContentSourceV2(
+      `\ufeff${source.replaceAll("\n", "\r\n")}`,
+    );
+
+    expect(transported.document.sourceHash).toBe(await sha256Hex(source));
+    expect(transported.document.sourceHash).toBe(canonical.document.sourceHash);
+    expect(transported.canonicalJson).toBe(canonical.canonicalJson);
+    expect(transported.contentHash).toBe(canonical.contentHash);
+  });
+
+  it.each([
+    ["delimiter-shaped", ":::"],
+    ["long-delimiter-shaped", "::::"],
+    ["suffixed-delimiter-shaped", "::: trailing"],
+    ["YAML-document-shaped", "---"],
+    ["unknown-directive-shaped", ":::unknown{}"],
+    ["malformed-header-shaped", ":::not a header"],
+    ["rational-header-shaped", ':::worked-example{left="01/2"}'],
+  ])("treats a %s frontmatter block scalar as data", async (_name, title) => {
+    const source = validV2Source().replace(
+      "title: Test lesson",
+      `title: |-\n ${title}`,
+    );
+    const compiled = await compileContentSourceV2(source);
+
+    expect(compiled.document.title).toBe(title);
+    expect(compiled.document.sourceHash).toBe(await sha256Hex(source));
+  });
+
+  it.each([
+    ["space-suffixed opening", "---\n", "--- \n"],
+    ["tab-suffixed opening", "---\n", "---\t\n"],
+    [
+      "space-suffixed closing",
+      "estimatedMinutes: 5\n---\n",
+      "estimatedMinutes: 5\n--- \n",
+    ],
+    [
+      "tab-suffixed closing",
+      "estimatedMinutes: 5\n---\n",
+      "estimatedMinutes: 5\n---\t\n",
+    ],
+  ])("rejects a non-exact %s YAML frontmatter fence", async (_name, from, to) => {
+    await expect(
+      compileContentSourceV2(validV2Source().replace(from, to)),
+    ).rejects.toMatchObject({
+      name: "ContentCompilationError",
+      code: "frontmatter-fence-syntax",
+    });
+  });
+
+  it("rejects a non-exact frontmatter close before a later exact setext fence can hide malformed Markdown", async () => {
+    const source = validV2Source()
+      .replace("estimatedMinutes: 5\n---\n", "estimatedMinutes: 5\n--- \n")
+      .replace(
+        "\n:::\n\n:::worked-example",
+        "\n::::\n\nBoundary marker\n---\n\n:::worked-example",
+      );
+
+    await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+      name: "ContentCompilationError",
+      code: "frontmatter-fence-syntax",
+    });
+  });
+
+  it("rejects an unclosed initial YAML frontmatter block", async () => {
+    const source = validV2Source().replace(
+      "estimatedMinutes: 5\n---\n",
+      "estimatedMinutes: 5\n",
+    );
+
+    await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+      name: "ContentCompilationError",
+      code: "frontmatter",
+    });
   });
 
   it("rejects a presentation paragraph that normalizes to empty", async () => {
@@ -449,6 +573,181 @@ describe("ContentDocumentV2 compiler", () => {
     await expect(compileContentSourceV2(source)).rejects.toMatchObject({
       name: "ContentCompilationError",
       code: "directive-closing-syntax",
+    });
+  });
+
+  it.each(directiveFenceSameLineWhitespaceCases)(
+    "rejects %s between a presentation opening fence and directive name",
+    async (_codePoint, whitespace) => {
+      const source = validV2Source()
+        .replace(":::explanation{", `:::${whitespace}explanation{`)
+        .replace("\n:::\n\n:::worked-example", "\n\n:::worked-example");
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-header-syntax",
+      });
+    },
+  );
+
+  it.each(directiveFenceSameLineWhitespaceCases)(
+    "rejects %s after a presentation closing fence before parser recovery",
+    async (_codePoint, whitespace) => {
+      const source = validV2Source().replace(
+        "\n:::\n\n:::worked-example",
+        `\n:::${whitespace}\n\nStill inside.\n:::\n\n:::worked-example`,
+      );
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it.each(noncanonicalDirectiveFenceMarkerCases)(
+    "rejects a %s between a presentation fence and directive name even with a matching malformed close",
+    async (_name, marker) => {
+      const source = validV2Source()
+        .replace(":::explanation{", `:::${marker}explanation{`)
+        .replace("\n:::\n\n:::worked-example", `\n:::${marker}\n\n:::worked-example`);
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it.each(noncanonicalDirectiveFenceMarkerCases)(
+    "rejects a %s suffix on a presentation close inside a valid container",
+    async (_name, marker) => {
+      const source = validV2Source().replace(
+        "\n:::\n\n:::worked-example",
+        `\n:::${marker}\n\nStill inside.\n:::\n\n:::worked-example`,
+      );
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it.each([
+    ["zero", ""],
+    ["one", " "],
+    ["two", "  "],
+    ["three", "   "],
+  ] as const)(
+    "classifies a malformed directive-like line after %s ASCII spaces",
+    async (_count, indentation) => {
+      const source = validV2Source().replace(
+        "\n:::\n\n:::worked-example",
+        `\n${indentation}:::#\n\nStill inside.\n:::\n\n:::worked-example`,
+      );
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it.each(noncanonicalDirectiveFencePrefixCases)(
+    "rejects %s before malformed nested presentation fences",
+    async (_name, prefix) => {
+      const source = validV2Source({
+        explanationBody: [
+          "Find a denominator both fractions can use.",
+          `${prefix}:::explanation{id="shadow-explanation" title="Shadow"}`,
+          "This must not become learner-visible prose.",
+          `${prefix}:::`,
+          "",
+        ].join("\n"),
+      });
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it.each(noncanonicalDirectiveFencePrefixCases)(
+    "rejects %s before a presentation close inside a valid container",
+    async (_name, prefix) => {
+      const source = validV2Source().replace(
+        "\n:::\n\n:::worked-example",
+        `\n${prefix}:::\n\nStill inside.\n:::\n\n:::worked-example`,
+      );
+
+      await expect(compileContentSourceV2(source)).rejects.toMatchObject({
+        name: "ContentCompilationError",
+        code: "directive-closing-syntax",
+      });
+    },
+  );
+
+  it("preserves visible prose before a colon sequence", async () => {
+    const compiled = await compileContentSourceV2(
+      validV2Source({
+        explanationBody: "A visible label before ::: remains ordinary prose.\n",
+      }),
+    );
+    const explanation = compiled.document.nodes.find(
+      (node) => node.type === "explanation",
+    );
+
+    expect(explanation?.type === "explanation" ? explanation.paragraphs : []).toEqual([
+      "A visible label before ::: remains ordinary prose.",
+    ]);
+  });
+
+  it("keeps prefixed directive-shaped lines inside a YAML block scalar as data", async () => {
+    const title = "\u200b:::explanation{}\n\u2060:::\n    :::!";
+    const source = validV2Source().replace(
+      "title: Test lesson",
+      `title: |-\n ${title.replaceAll("\n", "\n ")}`,
+    );
+
+    const compiled = await compileContentSourceV2(source);
+
+    expect(compiled.document.title).toBe(title);
+  });
+
+  it("allows a canonical supported leaf directive without changing container balance", async () => {
+    const registry: ContentCompilerRegistry = {
+      skillIds: new Set(["math.fractions.add-unlike", "math.fractions.equivalent"]),
+      generators: new Map([
+        [
+          "fractions.add",
+          new Map([
+            [
+              "1",
+              {
+                supportedLocales: new Set(["en"]),
+                maximumItems: 96,
+                maximumDirectivesPerDocument: 1,
+              },
+            ],
+          ]),
+        ],
+      ]),
+      assetIds: new Set(["fraction-bars-01"]),
+    };
+    const source = validV2Source({
+      tail: '::figure{id="figure-01" assetId="fraction-bars-01" alt="Fraction bars" caption="Reviewed model."}\n',
+    });
+
+    const compiled = await compileContentSourceV2(source, { registry });
+
+    expect(compiled.document.nodes.at(-1)).toEqual({
+      type: "figure",
+      id: "figure-01",
+      assetId: "fraction-bars-01",
+      alt: "Fraction bars",
+      caption: "Reviewed model.",
     });
   });
 

@@ -5,24 +5,22 @@ import {
   type RationalJson,
 } from "@exercisebook/domain";
 import {
-  ContentReferenceV2Schema,
-  LocalDateSchema,
-  LocaleSchema,
   RNG_ALGORITHM_V1,
-  RevisionSchema,
-  Sha256HexSchema,
-  StableIdSchema,
-  TimeZoneSchema,
   WORKSHEET_INSTANCE_V2_SCHEMA,
   assertSafeDataObjectGraph,
   validateContentDocumentV2,
   validateWorksheetInstanceV2,
   type ContentDocumentV2,
-  type ContentReferenceV2,
   type MaterializedWorksheetInstanceV2,
   type WorksheetSlotV2,
 } from "@exercisebook/schemas";
-import { z } from "zod";
+import {
+  DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+  DAY_ONE_PREVIEW_REGISTRY_V2,
+  planDailyPreviewV2,
+  validateDailyPlanPreviewV2,
+  type DailyPlanPreviewV2,
+} from "@exercisebook/planner";
 
 import {
   FRACTION_ADDITION_GENERATOR_ID,
@@ -33,37 +31,9 @@ import {
 import {
   PresentationResolutionError,
   resolveFractionPresentationContextV1,
-  validateAndDetachWorksheetPresentationSelectionV1,
-  type WorksheetPresentationSelectionInputV1,
 } from "./fraction-presentation-v1.js";
 
-const MAX_REVIEWED_ITEMS_V2 = 8;
 const MAX_DUPLICATE_RETRIES = 127;
-
-export interface FractionAdditionAssignmentInputV2 {
-  readonly assignmentId: string;
-  readonly localStudyDate: string;
-  readonly timeZone: string;
-  readonly locale: string;
-  readonly seed: string;
-  readonly seedSecretVersion: string;
-  readonly requestedItemCount: number;
-  readonly plan: Readonly<{
-    id: string;
-    version: number;
-  }>;
-  readonly policy: Readonly<{
-    id: string;
-    version: number;
-  }>;
-  readonly skillGraph: Readonly<{
-    id: string;
-    revision: number;
-  }>;
-  readonly selectionReasons: readonly WorksheetSlotV2["selectionReasons"][number][];
-  readonly content: ContentReferenceV2;
-  readonly presentationSelection: WorksheetPresentationSelectionInputV1;
-}
 
 export type FractionAdditionV2MaterializationErrorCode =
   | "unsafe-input"
@@ -97,62 +67,21 @@ export class FractionAdditionV2MaterializationError extends Error {
   }
 }
 
-const PresentationSelectionSnapshotSchema = z.strictObject({
-  explanationNodeId: StableIdSchema,
-  workedExampleNodeId: StableIdSchema,
-  exerciseNodeId: StableIdSchema,
-  // Keep rationals opaque here. The resolver owns the safe lexical and exact
-  // ordered-tuple contract after this complete value has been detached.
-  excludedCanonicalAnswers: z.array(z.unknown()).min(1).max(8),
-});
-
-const FractionAdditionAssignmentInputV2Schema = z.strictObject({
-  assignmentId: StableIdSchema,
-  localStudyDate: LocalDateSchema,
-  timeZone: TimeZoneSchema,
-  locale: LocaleSchema,
-  seed: Sha256HexSchema,
-  seedSecretVersion: StableIdSchema,
-  requestedItemCount: z.number().int().min(1).max(MAX_REVIEWED_ITEMS_V2),
-  plan: z.strictObject({
-    id: StableIdSchema,
-    version: RevisionSchema,
-  }),
-  policy: z.strictObject({
-    id: StableIdSchema,
-    version: RevisionSchema,
-  }),
-  skillGraph: z.strictObject({
-    id: StableIdSchema,
-    revision: RevisionSchema,
-  }),
-  selectionReasons: z
-    .array(
-      z.enum(["due-review", "prerequisite-repair", "current-frontier", "transfer"]),
-    )
-    .min(1)
-    .max(10),
-  content: ContentReferenceV2Schema,
-  presentationSelection: PresentationSelectionSnapshotSchema,
-});
-
-interface StableFractionAdditionAssignmentV2 extends Omit<
-  FractionAdditionAssignmentInputV2,
-  "presentationSelection"
-> {
-  readonly presentationSelection: WorksheetPresentationSelectionInputV1;
-}
-
 /**
- * Materialize a content-derived v2 worksheet from one pre-await input
- * snapshot. No caller-owned object is read after content hashing begins.
+ * Materialize a content-derived v2 worksheet from one complete, planner-owned
+ * plan snapshot. No caller-owned object is read after plan authorization
+ * begins, and no independent assignment claims cross this boundary.
  */
 export async function materializeFractionAdditionWorksheetFromContentV2(
   document: ContentDocumentV2,
-  assignment: FractionAdditionAssignmentInputV2,
+  plan: DailyPlanPreviewV2,
 ): Promise<MaterializedWorksheetInstanceV2> {
-  const { document: stableDocument, assignment: stableAssignment } =
-    snapshotMaterializationInputs(document, assignment);
+  const { document: stableDocument, plan: stablePlan } = snapshotMaterializationInputs(
+    document,
+    plan,
+  );
+  await assertPlanMatchesPinnedPlannerV2(stablePlan);
+  const activity = stablePlan.activities[0];
 
   // Hash the exact validated, detached document that the resolver and every
   // downstream derivation will consume. Do not re-read either caller input.
@@ -160,19 +89,17 @@ export async function materializeFractionAdditionWorksheetFromContentV2(
   const resolved = resolveFractionPresentationContextV1({
     document: stableDocument,
     computedContentHash,
-    expectedContent: stableAssignment.content,
-    selection: stableAssignment.presentationSelection,
+    expectedContent: activity.content,
+    selection: activity.presentationSelection,
   });
 
   const slots: WorksheetSlotV2[] = [];
   const promptSignatures = new Set<string>();
   const excludedAnswerSignatures = new Set(
-    stableAssignment.presentationSelection.excludedCanonicalAnswers.map(
-      rationalSignature,
-    ),
+    activity.presentationSelection.excludedCanonicalAnswers.map(rationalSignature),
   );
 
-  for (let index = 0; index < stableAssignment.requestedItemCount; index += 1) {
+  for (let index = 0; index < activity.itemCount; index += 1) {
     const id = `practice-${String(index + 1).padStart(2, "0")}`;
     let selected:
       | Readonly<{
@@ -190,7 +117,7 @@ export async function materializeFractionAdditionWorksheetFromContentV2(
       const derivationSlotId =
         generationAttempt === 0 ? id : `${id}:retry-${generationAttempt}`;
       const slotSeed = await deriveSlotSeed({
-        baseSeed: stableAssignment.seed,
+        baseSeed: stablePlan.generation.baseSeed,
         generatorId: FRACTION_ADDITION_GENERATOR_ID,
         generatorVersion: FRACTION_ADDITION_GENERATOR_VERSION,
         slotId: derivationSlotId,
@@ -220,7 +147,7 @@ export async function materializeFractionAdditionWorksheetFromContentV2(
       id,
       skillIds: [...stableDocument.skills],
       slotSeed,
-      selectionReasons: [...stableAssignment.selectionReasons],
+      selectionReasons: [...activity.selectionReasons],
       expectedMinutes: 2,
       prompt: {
         ...generated.prompt,
@@ -250,19 +177,19 @@ export async function materializeFractionAdditionWorksheetFromContentV2(
   try {
     instance = validateWorksheetInstanceV2({
       schema: WORKSHEET_INSTANCE_V2_SCHEMA,
-      assignmentId: stableAssignment.assignmentId,
+      assignmentId: stablePlan.id,
       title: stableDocument.title,
-      localStudyDate: stableAssignment.localStudyDate,
-      timeZone: stableAssignment.timeZone,
-      locale: stableAssignment.locale,
+      localStudyDate: stablePlan.localStudyDate,
+      timeZone: stablePlan.timeZone,
+      locale: stablePlan.locale,
       expectedMinutes: slots.reduce((total, slot) => total + slot.expectedMinutes, 0),
-      plan: stableAssignment.plan,
-      policy: stableAssignment.policy,
-      skillGraph: stableAssignment.skillGraph,
+      plan: { id: stablePlan.id, version: 2 },
+      policy: stablePlan.policy,
+      skillGraph: stablePlan.skillGraph,
       rng: {
         algorithm: RNG_ALGORITHM_V1,
-        baseSeed: stableAssignment.seed,
-        seedSecretVersion: stableAssignment.seedSecretVersion,
+        baseSeed: stablePlan.generation.baseSeed,
+        seedSecretVersion: stablePlan.generation.seedVersion,
       },
       content: [resolved.presentation.content],
       presentation: resolved.presentation,
@@ -280,22 +207,22 @@ export async function materializeFractionAdditionWorksheetFromContentV2(
 
 function snapshotMaterializationInputs(
   document: ContentDocumentV2,
-  assignment: FractionAdditionAssignmentInputV2,
+  plan: DailyPlanPreviewV2,
 ): Readonly<{
   document: ContentDocumentV2;
-  assignment: StableFractionAdditionAssignmentV2;
+  plan: DailyPlanPreviewV2;
 }> {
   try {
     // The envelope itself is fresh plain data, so this traverses both caller
     // graphs without first reading any caller-owned property.
-    assertSafeDataObjectGraph({ document, assignment });
+    assertSafeDataObjectGraph({ document, plan });
   } catch {
     throw new FractionAdditionV2MaterializationError("unsafe-input");
   }
 
-  let stableAssignment: z.infer<typeof FractionAdditionAssignmentInputV2Schema>;
+  let stablePlan: DailyPlanPreviewV2;
   try {
-    stableAssignment = FractionAdditionAssignmentInputV2Schema.parse(assignment);
+    stablePlan = validateDailyPlanPreviewV2(plan);
   } catch {
     throw new FractionAdditionV2MaterializationError("invalid-assignment");
   }
@@ -310,39 +237,43 @@ function snapshotMaterializationInputs(
   if (stableDocument.publication.status !== "draft") {
     throw new FractionAdditionV2MaterializationError("unsupported-content-state");
   }
-  if (
-    stableAssignment.locale !== "en" ||
-    stableAssignment.locale !== stableDocument.locale
-  ) {
+  if (stablePlan.locale !== stableDocument.locale) {
     throw new FractionAdditionV2MaterializationError("locale-mismatch");
   }
 
-  // Zod clones all typed assignment fields. The intentionally opaque
-  // selection rationals pass through the resolver-owned non-throwing lexical
-  // validator before the first await; no raw structured-clone failure can
-  // escape this boundary.
-  const presentationSelection = validateAndDetachWorksheetPresentationSelectionV1(
-    stableAssignment.presentationSelection,
-  );
-
   return {
     document: stableDocument,
-    assignment: {
-      assignmentId: stableAssignment.assignmentId,
-      localStudyDate: stableAssignment.localStudyDate,
-      timeZone: stableAssignment.timeZone,
-      locale: stableAssignment.locale,
-      seed: stableAssignment.seed,
-      seedSecretVersion: stableAssignment.seedSecretVersion,
-      requestedItemCount: stableAssignment.requestedItemCount,
-      plan: stableAssignment.plan,
-      policy: stableAssignment.policy,
-      skillGraph: stableAssignment.skillGraph,
-      selectionReasons: stableAssignment.selectionReasons,
-      content: stableAssignment.content,
-      presentationSelection,
-    },
+    plan: stablePlan,
   };
+}
+
+async function assertPlanMatchesPinnedPlannerV2(
+  plan: DailyPlanPreviewV2,
+): Promise<void> {
+  let expectedPlan: DailyPlanPreviewV2;
+  try {
+    const expected = await planDailyPreviewV2(
+      {
+        schema: DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+        goalId: plan.goalId,
+        practiceMinutes: plan.requestedPracticeMinutes,
+        localStudyDate: plan.localStudyDate,
+        timeZone: plan.timeZone,
+        locale: plan.locale,
+      },
+      DAY_ONE_PREVIEW_REGISTRY_V2,
+    );
+    if (expected.status !== "ready") {
+      throw new Error("The pinned V2 planner is unavailable");
+    }
+    expectedPlan = expected.plan;
+  } catch {
+    throw new FractionAdditionV2MaterializationError("invalid-assignment");
+  }
+
+  if (canonicalizeJson(plan) !== canonicalizeJson(expectedPlan)) {
+    throw new FractionAdditionV2MaterializationError("invalid-assignment");
+  }
 }
 
 function attributionFromContent(document: ContentDocumentV2) {
