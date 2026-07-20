@@ -546,18 +546,24 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 
 ## The next concrete milestone
 
-The active milestone is Phase 1.6: close canonical student-print authorization
-and bounded strict browser-response gaps before hosted delivery. Its executable
-contract and acceptance matrix are in
-[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
+The active milestone is Phase 1.7. The immutable content/compiler,
+policy-selection foundation, instance-bound presentation, exact prompt/answer
+relationship, and detached student-delivery authorization are implemented.
+Remaining work is the strict request/response-v2 Worker dispatch,
+renderer-neutral Web/lesson DTO and service lane, `PrintDocumentV2`, and their
+integrated compatibility, browser, accessibility, and A4 evidence. The current
+local Web surface remains a technical prototype; substantial navigation,
+information hierarchy, copy, or visual design work stays behind the
+product-direction gate above.
 
-Phase 1.7 then makes reviewed content, Web, and print share an instance-bound
-presentation rather than application-owned examples. The next product-value
-slice after those correctness gates is exact rational answer submission and
-formative feedback for one problem. It must distinguish first attempt, retry,
-and hint use while keeping answers out of the student payload and making no
-mastery claim. The current public deterministic sequence is replay provenance,
-not cryptographic answer secrecy, and must never be used to authenticate
-attempts or justify mastery. Curriculum breadth and Cloudflare persistence
-remain behind those learning-value checks; public curriculum publication
-remains behind the owner's license decision.
+Phase 1.6 remains the byte-preserved compatibility and rollback baseline; its
+executable contract is in
+[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
+After the Phase 1.7 correctness gates, the next product-value slice is exact
+rational answer submission and formative feedback for one problem. It must
+distinguish first attempt, retry, and hint use while keeping answers out of the
+student payload and making no mastery claim. The current public deterministic
+sequence is replay provenance, not cryptographic answer secrecy, and must never
+be used to authenticate attempts or justify mastery. Curriculum breadth and
+Cloudflare persistence remain behind those learning-value checks; public
+curriculum publication remains behind the owner's license decision.

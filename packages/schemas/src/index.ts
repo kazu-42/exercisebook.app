@@ -4,6 +4,17 @@ export * from "./content-document-v2.js";
 export * from "./phase-1-safe-math.js";
 export * from "./runtime-invariants.js";
 export {
+  StudentWorksheetDeliveryV2Schema,
+  StudentWorksheetSlotV2Schema,
+  WORKSHEET_DELIVERY_V2_SCHEMA,
+  projectWorksheetV2ForStudent,
+  validateStudentWorksheetDeliveryV2,
+} from "./student-worksheet-delivery-v2.js";
+export type {
+  StudentWorksheetDeliveryV2,
+  StudentWorksheetSlotV2,
+} from "./student-worksheet-delivery-v2.js";
+export {
   AttributionV1Schema,
   FractionAdditionPromptV1Schema,
   HintV1Schema,

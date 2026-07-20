@@ -258,6 +258,21 @@ export const WorksheetInstanceV2Schema = z
       const canonicalAnswer = BoundaryRationalJsonV2Schema.safeParse(
         slot.canonicalAnswer.value,
       );
+      const leftOperand = BoundaryRationalJsonV2Schema.safeParse(slot.prompt.left);
+      const rightOperand = BoundaryRationalJsonV2Schema.safeParse(slot.prompt.right);
+      if (
+        canonicalAnswer.success &&
+        leftOperand.success &&
+        rightOperand.success &&
+        !rationalSumEquals(leftOperand.data, rightOperand.data, canonicalAnswer.data)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "The canonical answer must equal the exact sum of the prompt operands",
+          path: ["slots", index, "canonicalAnswer", "value"],
+        });
+      }
       if (
         canonicalAnswer.success &&
         selectedExampleAnswers.some((exampleAnswer) =>
@@ -338,6 +353,25 @@ export function validateWorksheetInstanceV2(value: unknown): WorksheetInstanceV2
 
 function contentIdentityKey(id: string, revision: number): string {
   return `${id}\u0000${revision}`;
+}
+
+function rationalSumEquals(
+  left: { readonly numerator: string; readonly denominator: string },
+  right: { readonly numerator: string; readonly denominator: string },
+  result: { readonly numerator: string; readonly denominator: string },
+): boolean {
+  const leftNumerator = BigInt(left.numerator);
+  const leftDenominator = BigInt(left.denominator);
+  const rightNumerator = BigInt(right.numerator);
+  const rightDenominator = BigInt(right.denominator);
+  const resultNumerator = BigInt(result.numerator);
+  const resultDenominator = BigInt(result.denominator);
+
+  return (
+    (leftNumerator * rightDenominator + rightNumerator * leftDenominator) *
+      resultDenominator ===
+    resultNumerator * leftDenominator * rightDenominator
+  );
 }
 
 function contentReferenceKey(reference: {

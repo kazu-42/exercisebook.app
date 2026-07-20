@@ -55,6 +55,7 @@ export const WORKSHEET_INSTANCE_V2_RUNTIME_INVARIANTS = [
   "Each slot has unique skill IDs, selection reasons, hint IDs, solution-step IDs, and misconception IDs.",
   "Every slot provenance content ID, revision, source hash, compiled content hash, and compiler version matches both the selected presentation and exactly one top-level content reference.",
   "Every slot uses fractions.add@1 and its prompt instruction equals the selected exercise instruction.",
+  "Every slot canonical answer equals the exact rational sum of its prompt operands.",
   "No slot canonical answer is rationally equal to the selected worked-example left operand, right operand, or result.",
   "The scoring rule equals the canonical answer.",
   "The final solution result equals the canonical answer.",

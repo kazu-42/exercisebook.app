@@ -218,6 +218,28 @@ describe("WorksheetInstanceV2 contract", () => {
     expect(WorksheetInstanceV2Schema.safeParse(value).success).toBe(false);
   });
 
+  it("rejects a canonical answer that does not equal the prompt sum", () => {
+    const value = worksheetInstanceV2Fixture();
+    const incorrectAnswer = { numerator: "7", denominator: "8" };
+    value.slots[0]!.canonicalAnswer.value = incorrectAnswer;
+    value.slots[0]!.scoringRule.accepted = incorrectAnswer;
+    value.slots[0]!.solutionTrace.at(-1)!.result = incorrectAnswer;
+
+    expect(WorksheetInstanceV2Schema.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects changed prompt operands with a stale canonical answer", () => {
+    const value = worksheetInstanceV2Fixture();
+    value.slots[0]!.prompt.left = { numerator: "1", denominator: "4" };
+    value.slots[0]!.prompt.right = { numerator: "1", denominator: "5" };
+    value.slots[0]!.prompt.accessibleText =
+      "Add 1 over 4 and 1 over 5. Give the answer in lowest terms.";
+    value.slots[0]!.accessibility.summary =
+      "Fraction addition problem: 1 over 4 plus 1 over 5.";
+
+    expect(WorksheetInstanceV2Schema.safeParse(value).success).toBe(false);
+  });
+
   it.each([
     ["left operand", { numerator: "1", denominator: "2" }],
     ["right operand", { numerator: "1", denominator: "3" }],

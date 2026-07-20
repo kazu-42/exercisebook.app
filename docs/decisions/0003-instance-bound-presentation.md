@@ -148,7 +148,10 @@ only. Trusted canonical-answer context remains server-only. The role-sensitive
 student authorization scans the complete presentation, including structured
 example and intermediate rational forms and accessible text, plus every
 student-visible practice field including print fallbacks, against every
-generated practice answer. The final Web and Print student DTOs are
+generated practice answer. Before a slot answer enters that trusted context,
+the V2 instance validator proves by bounded exact rational arithmetic that it
+equals the sum of the prompt operands; matching scoring and solution fields are
+not sufficient by themselves. The final Web and Print student DTOs are
 independently validated and scanned after projection.
 
 ```mermaid
@@ -194,6 +197,8 @@ presentation growth.
   v3.
 - The typed example is exact, self-consistent, and equal to the ordered policy
   tuple.
+- Every trusted canonical practice answer equals the exact rational sum of its
+  prompt operands.
 - No generated practice answer is rationally equal to example left, right, or
   result.
 - Standalone lesson, worksheet Web, and print expose the same semantic
@@ -244,6 +249,9 @@ presentation growth.
   the full ContentDocument remain outside the delivery boundary.
 - A hash proves integrity but not safety; detached verification and final
   role-sensitive projection checks remain mandatory.
+- Browser-reachable source and protected workspace barrels cannot import or
+  re-export the trusted projection subpath or its mixed V1/V2 implementation
+  modules; the Worker and print server boundaries are explicit exceptions.
 - Answer-key projection stays an explicit trusted variant. A loaded or pending
   answer key cannot be treated as a student DTO or reused in student state.
 - Source identities and public attribution may be delivered, but learner

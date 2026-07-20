@@ -492,6 +492,8 @@ Additional runtime invariants are:
 - every slot provenance reference matches that same content reference;
 - every slot prompt instruction equals `presentation.exercise.instruction`;
 - every slot uses `fractions.add@1` from the selected exercise;
+- every slot canonical answer equals the exact rational sum of its prompt
+  operands;
 - no slot canonical answer equals any member of the ordered presentation tuple;
 - the presentation result equals the exact sum of its operands;
 - instance expected minutes still equal the sum of slot minutes;

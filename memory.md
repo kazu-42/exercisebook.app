@@ -242,3 +242,30 @@ V2 strings, and do not rely on a permissive Markdown parser to define canonical
 source syntax. The current source/content hashes remain unchanged. P17-003 is
 complete only at the planner-policy layer; response-v2 and strict HTTP dispatch
 remain separate wire-integration evidence.
+
+## 2026-07-20 - Authorize detached V2 student delivery
+
+**Context**: `WorksheetInstanceV2` adds a complete learner-facing presentation,
+so answer disclosure can occur in explanation, example, attribution, or
+practice roles even when the instance hash is valid. A coordinated mutation
+could also make a canonical answer, scoring rule, and final solution agree with
+each other while disagreeing with the prompt arithmetic. Trusted APIs exposed
+from mixed schema source modules could be imported directly or re-exported
+through a browser dependency barrel.
+
+**Decision**: Project `StudentWorksheetDeliveryV2` from one safe-data-checked,
+detached pre-await snapshot and compare its canonical bytes and SHA-256 before
+authorization. Accept a canonical practice answer only when bounded exact
+cross-multiplication proves it equals the prompt sum. Scan global,
+presentation, and practice roles separately, reconstruct all three displayed
+worked-example intermediate rationals, and keep canonical answers only on the
+server-only trusted subpath. Use the pinned Vite/Oxc AST parser for import
+policy: browser/renderer code and protected workspace barrels cannot reach the
+trusted subpath or mixed implementation modules, computed module loads fail
+closed, and Worker code remains the explicit server exception.
+
+**Impact**: V2 student delivery can be reused by Web and print projectors
+without exposing seeds, answers, scoring, solution traces, or misconceptions.
+Hash-correct but semantically wrong or answer-bearing instances fail before
+student delivery. V1 canonical bytes and Web/print artifacts remain unchanged;
+final Web and PrintDocumentV2 scans remain downstream P17-006/P17-007 work.
