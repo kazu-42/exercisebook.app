@@ -1,13 +1,15 @@
 # Exercise Book roadmap
 
 Status: working plan
-Updated: 2026-07-19
+Updated: 2026-08-02
 
 This roadmap is not a deployment-status page. Phase 1 is implemented as a
 local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
-and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3;
-production DNS, hosted Cloudflare persistence, and PDF backends remain gated
-future work.
+and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3.
+The current `feat/v2-worksheet-api` checkpoint is stacked on
+`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4), but is
+neither merged nor deployed. Production DNS, hosted Cloudflare persistence, and
+PDF backends remain gated future work.
 
 ## Product direction
 
@@ -234,6 +236,25 @@ See
 Outcome: the standalone lesson, worksheet Web view, and printable worksheet
 show the same reviewed explanation and worked example committed into the
 concrete instance, rather than application-owned constants.
+
+Checkpoint status (2026-08-02): the immutable V2 content, policy, instance, and
+student-delivery foundations are complete. The strict `web-worksheet.v2` DTO,
+trusted projector, replay-authorized service, and exact V1/V2 Hono dispatch are
+implemented as a bounded backend checkpoint. The active React `/new` flow still
+uses V1. Standalone lesson delivery, React V2 integration, real-browser visual
+and accessibility acceptance, `PrintDocumentV2`, and printable V2 HTML are not
+implemented by this checkpoint.
+
+The backend checkpoint also closes the client build-graph privacy gap at three
+layers: exact safe source leaves, final Rollup `OutputChunk.modules` provenance,
+and an all-regular-file protected-token canary. The artifact walk is bounded to
+1,000 total entries, 20 MiB of regular-file content, and depth 16. The canary is
+defense in depth and cannot prove semantic absence on its own; tree-shaking is
+not an authorization boundary. Injected planner, materializer, and projector
+results are exact-replayed against trusted implementations. Only explicit
+reviewed availability codes map to generic unavailability, injected unavailable
+reasons must exactly match trusted replay, and defect/future codes remain on the
+structured, sanitized 500 path.
 
 Deliver:
 
@@ -548,13 +569,26 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 
 The active milestone is Phase 1.7. The immutable content/compiler,
 policy-selection foundation, instance-bound presentation, exact prompt/answer
-relationship, and detached student-delivery authorization are implemented.
-Remaining work is the strict request/response-v2 Worker dispatch,
-renderer-neutral Web/lesson DTO and service lane, `PrintDocumentV2`, and their
-integrated compatibility, browser, accessibility, and A4 evidence. The current
-local Web surface remains a technical prototype; substantial navigation,
-information hierarchy, copy, or visual design work stays behind the
-product-direction gate above.
+relationship, detached student-delivery authorization, strict V2 Web DTO and
+projector, replay-authorized Worker service, exact V1/V2 HTTP dispatch, and
+three-layer client build privacy gate are implemented. Reviewed content and V1
+instance/Print/HTML identities remain unchanged, including V1 attribution
+runtime schema identity across public export paths. TypeScript 7.0.2 and 1,135
+Vitest tests across 42 files pass; focused privacy evidence is 61/61
+source/config boundary tests, 37/37 final module-provenance tests, and 21/21
+artifact-scanner tests. The maximum reviewed 365-day V2 response is 5,964 bytes
+against the 32,768-byte cap. The client build records 112 modules and the raw
+artifact canary scans 328,591 bytes. At the pinned versions recorded in the
+architecture, the 2026-08-02 `pnpm audit` run reported no known vulnerabilities;
+later advisory data may change that result.
+
+The next safe non-UI slice is the `PrintDocumentV2` semantic core: validator,
+canonical form, role-sensitive student/key projections, and semantic parity
+tests, before printable layout is treated as complete. Standalone lesson,
+React V2 integration, integrated browser/accessibility/A4 evidence, and final
+Phase 1.7 release review remain after that. The current local Web surface is a
+technical prototype; substantial navigation, information hierarchy, copy, or
+visual design work stays behind the product-direction gate above.
 
 Phase 1.6 remains the byte-preserved compatibility and rollback baseline; its
 executable contract is in

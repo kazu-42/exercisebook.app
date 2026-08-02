@@ -1,10 +1,10 @@
 # Content-derived presentation v1 execution ledger
 
 Status: in progress
-Branch: `feat/content-derived-presentation`
-Base: `feat/student-delivery-hardening`
+Branch: `feat/v2-worksheet-api`
+Base: `feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4)
 Specification: [content-derived-presentation-v1.md](content-derived-presentation-v1.md)
-Updated: 2026-07-21
+Updated: 2026-08-02
 
 ## Delivery rule
 
@@ -23,13 +23,13 @@ available and byte-identical.
 | --- | --- | --- | --- | --- |
 | P17-001 | Freeze specification, ADR, contracts, and compatibility baseline | M | none | complete |
 | P17-002 | Compile immutable ContentDocumentV2 revision 2 | L | P17-001 | complete |
-| P17-003 | Add plan/registry v2 and policy v3 | L | P17-001; vector lock after P17-002 | in progress |
+| P17-003 | Add plan/registry v2 and policy v3 | L | P17-001; vector lock after P17-002 | complete |
 | P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 planner foundation | complete |
 | P17-005 | Authorize detached StudentWorksheetDeliveryV2 | L | P17-004 | complete |
-| P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | pending |
+| P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | in progress — backend checkpoint only |
 | P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | pending |
 | P17-008 | Prove compatibility, artifacts, browser, and A4 gates | L | P17-006, P17-007 | pending |
-| P17-009 | Independent review, final checks, and stacked draft PR | M | P17-008 | pending |
+| P17-009 | Independent review, final checks, and stacked draft PR | M | checkpoint after P17-006 backend; closeout after P17-008 | in progress — backend checkpoint only |
 
 ## Dependency graph
 
@@ -44,10 +44,13 @@ flowchart TD
   E --> G[P17-007 Print v2]
   F --> H[P17-008 Integrated evidence]
   G --> H
-  H --> I[P17-009 Review and draft PR]
+  F --> I[P17-009 Bounded review and draft checkpoints]
+  H --> I
 ```
 
-P17-006 and P17-007 can run in parallel after P17-005. P17-002 and the
+P17-006 and P17-007 can run in parallel after P17-005. A bounded, reviewable
+backend checkpoint may enter P17-009 before P17-008, but that does not complete
+P17-009 or Phase 1.7; final closeout still depends on P17-008. P17-002 and the
 contract portion of P17-003 can run in parallel after P17-001; policy v3 cannot
 be enabled or fixed-vector locked until P17-002 records the exact revision-2
 source/content hashes.
@@ -151,7 +154,7 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-003 — Plan/registry v2 and policy v3
 
-- Status: in progress — planner-policy foundation complete; wire integration pending
+- Status: complete
 - Type: feature / tests
 - Size: L
 - Dependencies: P17-001; final hash/vector lock depends on P17-002
@@ -183,13 +186,27 @@ Every value below must remain exact throughout Phase 1.7.
     `preview-d8e7bffb76e814cf8fed232ed5817008d9291247f94d4e63bda6fbeb647daf33`
     and its base seed is
     `338bee573add98fce96ae0616b008d002f1bb613bcbb805d6b291ce34bb1671f`;
-  - planner tests pass 83/83: 27 frozen-v1 and 56 v2 tests, including
-    detached snapshots, exact reviewed-count matching, and non-throwing
-    lexical rational validation;
+  - planner tests pass 85/85, including frozen-v1/v2 type parity, detached
+    snapshots, exact reviewed-count matching, and non-throwing lexical
+    rational validation;
   - planner typecheck, formatting, and independent foundation review pass;
-  - response-v2 contracts, strict Worker request/response dispatch, trusted
-    resolution-error mapping, and sanitized HTTP failure mapping remain open,
-    so the ledger does not mark the whole task complete yet.
+  - strict public request/response-v2 contracts and exact Hono v1/v2
+    discriminator dispatch are implemented; v2 never falls through to v1 or
+    changes lane from ambient registry state;
+  - trusted planner, materializer, and projector test seams are detached and
+    exact-replayed against independent trusted results before response;
+  - presentation availability is limited to `content-identity-mismatch`,
+    `invalid-selection`, `selected-node-count`, `selected-node-type`,
+    `exercise-contract-mismatch`, `worked-example-arithmetic-mismatch`,
+    `excluded-answer-tuple-mismatch`, and `presentation-invalid`;
+    materialization availability is limited to `unsupported-content-state`,
+    `locale-mismatch`, and `generation-exhausted`;
+  - an injected unavailable outcome must match the trusted replay's exact
+    reason kind and code. Presentation `unsafe-input`/`invalid-content`,
+    materialization `unsafe-input`/`invalid-assignment`/`invalid-instance`, and
+    future unclassified codes remain exceptions; the route reports only a fixed
+    sanitized 500 classification without raw exception or request data;
+  - all policy-v2 frozen vectors remain exact.
 
 ## P17-004 — Presentation resolver and WorksheetInstanceV2
 
@@ -225,7 +242,7 @@ Every value below must remain exact throughout Phase 1.7.
 - Current evidence:
   - the additive WorksheetPresentationV1/WorksheetInstanceV2 schema lane and
     checked-in JSON Schema are implemented; 43 focused tests pass, including
-    exact prompt-sum/canonical-answer parity, and all 278 schema tests pass
+    exact prompt-sum/canonical-answer parity, and all 280 schema tests pass
     after P17-005 with schema check and TypeScript 7 typecheck;
   - every v2 rational-bearing slot field uses a lexical gate before exact
     rational refinement, and schema-level content/presentation/provenance,
@@ -299,7 +316,7 @@ Every value below must remain exact throughout Phase 1.7.
   - `WorksheetInstanceV2` now rejects a canonical answer that differs from the
     exact prompt sum even when scoring and the final solution are changed to
     agree with that wrong answer;
-  - 75 focused delivery tests and all 278 schema tests pass; the shared
+  - 75 focused delivery tests and all 280 schema tests pass; the shared
     answer-disclosure scan handles raw, NFKC, form-space, and repeated
     URI-component encoding at depths 0, 1, 2, 3, and 32 with a deduplicated
     closure capped at 24 value-and-round states and three URI-decode rounds,
@@ -311,20 +328,24 @@ Every value below must remain exact throughout Phase 1.7.
     `%252539%252F35`, malformed `%ZZ` and truncated UTF-8 suffixes, the benign
     `%2538%2F35`, and cross-slot `%25113%2F70`; either cap fails closed rather
     than accepting a partial closure;
-  - the Vite/Oxc boundary suite passes 58/58 plus the live repository scan,
-    covering static and computed module loads, a production Vite-glob ban,
-    trusted named-binding and transitive re-export paths, source-root and
-    symlink containment, production-to-test edges, exact root/browser manifests
-    and scripts, the complete lockfile and every workspace manifest,
-    built-in-only pre-install CI ordering before any pnpm invocation, forbidden
-    repository-local package-manager configuration and direct `*.gyp` inputs,
-    production runtime dependencies, Vite/Wrangler and implicit PostCSS
-    configuration, absent Vite public assets, required repository inputs,
-    fail-closed non-CSS style languages and CSS Modules/ICSS dependencies, and
-    an exact reviewed HTML tag/attribute/URL plus browser CSS asset surface;
-    extensionless and unreviewed executable source extensions fail closed while
-    the pinned Vite static-asset, JSON, and inspected style surfaces remain
-    explicit non-executable exceptions;
+  - two V1 compatibility regressions prove that the attribution schema remains
+    the same runtime object across root, safe-leaf, presentation, and worksheet
+    exports rather than merely remaining structurally equivalent;
+  - the Vite/Oxc boundary suite passes 61/61 plus the live repository scan. It
+    enforces exact browser-safe public leaf imports and exact transitive source
+    dependencies, along with the reviewed manifests, scripts, complete
+    lockfile/workspace, Vite/Wrangler/PostCSS, HTML/CSS assets, and executable
+    source surfaces;
+  - final Rollup `OutputChunk.modules` provenance rejects server, Worker,
+    generator, and unreviewed workspace contributors after bundling; a bounded
+    post-build canary then scans every regular emitted file for protected
+    answer, seed, scoring, and solution-trace tokens. The artifact walk rejects
+    symbolic links and non-regular entries and fails closed above 1,000 total
+    entries, 20 MiB of regular-file content, or depth 16. Focused integration
+    coverage passes 37/37 provenance tests and 21/21 scanner tests;
+  - the raw token canary is defense in depth, not semantic absence proof.
+    Tree-shaking is an optimization, not an authorization boundary; source
+    reachability and final emitted-module provenance are separate gates;
   - successive exact reviews and real Vite 8.1.5 builds regression-lock the
     compiler-partition, trusted-module, resolver, package metadata, HTML, CSS,
     and test-only edge classes;
@@ -333,13 +354,14 @@ Every value below must remain exact throughout Phase 1.7.
     Vite-module enumeration bypass; all now have red/green integration
     regressions, but P17-009 still requires a fresh review of the final frozen
     diff rather than reusing any earlier verdict;
-  - repository formatting, TypeScript 7.0.2, schema/content checks, all 945
-    Vitest tests, production build, and sample artifact verification pass;
+  - repository formatting, TypeScript 7.0.2, schema/content checks, production
+    build, and sample artifact verification pass;
   - the v1 Web/PrintDocument/HTML content addresses remain byte-identical.
 
 ## P17-006 — Web worksheet v2 and standalone lesson
 
-- Status: pending
+- Status: in progress — strict worksheet DTO/projector/service/API backend
+  checkpoint complete; lesson, React, and browser acceptance pending
 - Type: feature / accessibility / tests
 - Size: L
 - Dependencies: P17-005
@@ -358,7 +380,10 @@ Every value below must remain exact throughout Phase 1.7.
   - `packages/web-renderer/src/worksheet-view.tsx`
   - `packages/web-renderer/src/fraction-bar-explorer.tsx`
   - Web renderer tests/fixtures/styles
-  - `apps/web/src/worker/web-worksheet-projector.ts`
+  - `apps/web/src/shared/daily-plan-preview-contract-v2.ts`
+  - `apps/web/src/worker/web-worksheet-projector-v2.ts`
+  - `apps/web/src/worker/daily-plan-preview-service-v2.ts`
+  - V2 contract/projector/service/API tests and `apps/web/src/worker/app.ts`
   - lesson service/route and existing sample/preview services
   - `apps/web/src/react-app/App.tsx`
   - lesson loader, shared limits, and browser/React tests
@@ -377,6 +402,31 @@ Every value below must remain exact throughout Phase 1.7.
   - no protected field/value appears in student data or DOM;
   - keyboard, accessibility, cancellation/race, desktop, and 390 px tests pass;
   - preview/sample limits remain 32/64 KiB with deliberate headroom.
+- Current evidence:
+  - strict `web-worksheet.v2` validation and model projection are implemented;
+    prompt rationals are canonical/reduced with positive denominators, and
+    prompt accessibility text is re-derived exactly from typed operands;
+  - the Worker projector consumes detached trusted answers, performs a final
+    answer-disclosure authorization after validation, and the application
+    service exact-replays injected planner, materializer, and projector outputs
+    rather than trusting schema-valid substitutes. Only the explicit reviewed
+    availability-code allowlists become generic unavailability, and an injected
+    unavailable reason must exactly match trusted replay; defect and future
+    unclassified codes remain exceptions;
+  - `POST /api/plans/preview` dispatches exact request-v1/response-v1 and
+    request-v2/response-v2 lanes, enforces one exact 32 KiB serialization cap,
+    and returns structured sanitized errors;
+  - the reviewed 365-day corpus has a maximum V2 response of 5,964/32,768
+    bytes, leaving 26,804 bytes headroom;
+  - production browser privacy has three gates: exact safe source leaves, final
+    Rollup `OutputChunk.modules` provenance, and a protected-token canary over
+    every regular emitted file. The canary is defense in depth, not semantic
+    absence proof; tree-shaking is not an authorization boundary;
+  - the production client records 112 modules and the raw scanner covers
+    328,591 artifact bytes;
+  - the active React `/new` path still uses V1. `web-lesson.v1`, shared lesson
+    presentation UI, React V2 integration, and browser/visual/accessibility
+    tests remain pending, so P17-006 is not complete.
 
 ## P17-007 — PrintDocumentV2 and printable HTML
 
@@ -405,6 +455,10 @@ Every value below must remain exact throughout Phase 1.7.
   - semantic snapshot parity with Web/lesson passes;
   - injected presentation answers fail final print authorization;
   - all four current v1 PrintDocument/HTML hashes remain exact.
+- Next slice:
+  - implement the renderer-neutral `PrintDocumentV2` validator, canonical form,
+    and role-sensitive student/key semantic projectors first; printable HTML and
+    A4 layout evidence follow without being claimed by that semantic checkpoint.
 
 ## P17-008 — Integrated compatibility and release evidence
 
@@ -434,33 +488,60 @@ Every value below must remain exact throughout Phase 1.7.
     protected DOM values, horizontal overflow, or print regeneration;
   - exact page counts, clipping/read-order result, response maxima, and all v2
     hashes are recorded in this ledger.
+- Current partial evidence:
+  - TypeScript 7.0.2 and 1,135 Vitest tests across 42 files pass, together with
+    61/61 source/config boundary tests, 37/37 final module-provenance tests, and
+    21/21 artifact-scanner tests; production build and exact content/artifact
+    verification also pass;
+  - revision-1/revision-2 content hashes and every frozen V1
+    WorksheetInstance/PrintDocument/HTML identity remain unchanged;
+  - the 2026-08-02 `pnpm audit` run reported no known vulnerabilities after
+    patching the Cloudflare development stack to
+    `@cloudflare/vite-plugin@1.49.0`,
+    `@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
+    `miniflare@4.20260730.0` / `sharp@0.35.2`;
+  - these checks support the backend checkpoint only. V2 print artifacts,
+    standalone lesson/React browser flows, visual/accessibility inspection, and
+    A4 evidence are missing, so P17-008 remains pending.
 
 ## P17-009 — Independent review and stacked draft PR
 
-- Status: pending
+- Status: in progress — bounded backend checkpoint only; Phase 1.7 closeout
+  remains dependent on P17-008
 - Type: review / delivery
 - Size: M
-- Dependencies: P17-008
+- Dependencies: bounded checkpoint after the P17-006 backend subset; full
+  closeout after P17-008
 - Suggested ownership: independent reviewers then coordinator
 - Deliverables:
   - independent versioning/contract review;
   - independent adversarial privacy/snapshot review;
   - independent Web/lesson/print accessibility and release-readiness review;
   - repaired findings and rerun focused/full gates;
-  - focused commits pushed to `feat/content-derived-presentation`;
-  - stacked draft PR targeting `feat/student-delivery-hardening`.
+  - focused commits pushed to `feat/v2-worksheet-api`;
+  - bounded stacked draft PR targeting `feat/content-derived-presentation`;
+  - final Phase 1.7 review and release checkpoint after P17-008.
 - Completion evidence:
   - clean worktree and exact local/remote/head SHA agreement;
   - draft/open/base/head/mergeability readback;
   - successful final CI for the final pushed SHA;
   - no merge, deployment, DNS, or license mutation;
   - remaining findings recorded as explicit next-loop work.
+- Current evidence:
+  - local full checks for the bounded backend checkpoint pass with the exact
+    counts recorded under P17-008;
+  - the branch is stacked on `feat/content-derived-presentation` at
+    `fe389bcb` (parent draft PR #4), with no merge or deployment;
+  - child draft-PR state, exact local/remote head agreement, and final CI are
+    volatile GitHub evidence that must be read back at delivery time rather than
+    inferred from this ledger; a bounded draft checkpoint still does not
+    complete P17-009 or Phase 1.7.
 
 ## Execution lanes
 
 | Lane | Tasks | Start condition |
 | --- | --- | --- |
-| Contract coordinator | P17-001, P17-004 integration, P17-008, P17-009 | immediate |
+| Contract coordinator | P17-001, P17-004 integration, bounded P17-009 checkpoints, P17-008/final P17-009 | immediate |
 | Content/schema | P17-002 | P17-001 reviewed |
 | Planner/policy | P17-003 | P17-001 reviewed; hashes finalize after P17-002 |
 | Privacy boundary | P17-005 | P17-004 complete |
@@ -485,3 +566,5 @@ remaining risks. The coordinator owns cross-lane integration and all commits.
   worked-example models;
 - answer-key source/target solution-string bound reconciliation unless changed
   by this slice.
+- semantic answer review beyond the bounded rational scanner, including decimal,
+  percentage, and natural-language equivalents in authored presentation.

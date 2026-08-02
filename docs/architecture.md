@@ -1,14 +1,17 @@
 # Exercise Book architecture
 
-Status: proposed foundation
+Status: proposed foundation with local implementation checkpoints
 
-Date: 2026-07-19
+Date: 2026-08-02
 
 This is a target architecture, not a deployment record. The Phase 1 repository
-implements a local walking skeleton through printable A4 HTML, and Phase 1.5
-adds an anonymous deterministic daily-plan preview. It does not claim
-production DNS/application deployment, durable Cloudflare storage, learner
-adaptation, a hosted PDF service, Browser Run rendering, or a LuaLaTeX backend.
+implements a local walking skeleton through printable A4 HTML, Phase 1.5 adds
+an anonymous deterministic daily-plan preview, and the current Phase 1.7
+checkpoint adds a strict V2 worksheet-preview backend beside the preserved V1
+lane. It does not claim production DNS/application deployment, durable
+Cloudflare storage, learner adaptation, a hosted PDF service, Browser Run
+rendering, a LuaLaTeX backend, `PrintDocumentV2`, a standalone lesson, or a V2
+React experience.
 
 Primary application: `https://exercisebook.app`
 
@@ -18,22 +21,36 @@ Decision record: [ADR-0001](decisions/0001-core-architecture.md)
 
 ### Current implemented boundary
 
-The local Phase 1.5 slice is intentionally smaller than the target containers
-below. `@exercisebook/planner` is a pure, version-pinned policy package. The
-Hono Worker application service composes that policy with reviewed content,
-the deterministic fraction generator, an integrity check, and a strict
-student-only Web projection. `POST /api/plans/preview` returns an unsaved set
-for one reviewed goal and an 8-, 12-, or 20-minute practice cap.
+The local slice is intentionally smaller than the target containers below.
+`@exercisebook/planner` is a pure, version-pinned policy package. The Hono
+Worker application service composes that policy with reviewed content, the
+deterministic fraction generator, an integrity check, and a strict student-only
+Web projection. `POST /api/plans/preview` dispatches exact V1 requests only to
+the preserved V1 response lane and exact V2 requests only to the new
+`web-worksheet.v2` response lane. It returns an unsaved set for one reviewed
+goal and an 8-, 12-, or 20-minute practice cap; it does not infer a version
+from optional fields or ambient configuration.
 
 The current preview has no repository or Cloudflare storage adapter, accepts no
 learner identity or evidence, writes no cookie or browser storage, and does not
 claim mastery or adaptation. Its sequence seed is internal to materialization;
 the public response exposes only the preview identity, pinned public
 provenance, selection reason, counts, minutes, and student worksheet. The
-executable contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+active React `/new` experience still requests and renders V1. The V2 DTO,
+trusted projector, service, and HTTP route are backend contract work only;
+standalone lesson delivery, React integration, browser/visual/accessibility
+acceptance, and `PrintDocumentV2` remain open. The preserved executable V1
+contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
-The enabled `day-one-fraction-preview@2` policy also owns every reduced
-canonical rational structurally exposed by the reviewed worked example—its
+The V2 lane uses `day-one-fraction-preview@3`, pinned to the immutable V2
+content identity and the selected lesson, worked-example, and exercise nodes.
+Its `WorksheetInstanceV2` hash commits the renderer-neutral selected
+presentation, and detached `StudentWorksheetDeliveryV2` authorization removes
+answer authority before the strict Web DTO is projected.
+
+In the preserved V1 lane, the enabled `day-one-fraction-preview@2` policy
+owns every reduced canonical rational structurally exposed by the reviewed
+worked example—its
 left operand, right operand, and result—as the ordered plan-activity tuple
 `[1/2, 1/3, 5/6]`. The example's left/right/result values are derived from that
 same tuple. Materialization deterministically advances its retry sequence when
@@ -49,6 +66,55 @@ may legitimately equal another slot's answer, but never its own; prompt
 `accessibleText` and accessibility summaries are exact derivations from the
 validated operands. This distinction rejects cross-slot leaks in fields such
 as `printFallback` without rejecting mathematically valid operand reuse.
+
+The V2 service treats injected dependencies as hostile test seams, not as
+alternate authorities. Supplied planner, materializer, and projector outputs
+are detached and canonical-compared with independently trusted replay before a
+response can be returned. Only trusted planner unavailability and an explicit
+allowlist of reviewed presentation/materialization availability codes become
+the generic unavailable result. An injected unavailable outcome must match the
+trusted replay's exact internal reason; defect-oriented or newly introduced
+codes remain exceptions until explicitly reviewed. Unexpected Hono route
+failures are reported through a fixed structured event containing only the
+route classification and status; the client receives one sanitized, no-store
+500 response, and neither the raw exception nor request data is placed in that
+report.
+
+Browser privacy is enforced at three independent layers:
+
+1. production browser source may import only exact reviewed public leaf
+   subpaths, with their exact transitive dependencies checked;
+2. the Vite build inspects final Rollup `OutputChunk.modules` provenance and
+   fails if a client chunk contains a server, Worker, generator, or unreviewed
+   workspace module; and
+3. a post-build canary scans every regular emitted file for protected answer,
+   seed, scoring, and solution-trace tokens.
+
+The artifact walk fails closed above 1,000 total entries, 20 MiB of regular-file
+content, or depth 16, and rejects symbolic links and non-regular entries. The
+token canary is defense in depth, not proof that every equivalent answer or
+secret is semantically absent. Tree-shaking is an optimization and is never an
+authorization boundary; source reachability and emitted-module provenance must
+both remain reviewable.
+
+This 2026-08-02 checkpoint is on `feat/v2-worksheet-api`, stacked on
+`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4). It is
+neither merged nor deployed. Reviewed content hashes and V1 instance/Print/HTML
+identities remain unchanged, and the V1 attribution schema retains the same
+runtime object identity across its root, safe-leaf, presentation, and worksheet
+exports. TypeScript 7.0.2 and 1,135 Vitest tests across 42 files pass. The
+focused privacy gates pass 61/61 source/config boundary tests, 37/37 final
+module-provenance tests, and 21/21 artifact-scanner tests. Across the reviewed
+365-day V2 corpus, the largest exact serialized response is 5,964 of 32,768
+bytes, leaving 26,804 bytes of headroom. The production client build records
+112 modules, and the all-regular-file canary scans 328,591 artifact bytes.
+
+The patched local Cloudflare development stack is pinned to
+`@cloudflare/vite-plugin@1.49.0`,
+`@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
+`miniflare@4.20260730.0` / `sharp@0.35.2`; the 2026-08-02 `pnpm audit` run
+reported no known vulnerabilities. These are local verification inputs, not
+deployment evidence, and later advisory data may change that result.
 
 ## 1. Purpose
 
