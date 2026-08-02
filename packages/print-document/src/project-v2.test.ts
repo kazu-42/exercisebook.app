@@ -610,6 +610,98 @@ describe("WorksheetInstanceV2 -> PrintDocumentV2", () => {
     );
   });
 
+  it("shares one aggregate candidate budget across final Print V2 authorization roles", async () => {
+    const student = await projectStudent(materialized);
+    const projection =
+      await projectWorksheetV2ForStudentWithCanonicalAnswers(materialized);
+    const document = structuredClone(student.document);
+    const delivery = structuredClone(projection.delivery);
+    const sourceInstance = structuredClone(materialized.instance);
+
+    expect(projection.canonicalAnswers.some((answer) => answer.numerator === "0")).toBe(
+      false,
+    );
+
+    // Each role-sensitive assertion stays below its 4,096-candidate local cap:
+    // attributions contain 3,800, presentation contains 3,700 plus its small
+    // fixed model, and each fallback contains 450. Together they exceed the
+    // prepared session's 8,192-candidate aggregate cap without relying on time.
+    const attributionModifications = [
+      ...Array.from({ length: 31 }, () => nonAnswerCandidateText(120)),
+      nonAnswerCandidateText(80),
+    ];
+    const presentationText = nonAnswerCandidateText(3_700);
+    const fallbackText = nonAnswerCandidateText(450);
+
+    const documentAttribution = document.attributions[0];
+    const deliveryAttribution = delivery.attributions[0];
+    const sourceAttribution = sourceInstance.attributions[0];
+    if (
+      documentAttribution === undefined ||
+      deliveryAttribution === undefined ||
+      sourceAttribution === undefined
+    ) {
+      throw new Error("Expected one mapped attribution");
+    }
+    documentAttribution.modifications = [...attributionModifications];
+    deliveryAttribution.modifications = [...attributionModifications];
+    sourceAttribution.modifications = [...attributionModifications];
+
+    delivery.presentation.lesson.paragraphs[0] = presentationText;
+    sourceInstance.presentation.lesson.paragraphs[0] = presentationText;
+    const documentParagraph = document.blocks.find(
+      (block) =>
+        block.type === "paragraph" &&
+        "paragraphOrdinal" in block &&
+        block.paragraphOrdinal === 1,
+    );
+    if (
+      documentParagraph?.type !== "paragraph" ||
+      !("paragraphOrdinal" in documentParagraph)
+    ) {
+      throw new Error("Expected the first mapped lesson paragraph");
+    }
+    const paragraphInline = documentParagraph.content[0];
+    if (paragraphInline?.type !== "text") {
+      throw new Error("Expected the first mapped lesson paragraph");
+    }
+    (paragraphInline as { text: string }).text = presentationText;
+
+    for (const index of [0, 1]) {
+      const ordinal = index + 1;
+      const deliverySlot = delivery.slots[index];
+      const sourceSlot = sourceInstance.slots[index];
+      const fallback = document.blocks.find(
+        (block) => block.type === "print-fallback" && block.ordinal === ordinal,
+      );
+      if (
+        deliverySlot === undefined ||
+        sourceSlot === undefined ||
+        fallback?.type !== "print-fallback"
+      ) {
+        throw new Error(`Expected mapped fallback ${String(ordinal)}`);
+      }
+      deliverySlot.printFallback.text = fallbackText;
+      sourceSlot.printFallback.text = fallbackText;
+      if (fallback.content.type === "text") {
+        (fallback.content as { text: string }).text = fallbackText;
+      } else {
+        (fallback.content as { caption: string }).caption = fallbackText;
+      }
+    }
+
+    expectStudentAuthorizationFailure(
+      () =>
+        assertStudentPrintDocumentV2Authorization(
+          document,
+          delivery,
+          projection.canonicalAnswers,
+          sourceInstance,
+        ),
+      /prepared canonical-answer phase exceeds 8192 candidates/iu,
+    );
+  });
+
   it("requires one exact projection options envelope with an explicit A4 paper", async () => {
     const invalidOptions = [
       undefined,
@@ -830,6 +922,10 @@ function rationalFromInline(
 
 function rationalText(value: CanonicalRationalValue | RationalJson): string {
   return `${value.numerator}/${value.denominator}`;
+}
+
+function nonAnswerCandidateText(count: number): string {
+  return "0/1 ".repeat(count).trim();
 }
 
 function ordinalId(prefix: string, ordinal: number): string {

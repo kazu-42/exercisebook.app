@@ -13,7 +13,10 @@ import {
   type WorksheetInstanceV2,
 } from "@exercisebook/schemas";
 import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
-import type { StudentWebWorksheetV2 } from "@exercisebook/web-renderer";
+import {
+  validateStudentWebWorksheetV2,
+  type StudentWebWorksheetV2,
+} from "@exercisebook/web-renderer";
 import { describe, expect, it } from "vitest";
 
 import { SAMPLE_CONTENT_DOCUMENT_V2 } from "./sample-content-v2.js";
@@ -291,5 +294,61 @@ describe("WorksheetInstanceV2 Web projector", () => {
         projection.canonicalAnswers,
       ),
     ).toThrow(/exact deterministic derivation/u);
+  });
+
+  it("bounds rational candidate work across one final Web authorization phase", async () => {
+    const materialized = await createMaterializedFixture();
+    const projection =
+      await projectWorksheetV2ForStudentWithCanonicalAnswers(materialized);
+    const original = await projectStudentWorksheetForWebV2(materialized);
+    const sourceItems = original.items;
+    const sourceAnswers = projection.canonicalAnswers;
+    if (sourceItems.length === 0 || sourceAnswers.length !== sourceItems.length) {
+      throw new Error("Expected matching non-empty Web projection fixtures");
+    }
+
+    const safeCandidate = { numerator: "1", denominator: "997" } as const;
+    if (sourceAnswers.some((answer) => equalRationals(answer, safeCandidate))) {
+      throw new Error("Expected the dense scan candidate to differ from every answer");
+    }
+
+    // These two valid fields contribute 416 rational candidates per item. A
+    // single item assertion remains well below 4096, while 20 final items plus
+    // their prompts deterministically exceed the prepared phase limit of 8192.
+    const denseResponseLabel =
+      `${safeCandidate.numerator}/${safeCandidate.denominator} `.repeat(83).trim();
+    const densePrintFallback =
+      `${safeCandidate.numerator}/${safeCandidate.denominator} `.repeat(333).trim();
+    const itemCount = 20;
+    const worksheet = validateStudentWebWorksheetV2({
+      ...original,
+      items: Array.from({ length: itemCount }, (_, index) => {
+        const sourceItem = sourceItems[index % sourceItems.length];
+        if (sourceItem === undefined) {
+          throw new Error("Expected a source Web item");
+        }
+        return {
+          ...sourceItem,
+          id: `phase-budget-${String(index + 1).padStart(2, "0")}`,
+          ordinal: index + 1,
+          responseLabel: denseResponseLabel,
+          printFallback: densePrintFallback,
+        };
+      }),
+    });
+    const canonicalAnswers = Array.from({ length: itemCount }, (_, index) => {
+      const answer = sourceAnswers[index % sourceAnswers.length];
+      if (answer === undefined) {
+        throw new Error("Expected a source canonical answer");
+      }
+      return answer;
+    });
+
+    expect(() =>
+      assertStudentWebWorksheetV2DoesNotRevealPracticeAnswers(
+        worksheet,
+        canonicalAnswers,
+      ),
+    ).toThrow(/prepared canonical-answer phase exceeds 8192 candidates/u);
   });
 });

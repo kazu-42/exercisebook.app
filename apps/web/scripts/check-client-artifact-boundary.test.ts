@@ -29,6 +29,8 @@ describe("client artifact boundary", () => {
   it("keeps every reviewed private worksheet field in the forbidden set", () => {
     expect(FORBIDDEN_CLIENT_ARTIFACT_TOKENS).toEqual(
       expect.arrayContaining([
+        "assertDoesNotRevealAnswerAt",
+        "assertDoesNotRevealAnyAnswer",
         "baseSeed",
         "canonicalAnswer",
         "excludedCanonicalAnswers",
@@ -37,6 +39,7 @@ describe("client artifact boundary", () => {
         "seedVersion",
         "slotSeed",
         "solutionTrace",
+        "prepareStudentVisibleAnswerGuard",
       ]),
     );
   });

@@ -6,7 +6,6 @@ import {
 } from "@exercisebook/domain";
 import {
   assertSafeDataObjectGraph,
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionPromptAccessibleText,
   validateStudentWorksheetDeliveryV2,
   validateWorksheetInstanceV2,
@@ -18,7 +17,11 @@ import {
   type WorksheetInstanceV2,
   type WorksheetSlotV2,
 } from "@exercisebook/schemas";
-import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
+import {
+  prepareStudentVisibleAnswerGuard,
+  projectWorksheetV2ForStudentWithCanonicalAnswers,
+  type PreparedStudentVisibleAnswerGuard,
+} from "@exercisebook/schemas/trusted-student-projection";
 
 import { materializePrintDocumentV2 } from "./canonical-v2.js";
 import {
@@ -205,11 +208,13 @@ export function assertStudentPrintDocumentV2Authorization(
   sourceInstanceValue: WorksheetInstanceV2,
 ): void {
   try {
-    assertStudentPrintDocumentV2AuthorizationRaw(
+    const answerGuard = prepareStudentVisibleAnswerGuard(canonicalAnswerValues);
+    assertStudentPrintDocumentV2AuthorizationWithPreparedAnswerGuard(
       documentValue,
       deliveryValue,
       canonicalAnswerValues,
       sourceInstanceValue,
+      answerGuard,
     );
   } catch (error: unknown) {
     throw new PrintDocumentV2ProjectionError(
@@ -640,11 +645,12 @@ function projectAttributions(attributions: readonly AttributionV1[]): Attributio
   }));
 }
 
-function assertStudentPrintDocumentV2AuthorizationRaw(
+function assertStudentPrintDocumentV2AuthorizationWithPreparedAnswerGuard(
   documentValue: StudentPrintDocumentV2,
   deliveryValue: StudentWorksheetDeliveryV2,
   canonicalAnswerValues: readonly CanonicalRationalValue[],
   sourceInstanceValue: WorksheetInstanceV2,
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   assertSafeDataObjectGraph({
     document: documentValue,
@@ -696,15 +702,15 @@ function assertStudentPrintDocumentV2AuthorizationRaw(
   }
 
   const { blocks, attributions, ...globalDocument } = document;
-  assertVisibleValueHasNoCanonicalAnswers(globalDocument, canonicalAnswers);
-  assertVisibleValueHasNoCanonicalAnswers(attributions, canonicalAnswers);
+  assertVisibleValueHasNoCanonicalAnswers(globalDocument, answerGuard);
+  assertVisibleValueHasNoCanonicalAnswers(attributions, answerGuard);
 
   const presentationBlockCount = 4 + delivery.presentation.lesson.paragraphs.length;
   const presentationBlocks = blocks.slice(0, presentationBlockCount);
-  assertVisibleValueHasNoCanonicalAnswers(presentationBlocks, canonicalAnswers);
+  assertVisibleValueHasNoCanonicalAnswers(presentationBlocks, answerGuard);
   assertPresentationIntermediatesDoNotRevealPracticeAnswers(
     delivery.presentation.workedExample.model,
-    canonicalAnswers,
+    answerGuard,
   );
   assertCanonicalAnswersMatchSource(canonicalAnswers, sourceInstance.slots);
 
@@ -736,14 +742,27 @@ function assertStudentPrintDocumentV2AuthorizationRaw(
       throw new Error("Student PrintDocumentV2 problem mapping is inconsistent");
     }
     const { problems, ...groupMetadata } = group;
-    assertVisibleValueHasNoCanonicalAnswers(groupMetadata, canonicalAnswers);
+    assertVisibleValueHasNoCanonicalAnswers(groupMetadata, answerGuard);
 
     const { prompt, promptAccessibleText, ...nonPromptProblem } = problem;
-    assertVisibleValueHasNoCanonicalAnswers(nonPromptProblem, canonicalAnswers);
-    assertProblemPromptAuthorization(prompt, promptAccessibleText, slot, ownAnswer);
+    assertVisibleValueHasNoCanonicalAnswers(nonPromptProblem, answerGuard);
+    assertProblemPromptAuthorization(
+      prompt,
+      promptAccessibleText,
+      slot,
+      ownAnswer,
+      index,
+      answerGuard,
+    );
 
-    assertFallbackAuthorization(fallback, slot, ownAnswer, canonicalAnswers);
-    assertVisibleValueHasNoCanonicalAnswers(workingSpace, canonicalAnswers);
+    assertFallbackAuthorization(
+      fallback,
+      slot,
+      canonicalAnswers.length,
+      index,
+      answerGuard,
+    );
+    assertVisibleValueHasNoCanonicalAnswers(workingSpace, answerGuard);
   }
 }
 
@@ -831,6 +850,8 @@ function assertProblemPromptAuthorization(
   promptAccessibleText: string,
   slot: StudentWorksheetSlotV2,
   ownAnswer: CanonicalRationalValue,
+  answerIndex: number,
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   const expectedAccessibleText = deriveFractionAdditionPromptAccessibleText(
     slot.prompt.left,
@@ -846,26 +867,28 @@ function assertProblemPromptAuthorization(
   ) {
     throw new Error("Student PrintDocumentV2 prompt authorization failed");
   }
-  assertVisibleValueHasNoCanonicalAnswers({ prompt, promptAccessibleText }, [
-    ownAnswer,
-  ]);
+  answerGuard.assertDoesNotRevealAnswerAt(
+    { prompt, promptAccessibleText },
+    answerIndex,
+  );
 }
 
 function assertFallbackAuthorization(
   fallback: PrintFallbackBlockV2,
   slot: StudentWorksheetSlotV2,
-  ownAnswer: CanonicalRationalValue,
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerCount: number,
+  answerIndex: number,
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   if (
     fallback.problemId !== slot.id ||
     fallback.ordinal < 1 ||
-    fallback.ordinal > canonicalAnswers.length
+    fallback.ordinal > answerCount
   ) {
     throw new Error("Student PrintDocumentV2 fallback mapping is inconsistent");
   }
   if (fallback.content.type === "text") {
-    assertVisibleValueHasNoCanonicalAnswers(fallback, canonicalAnswers);
+    assertVisibleValueHasNoCanonicalAnswers(fallback, answerGuard);
     return;
   }
 
@@ -878,14 +901,14 @@ function assertFallbackAuthorization(
       ordinal: fallback.ordinal,
       content: { ...fallbackContentMetadata, caption },
     },
-    canonicalAnswers,
+    answerGuard,
   );
-  assertVisibleValueHasNoCanonicalAnswers({ label, bars }, [ownAnswer]);
+  answerGuard.assertDoesNotRevealAnswerAt({ label, bars }, answerIndex);
 }
 
 function assertPresentationIntermediatesDoNotRevealPracticeAnswers(
   model: StudentWorksheetDeliveryV2["presentation"]["workedExample"]["model"],
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   assertVisibleValueHasNoCanonicalAnswers(
     [
@@ -902,15 +925,15 @@ function assertPresentationIntermediatesDoNotRevealPracticeAnswers(
         denominator: model.commonDenominator,
       },
     ],
-    canonicalAnswers,
+    answerGuard,
   );
 }
 
 function assertVisibleValueHasNoCanonicalAnswers(
   value: unknown,
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(value, canonicalAnswers);
+  answerGuard.assertDoesNotRevealAnyAnswer(value);
 }
 
 function validateProjectedStudentDocument(value: unknown): StudentPrintDocumentV2 {

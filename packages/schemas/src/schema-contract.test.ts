@@ -5,6 +5,17 @@ import { z, type ZodType } from "zod";
 
 import { canonicalizeJson, sha256Hex } from "@exercisebook/domain";
 
+import * as AttributionPublicSchemas from "./attribution-v1.js";
+import * as PublicDataSchemas from "./common.js";
+// @ts-expect-error Prepared answer authority must stay absent from the public root.
+import type { PreparedStudentVisibleAnswerGuard as RootPreparedGuardLeak } from "./index.js";
+// @ts-expect-error Prepared answer authority must stay absent from attribution contracts.
+import type { PreparedStudentVisibleAnswerGuard as AttributionPreparedGuardLeak } from "./attribution-v1.js";
+// @ts-expect-error Prepared answer authority must stay absent from public data contracts.
+import type { PreparedStudentVisibleAnswerGuard as PublicDataPreparedGuardLeak } from "./common.js";
+// @ts-expect-error Prepared answer authority must stay absent from presentation contracts.
+import type { PreparedStudentVisibleAnswerGuard as PresentationPreparedGuardLeak } from "./presentation-contract-v1.js";
+
 import {
   AttributionV1Schema,
   CANONICAL_INTEGER_PATTERN,
@@ -31,7 +42,20 @@ import {
   validateContentDocumentV1,
   validateWorksheetInstanceV1,
 } from "./index.js";
-import { projectWorksheetForStudentWithCanonicalAnswers } from "./trusted-student-projection.js";
+import * as PublicSchemas from "./index.js";
+import * as PresentationPublicSchemas from "./presentation-contract-v1.js";
+import {
+  prepareStudentVisibleAnswerGuard,
+  projectWorksheetForStudentWithCanonicalAnswers,
+  type PreparedStudentVisibleAnswerGuard,
+} from "./trusted-student-projection.js";
+
+// Compile-only: each @ts-expect-error becomes unused if this authority leaks.
+type ForbiddenPublicPreparedGuardTypeLeak =
+  | AttributionPreparedGuardLeak
+  | PresentationPreparedGuardLeak
+  | PublicDataPreparedGuardLeak
+  | RootPreparedGuardLeak;
 
 interface SchemaFixture {
   readonly fileUrl: URL;
@@ -91,6 +115,25 @@ const BENIGN_NORMALIZATION_COMPOSITION_CASES = [
 ] as const;
 
 describe("structural JSON Schema and normative Zod runtime contracts", () => {
+  it("exposes prepared answer authority only from the trusted server leaf", () => {
+    const preparedGuard: PreparedStudentVisibleAnswerGuard =
+      prepareStudentVisibleAnswerGuard(CANONICAL_ANSWER_39_OVER_35);
+
+    expect(preparedGuard.assertDoesNotRevealAnyAnswer).toBeTypeOf("function");
+    expect(preparedGuard.assertDoesNotRevealAnswerAt).toBeTypeOf("function");
+    expect(PublicSchemas.assertStudentVisibleDataHasNoRecognizedCanonicalAnswers).toBe(
+      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
+    );
+    for (const publicSurface of [
+      PublicSchemas,
+      AttributionPublicSchemas,
+      PublicDataSchemas,
+      PresentationPublicSchemas,
+    ]) {
+      expect(publicSurface).not.toHaveProperty("prepareStudentVisibleAnswerGuard");
+    }
+  });
+
   it.each([null, 42, ["1"], new String("1")])(
     "rejects non-primitive runtime safe-math source input: %j",
     (source) => {
@@ -637,6 +680,16 @@ describe("structural JSON Schema and normative Zod runtime contracts", () => {
       });
     },
   );
+
+  it("shares one aggregate prepared-answer budget across the V1 delivery phase", async () => {
+    const materialized = await rematerializeWorksheetFixture(
+      worksheetWithV1DeliveryPhaseCandidateBudget(),
+    );
+
+    await expect(projectWorksheetForStudent(materialized)).rejects.toThrow(
+      "Student projection prepared canonical-answer phase exceeds 8192 candidates",
+    );
+  });
 
   it.each([1, 2, 3, 32])(
     "rejects a compatibility-normalized answer through the V1 projector after %i URI-encoding layers",
@@ -1312,6 +1365,56 @@ function crossSlotCollisionWorksheetSlotFixture(id: string): unknown {
     },
     provenance: slotProvenanceFixture(0),
   };
+}
+
+interface V1DeliveryPhaseCandidateBudgetSlotFixture {
+  id: string;
+  slotSeed: string;
+  prompt: { instruction: string };
+  hints: Array<{ id: string; text: string }>;
+  printFallback: { text: string };
+  provenance: { generationAttempt: number };
+}
+
+interface V1DeliveryPhaseCandidateBudgetWorksheetFixture {
+  expectedMinutes: number;
+  slots: V1DeliveryPhaseCandidateBudgetSlotFixture[];
+}
+
+function worksheetWithV1DeliveryPhaseCandidateBudget(): unknown {
+  const worksheet = structuredClone(
+    worksheetInstanceFixture({}),
+  ) as V1DeliveryPhaseCandidateBudgetWorksheetFixture;
+  const templateSlot = worksheet.slots[0];
+  if (templateSlot === undefined) {
+    throw new Error("Expected worksheet fixture slot");
+  }
+
+  const benignCandidate = "1/2 ";
+  const slotCount = 10;
+  const instructionCandidatesPerSlot = 125;
+  const hintCandidatesPerSlot = 250;
+  const fallbackCandidatesPerSlot = 500;
+  // Each assertion sees at most 750 candidates, but the shared V1 delivery
+  // phase sees 10 * (125 + 250 + 500) = 8,750 candidates.
+  worksheet.expectedMinutes = slotCount * 2;
+  worksheet.slots = Array.from({ length: slotCount }, (_, index) => {
+    const ordinal = String(index + 1).padStart(2, "0");
+    const slot = structuredClone(templateSlot);
+    slot.id = `practice-${ordinal}`;
+    slot.slotSeed = ((index + 2) % 10).toString().repeat(64);
+    slot.prompt.instruction = benignCandidate.repeat(instructionCandidatesPerSlot);
+    slot.hints = [
+      {
+        id: `hint-${ordinal}`,
+        text: benignCandidate.repeat(hintCandidatesPerSlot),
+      },
+    ];
+    slot.printFallback.text = benignCandidate.repeat(fallbackCandidatesPerSlot);
+    slot.provenance.generationAttempt = index;
+    return slot;
+  });
+  return worksheet;
 }
 
 function worksheetWithDuplicateSlotCollection(

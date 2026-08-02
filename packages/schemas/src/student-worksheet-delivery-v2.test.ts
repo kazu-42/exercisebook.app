@@ -599,6 +599,41 @@ describe("StudentWorksheetDeliveryV2", () => {
     ).rejects.toThrow("canonical-answer");
   });
 
+  it("shares one aggregate answer-scan budget across the V2 delivery phase", async () => {
+    const instance = structuredClone(worksheetInstanceV2Fixture());
+    const sourceSlot = instance.slots[0]!;
+    // These exact schema maxima contribute 125, 250, and 500 benign
+    // candidates. Every individual assertion stays below 4,096 while the
+    // shared 12-slot delivery phase deterministically exceeds 8,192.
+    const denseInstruction = "1/2 ".repeat(125);
+    const denseHint = "1/2 ".repeat(250);
+    const densePrintFallback = "1/2 ".repeat(500);
+
+    instance.presentation.exercise.instruction = denseInstruction;
+    instance.slots = Array.from({ length: 12 }, (_, index) => {
+      const slot = structuredClone(sourceSlot);
+      const ordinal = String(index + 1).padStart(2, "0");
+
+      slot.id = `practice-${ordinal}`;
+      slot.slotSeed = (index + 2).toString(16).repeat(64);
+      slot.prompt.instruction = denseInstruction;
+      slot.hints[0]!.id = `hint-common-denominator-${ordinal}`;
+      slot.hints[0]!.text = denseHint;
+      slot.solutionTrace[0]!.id = `step-reduce-${ordinal}`;
+      slot.printFallback.text = densePrintFallback;
+      slot.provenance.generationAttempt = index;
+      return slot;
+    });
+    instance.expectedMinutes = instance.slots.reduce(
+      (total, slot) => total + slot.expectedMinutes,
+      0,
+    );
+
+    await expect(
+      projectWorksheetV2ForStudent(await rematerializeWorksheetV2Fixture(instance)),
+    ).rejects.toThrow(/prepared canonical-answer phase exceeds 8192 candidates/i);
+  });
+
   it.each([3, 32])(
     "rejects another slot's answer in a global attribution URL after %i URI-encoding layers",
     async (encodingDepth) => {

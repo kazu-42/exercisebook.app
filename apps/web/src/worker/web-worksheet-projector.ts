@@ -7,11 +7,14 @@ import type {
 } from "@exercisebook/schemas";
 import {
   assertSafeDataObjectGraph,
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionPromptAccessibleText,
   validateWorksheetInstanceV1,
 } from "@exercisebook/schemas";
-import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
+import {
+  prepareStudentVisibleAnswerGuard,
+  projectWorksheetForStudentWithCanonicalAnswers,
+  type PreparedStudentVisibleAnswerGuard,
+} from "@exercisebook/schemas/trusted-student-projection";
 import type {
   AnswerKeyWebWorksheet,
   StudentWebWorksheet,
@@ -88,11 +91,17 @@ export async function projectStudentWorksheetForWeb(
     })),
     attributions: delivery.attributions.map(projectAttribution),
   });
-  assertWorkedExampleDoesNotRevealPracticeAnswers(
+  const answerGuard = prepareStudentVisibleAnswerGuard(canonicalAnswers);
+  assertWorkedExampleDoesNotRevealPracticeAnswersWithPreparedGuard(
     worksheet.workedExample,
     canonicalAnswers,
+    answerGuard,
   );
-  assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(worksheet, canonicalAnswers);
+  assertFinalStudentWorksheetDoesNotRevealPracticeAnswersWithPreparedGuard(
+    worksheet,
+    canonicalAnswers,
+    answerGuard,
+  );
   return worksheet;
 }
 
@@ -103,29 +112,24 @@ export async function projectStudentWorksheetForWeb(
  * problem's result; their accessible text is therefore derived locally from
  * those operands and the prompt is checked only against its own answer.
  */
-function assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
+function assertFinalStudentWorksheetDoesNotRevealPracticeAnswersWithPreparedGuard(
   worksheet: StudentWebWorksheet,
   canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   if (worksheet.items.length !== canonicalAnswers.length) {
     throw new Error("Web worksheet item-to-answer mapping is inconsistent");
   }
 
   const { items, ...globalWorksheet } = worksheet;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    globalWorksheet,
-    canonicalAnswers,
-  );
+  answerGuard.assertDoesNotRevealAnyAnswer(globalWorksheet);
   for (const [index, item] of items.entries()) {
     const answer = canonicalAnswers[index];
     if (answer === undefined) {
       throw new Error("Web worksheet item-to-answer mapping is inconsistent");
     }
     const { prompt, ...nonPromptItem } = item;
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      nonPromptItem,
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer(nonPromptItem);
     if (
       prompt.accessibleText !==
       deriveFractionAdditionPromptAccessibleText(prompt.left, prompt.right)
@@ -139,13 +143,25 @@ function assertFinalStudentWorksheetDoesNotRevealPracticeAnswers(
         "Web worksheet contains its own canonical-answer value as a prompt operand",
       );
     }
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(prompt, [answer]);
+    answerGuard.assertDoesNotRevealAnswerAt(prompt, index);
   }
 }
 
 export function assertWorkedExampleDoesNotRevealPracticeAnswers(
   workedExample: WebWorkedExample,
   canonicalAnswers: readonly CanonicalRationalValue[],
+): void {
+  assertWorkedExampleDoesNotRevealPracticeAnswersWithPreparedGuard(
+    workedExample,
+    canonicalAnswers,
+    prepareStudentVisibleAnswerGuard(canonicalAnswers),
+  );
+}
+
+function assertWorkedExampleDoesNotRevealPracticeAnswersWithPreparedGuard(
+  workedExample: WebWorkedExample,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
   const structuredExampleValues = [
     workedExample.left,
@@ -161,10 +177,7 @@ export function assertWorkedExampleDoesNotRevealPracticeAnswers(
       "The student worked example reveals a generated practice answer value.",
     );
   }
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    workedExample,
-    canonicalAnswers,
-  );
+  answerGuard.assertDoesNotRevealAnyAnswer(workedExample);
 }
 
 export async function projectAnswerKeyWorksheetForWeb(

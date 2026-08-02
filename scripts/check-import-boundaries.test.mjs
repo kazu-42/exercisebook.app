@@ -397,6 +397,8 @@ test("rejects trusted server imports from every browser-reachable source root", 
     {
       "apps/web/src/react-app/exact.ts":
         'import { trusted } from "@exercisebook/schemas/trusted-student-projection";',
+      "apps/web/src/react-app/prepared-guard.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";',
       "apps/web/src/react-app/dynamic.ts":
         'const trusted = import("@exercisebook/schemas/trusted-student-projection/dynamic");',
       "apps/web/src/react-app/template-import.ts":
@@ -415,6 +417,10 @@ test("rejects trusted server imports from every browser-reachable source root", 
         'import trusted = require("@exercisebook/schemas/trusted-student-projection");',
       "apps/web/src/shared/import-type.ts":
         'type Trusted = import("@exercisebook/schemas/trusted-student-projection").Projection;',
+      "apps/web/src/shared/prepared-guard-type.ts":
+        'import type { PreparedStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";',
+      "apps/web/src/shared/prepared-guard-source.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "../../../../packages/schemas/src/worksheet-instance-v1.js";',
       "apps/web/src/shared/relative.ts":
         'export { trusted } from "../../../../packages/schemas/src/trusted-student-projection.js";',
       "apps/web/src/shared/v2-implementation.ts":
@@ -423,6 +429,10 @@ test("rejects trusted server imports from every browser-reachable source root", 
         'export * from "@exercisebook/schemas/trusted-student-projection/internal";',
       "packages/web-renderer/src/relative.ts":
         'import trusted from "../../schemas/src/trusted-student-projection.ts";',
+      "packages/web-renderer/src/prepared-guard.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";',
+      "packages/web-renderer/src/prepared-guard-source.ts":
+        'import type { PreparedStudentVisibleAnswerGuard } from "../../schemas/src/worksheet-instance-v1.js";',
       "packages/web-renderer/src/v1-implementation.ts":
         'import { projectWorksheetForStudentWithCanonicalAnswers } from "../../schemas/src/worksheet-instance-v1.js";',
       "packages/web-renderer/src/v2-internal-specifier.ts":
@@ -435,9 +445,10 @@ test("rejects trusted server imports from every browser-reachable source root", 
     async (repositoryRoot, findFixtureViolations) => {
       const violations = await findFixtureViolations();
 
-      assert.equal(violations.length, 18);
+      assert.equal(violations.length, 23);
       for (const relativeFile of [
         "apps/web/src/react-app/exact.ts",
+        "apps/web/src/react-app/prepared-guard.ts",
         "apps/web/src/react-app/dynamic.ts",
         "apps/web/src/react-app/template-import.ts",
         "apps/web/src/react-app/parenthesized-import.ts",
@@ -446,11 +457,15 @@ test("rejects trusted server imports from every browser-reachable source root", 
         "apps/web/src/shared/optional-require.ts",
         "apps/web/src/shared/import-equals.ts",
         "apps/web/src/shared/import-type.ts",
+        "apps/web/src/shared/prepared-guard-type.ts",
+        "apps/web/src/shared/prepared-guard-source.ts",
         "apps/web/src/shared/relative.ts",
         "apps/web/src/shared/template-require.ts",
         "apps/web/src/shared/v2-implementation.ts",
         "packages/web-renderer/src/prefix.ts",
         "packages/web-renderer/src/relative.ts",
+        "packages/web-renderer/src/prepared-guard.ts",
+        "packages/web-renderer/src/prepared-guard-source.ts",
         "packages/web-renderer/src/v1-implementation.ts",
         "packages/web-renderer/src/v2-internal-specifier.ts",
         "packages/web-renderer/src/javascript-bypass.js",
@@ -1175,18 +1190,132 @@ test("keeps direct trusted imports available to the Worker server boundary", asy
   await withRepositoryFixture(
     {
       "apps/web/src/worker/static.ts":
-        'import { trusted } from "@exercisebook/schemas/trusted-student-projection";',
-      "apps/web/src/worker/dynamic.ts":
-        'const trusted = import("@exercisebook/schemas/trusted-student-projection/internal");',
-      "apps/web/src/worker/require.ts":
-        'const trusted = require("@exercisebook/schemas/trusted-student-projection");',
-      "apps/web/src/worker/relative.ts":
-        'export { trusted } from "../../../../packages/schemas/src/trusted-student-projection.js";',
-      "apps/web/src/worker/v2-implementation.ts":
-        'import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "../../../../packages/schemas/src/student-worksheet-delivery-v2.js";',
+        'import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";',
+      "apps/web/src/worker/prepared-guard.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "@exercisebook/schemas/trusted-student-projection";
+        void prepareStudentVisibleAnswerGuard;
+        void (undefined as unknown as PreparedStudentVisibleAnswerGuard);
+      `,
     },
     async (repositoryRoot, findFixtureViolations) => {
       assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+});
+
+test("rejects every direct schemas implementation load from Worker production", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/worker/aliased-prepared-guard.ts":
+        'import { innocuousGuardFactory } from "../../../../packages/schemas/src/student-worksheet-delivery-v2.js";',
+      "apps/web/src/worker/legacy-projector.ts":
+        'import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "../../../../packages/schemas/src/student-worksheet-delivery-v2.js";',
+      "packages/schemas/src/student-worksheet-delivery-v2.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+        } from "./worksheet-instance-v1.js";
+        export const innocuousGuardFactory = prepareStudentVisibleAnswerGuard;
+        export const projectWorksheetV2ForStudentWithCanonicalAnswers = true;
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/worker/aliased-prepared-guard.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../../../packages/schemas/src/student-worksheet-delivery-v2.js"',
+        'apps/web/src/worker/legacy-projector.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../../../packages/schemas/src/student-worksheet-delivery-v2.js"',
+      ]);
+    },
+  );
+});
+
+test("allows prepared answer authority only through the exact trusted leaf in Worker and Print production", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/worker/allowed.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "@exercisebook/schemas/trusted-student-projection";
+        void prepareStudentVisibleAnswerGuard;
+        void (undefined as unknown as PreparedStudentVisibleAnswerGuard);
+      `,
+      "apps/web/src/worker/root-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas";',
+      "apps/web/src/worker/source-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "../../../../packages/schemas/src/worksheet-instance-v1.js";',
+      "apps/web/src/worker/internal-consumer-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "../../../../packages/schemas/src/student-worksheet-delivery-v2.js";',
+      "apps/web/src/worker/namespace-source-escape.ts":
+        'import * as AnswerAuthority from "../../../../packages/schemas/src/worksheet-instance-v1.js";',
+      "apps/web/src/worker/subpath-escape.ts":
+        'import type { PreparedStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection/internal";',
+      "apps/web/src/worker/trusted-alias-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard as innocuousGuardFactory } from "@exercisebook/schemas/trusted-student-projection";',
+      "apps/web/src/worker/trusted-dynamic-escape.ts":
+        'const answerAuthority = import("@exercisebook/schemas/trusted-student-projection");',
+      "apps/web/src/worker/trusted-reexport-escape.ts":
+        'export { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";',
+      "apps/web/src/worker/trusted-relative-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "../../../../packages/schemas/src/trusted-student-projection.js";',
+      "apps/web/src/worker/trusted-two-step-reexport.ts": `
+        import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";
+        export { prepareStudentVisibleAnswerGuard };
+      `,
+      "apps/web/src/worker/trusted-identity-alias.ts": `
+        import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";
+        const innocuousGuardFactory = prepareStudentVisibleAnswerGuard;
+        export { innocuousGuardFactory };
+      `,
+      "apps/web/src/worker/public-root-reexport.ts":
+        'export { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas";',
+      "packages/print-document/src/allowed.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "@exercisebook/schemas/trusted-student-projection";
+        void prepareStudentVisibleAnswerGuard;
+        void (undefined as unknown as PreparedStudentVisibleAnswerGuard);
+      `,
+      "packages/print-document/src/root-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas";',
+      "packages/print-document/src/trusted-alias-escape.ts":
+        'import { prepareStudentVisibleAnswerGuard as innocuousGuardFactory } from "@exercisebook/schemas/trusted-student-projection";',
+      "packages/print-document/src/trusted-reexport-escape.ts":
+        'export { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";',
+      "packages/print-document/src/trusted-two-step-bridge.ts": `
+        import { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas/trusted-student-projection";
+        export { prepareStudentVisibleAnswerGuard };
+      `,
+      "packages/print-document/src/public-barrel.ts":
+        'export { prepareStudentVisibleAnswerGuard } from "./trusted-two-step-bridge.js";',
+      "packages/print-document/src/public-root-reexport.ts":
+        'export { prepareStudentVisibleAnswerGuard } from "@exercisebook/schemas";',
+      "packages/print-document/src/source-escape.ts":
+        'import type { PreparedStudentVisibleAnswerGuard } from "../../schemas/src/worksheet-instance-v1.js";',
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/worker/internal-consumer-escape.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../../../packages/schemas/src/student-worksheet-delivery-v2.js"',
+        'apps/web/src/worker/namespace-source-escape.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../../../packages/schemas/src/worksheet-instance-v1.js"',
+        'apps/web/src/worker/public-root-reexport.ts exports prepared answer authority outside the exact trusted leaf "@exercisebook/schemas"',
+        'apps/web/src/worker/root-escape.ts imports prepared answer authority outside the exact trusted leaf "@exercisebook/schemas"',
+        'apps/web/src/worker/source-escape.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../../../packages/schemas/src/worksheet-instance-v1.js"',
+        'apps/web/src/worker/subpath-escape.ts imports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection/internal"',
+        'apps/web/src/worker/trusted-alias-escape.ts imports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection"',
+        'apps/web/src/worker/trusted-dynamic-escape.ts loads trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection"',
+        'apps/web/src/worker/trusted-identity-alias.ts re-exports trusted answer authority through local binding "innocuousGuardFactory"',
+        'apps/web/src/worker/trusted-reexport-escape.ts exports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection"',
+        'apps/web/src/worker/trusted-relative-escape.ts imports trusted answer authority outside an exact non-aliased trusted-leaf import "../../../../packages/schemas/src/trusted-student-projection.js"',
+        'apps/web/src/worker/trusted-two-step-reexport.ts re-exports trusted answer authority through local binding "prepareStudentVisibleAnswerGuard"',
+        'packages/print-document/src/public-root-reexport.ts exports prepared answer authority outside the exact trusted leaf "@exercisebook/schemas"',
+        'packages/print-document/src/root-escape.ts imports prepared answer authority outside the exact trusted leaf "@exercisebook/schemas"',
+        'packages/print-document/src/source-escape.ts imports schemas implementation outside reviewed public or trusted entrypoints "../../schemas/src/worksheet-instance-v1.js"',
+        'packages/print-document/src/trusted-alias-escape.ts imports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection"',
+        'packages/print-document/src/trusted-reexport-escape.ts exports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection"',
+        'packages/print-document/src/trusted-two-step-bridge.ts re-exports trusted answer authority through local binding "prepareStudentVisibleAnswerGuard"',
+      ]);
     },
   );
 });
@@ -1393,11 +1522,11 @@ test("allows only exact reviewed runtime roots in print-document production sour
       "packages/print-document/src/allowed-production.ts": `
         import { value as domain } from "@exercisebook/domain";
         import { value as schemas } from "@exercisebook/schemas";
-        import { value as trustedProjection } from "@exercisebook/schemas/trusted-student-projection";
+        import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
         import { localValue } from "./allowed-local.js";
         void domain;
         void schemas;
-        void trustedProjection;
+        void projectWorksheetForStudentWithCanonicalAnswers;
         void localValue;
       `,
       "packages/print-document/src/production-leaks.ts": `
@@ -1437,7 +1566,7 @@ test("allows only exact reviewed runtime roots in print-document production sour
         'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/content-compiler"',
         'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/domain/rational"',
         'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/schemas/public-data"',
-        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/schemas/trusted-student-projection/internal"',
+        'packages/print-document/src/production-leaks.ts imports trusted answer authority outside an exact non-aliased trusted-leaf import "@exercisebook/schemas/trusted-student-projection/internal"',
         'packages/print-document/src/production-leaks.ts imports test-only module "./test-helper.test.js"',
         'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/generators"',
         'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/planner"',
@@ -1722,7 +1851,11 @@ test("rejects trusted named bindings from mixed modules at the public schemas ba
         export { WorksheetInstanceV1Schema };
         export type {
           StudentWorksheetProjectionV1 as HarmlessProjectionV1,
+          PreparedStudentVisibleAnswerGuard,
           WorksheetInstanceV1,
+        } from "./worksheet-instance-v1.js";
+        export {
+          prepareStudentVisibleAnswerGuard,
         } from "./worksheet-instance-v1.js";
         type SafeImportedType =
           import("./worksheet-instance-v1.js").WorksheetInstanceV1;
@@ -1737,10 +1870,85 @@ test("rejects trusted named bindings from mixed modules at the public schemas ba
         'packages/schemas/src/index.ts exports trusted server-only binding "StudentWorksheetProjectionV2" from "./student-worksheet-delivery-v2.js"',
         'packages/schemas/src/index.ts imports trusted server-only binding "projectWorksheetForStudentWithCanonicalAnswers" from "./worksheet-instance-v1.js"',
         'packages/schemas/src/index.ts exports trusted server-only binding "StudentWorksheetProjectionV1" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/index.ts exports trusted server-only binding "PreparedStudentVisibleAnswerGuard" from "./worksheet-instance-v1.js"',
+        'packages/schemas/src/index.ts exports trusted server-only binding "prepareStudentVisibleAnswerGuard" from "./worksheet-instance-v1.js"',
         'packages/schemas/src/index.ts loads trusted server-only binding "StudentWorksheetProjectionV1" from "./worksheet-instance-v1.js"',
       ]);
     },
   );
+});
+
+test("allows the prepared guard implementation only in its reviewed schemas consumer and trusted entrypoint", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/student-worksheet-delivery-v2.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "./worksheet-instance-v1.js";
+        void prepareStudentVisibleAnswerGuard;
+        void (undefined as unknown as PreparedStudentVisibleAnswerGuard);
+      `,
+      "packages/schemas/src/trusted-student-projection.ts": `
+        export {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "./worksheet-instance-v1.js";
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+});
+
+test("rejects prepared guard implementation subpaths from the reviewed schemas consumer", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/schemas/src/student-worksheet-delivery-v2.ts": `
+        import {
+          prepareStudentVisibleAnswerGuard,
+          type PreparedStudentVisibleAnswerGuard,
+        } from "./worksheet-instance-v1/internal.js";
+        void prepareStudentVisibleAnswerGuard;
+        void (undefined as unknown as PreparedStudentVisibleAnswerGuard);
+      `,
+      "packages/schemas/src/worksheet-instance-v1/internal.ts":
+        "export const unrelated = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/schemas/src/student-worksheet-delivery-v2.ts imports trusted server-only binding "prepareStudentVisibleAnswerGuard" from "./worksheet-instance-v1/internal.js"',
+        'packages/schemas/src/student-worksheet-delivery-v2.ts imports trusted server-only binding "PreparedStudentVisibleAnswerGuard" from "./worksheet-instance-v1/internal.js"',
+      ]);
+    },
+  );
+});
+
+test("rejects prepared answer authority from every public schemas leaf", async () => {
+  for (const relativeFile of [
+    "packages/schemas/src/attribution-v1.ts",
+    "packages/schemas/src/common.ts",
+    "packages/schemas/src/presentation-contract-v1.ts",
+  ]) {
+    await withRepositoryFixture(
+      {
+        [relativeFile]: `
+          export {
+            prepareStudentVisibleAnswerGuard,
+            type PreparedStudentVisibleAnswerGuard,
+          } from "./worksheet-instance-v1.js";
+        `,
+      },
+      async (repositoryRoot, findFixtureViolations) => {
+        assert.deepEqual(await findFixtureViolations(), [
+          `${relativeFile} exports non-allowlisted browser-safe leaf dependency "./worksheet-instance-v1.js"`,
+          `${relativeFile} exports trusted server-only binding "prepareStudentVisibleAnswerGuard" from "./worksheet-instance-v1.js"`,
+          `${relativeFile} exports trusted server-only binding "PreparedStudentVisibleAnswerGuard" from "./worksheet-instance-v1.js"`,
+        ]);
+      },
+    );
+  }
 });
 
 test("allows only direct reviewed bindings from mixed schema modules", async () => {
@@ -1835,8 +2043,7 @@ test("rejects browser imports and globs that cross into the Worker server root",
         'const projectors = import.meta.glob("/src/worker/*.ts");',
       "apps/web/src/react-app/shared-constructor-worker.ts":
         "const worker = new SharedWorker(new URL(`../worker/web-worksheet-projector.ts`, import.meta.url));",
-      "apps/web/src/worker/web-worksheet-projector.ts":
-        'import { trusted } from "@exercisebook/schemas/trusted-student-projection"; export const project = trusted;',
+      "apps/web/src/worker/web-worksheet-projector.ts": "export const project = true;",
     },
     async (repositoryRoot, findFixtureViolations) => {
       assert.deepEqual(await findFixtureViolations(), [

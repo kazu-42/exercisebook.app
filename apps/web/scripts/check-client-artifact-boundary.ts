@@ -6,6 +6,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const FORBIDDEN_CLIENT_ARTIFACT_TOKENS = Object.freeze([
   "projectWorksheetForStudentWithCanonicalAnswers",
   "projectWorksheetV2ForStudentWithCanonicalAnswers",
+  "prepareStudentVisibleAnswerGuard",
+  "assertDoesNotRevealAnyAnswer",
+  "assertDoesNotRevealAnswerAt",
   "assertStudentVisibleDataHasNoRecognizedCanonicalAnswers",
   "baseSeed",
   "excludedCanonicalAnswers",
