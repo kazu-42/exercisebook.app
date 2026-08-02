@@ -293,19 +293,23 @@ document hash but does not establish page layout.
 This remains a bounded semantic backend checkpoint, not implementation of the
 complete ADR. The active React UI still uses V1. Printable V2 HTML and artifacts,
 rendered A4 behavior, standalone lesson delivery, React V2 integration, and
-browser/visual/accessibility gates remain incomplete. The checkpoint is on
-`feat/v2-print-document`, stacked on `feat/v2-worksheet-api` at
-`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5). No child PR is
+browser/visual/accessibility gates remain incomplete. The prepared-guard
+checkpoint is on `feat/prepared-answer-guard`, stacked on
+`feat/v2-print-document` at
+`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6). No child PR is
 claimed here, and nothing in this checkpoint is merged or deployed.
 
 Reviewed content hashes and all five frozen V1 worksheet/PrintDocument/HTML
 identities remain unchanged. The V1 attribution schema also retains one runtime
 object identity across the root, safe-leaf, presentation, and worksheet
-exports. TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused
-evidence includes 142/142 print-package tests across 10 files, 330/330 schema
-tests across 5 files, 50/50 equivalent-fraction guard tests, 62/62 source/config
-boundary tests plus the live scan, 37/37 final module-provenance tests, and
-21/21 artifact-scanner tests. The fixed V2 worksheet instance hash is
+exports. The aggregate `pnpm check` is green with TypeScript 7.0.2 and
+1,315/1,315 Vitest tests across 48 files. Focused evidence is 143/143
+print-package tests across 10 files, 358/358 schema tests across 5 files
+(including 162/162 schema-contract tests), 75/75 equivalent/prepared-guard
+tests, 67/67 source/config boundary tests plus the live scan, 37/37 final
+module-provenance tests, and 24/24 artifact-scanner tests. Production build and
+existing sample verification pass without identity changes. The fixed V2
+worksheet instance hash remains
 `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
 The student PrintDocument hash is
 `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
@@ -388,14 +392,35 @@ reported no known vulnerabilities. Later advisory data may change that result.
   candidate, or integer bounds rejects the delivery instead of accepting a
   partial scan. This fail-closed policy may reject an answer-equivalent
   fraction-looking URL path or prose fragment.
-- The candidate budget bounds one role scan; it is not an aggregate projector
-  CPU bound. Answer signatures are currently rebuilt for each role scan, and
-  hostile but self-consistent 100–200-problem inputs with large integers have
-  measured about 0.17–2.8 seconds. Trusted planner/materializer replay must
-  precede print projection, and this checkpoint permits only the reviewed
-  4/6/8-problem, small-integer path. A prepared signature context reused across
-  projection, or narrower trusted item/integer bounds, is a release blocker
-  before any public synchronous render endpoint or broad 200-problem use.
+- Trusted server projectors prepare one opaque answer guard per authorization
+  phase. Preparation validates and detaches the canonical-answer array once and
+  constructs the complete and per-slot signature sets in O(N). Only
+  `@exercisebook/schemas/trusted-student-projection` exports this API; browser
+  source and artifact boundaries reject it. The root one-shot assertion remains
+  behavior-compatible for callers without a phase.
+- One prepared assertion has a combined 4,096-candidate cap across structured
+  and recognized-text rationals; all assertions in the phase share an 8,192-
+  candidate cap. End-to-end production Web/Print projection entrypoints have
+  two fixed authorization phases, and the replay-authorized V2 service path has
+  three. These fail-closed phase bounds neither replace trusted-replay-first
+  ordering nor establish a request-wide deadline, memory cap, or whole-CPU
+  guarantee.
+- A schema-valid, unique-answer boundary fixture consumes 6 candidates in
+  delivery and `12 + 10N` in the final Print phase, or `18 + 10N` across both
+  direct V2 phases. At N=200 the heavier phase consumes 2,012/8,192 and the
+  two-phase total is 2,018. Prepared trusted/full V2 p50 is 7.13/30.08 ms at
+  N=100 and 13.48/56.63 ms at N=200. These are local Apple M5 Pro / Node 26.5.0
+  reference measurements after 3 warmups and across 15 measured runs, not a CI
+  latency or SLO gate; deterministic counters and tests are the regression
+  evidence. Instrumented answer-guard BigInt conversions across trusted
+  delivery and final Print authorization are `24N + 36`: 4,836 at N=200 versus
+  the former guard-only 487,636 baseline, about 100.8x fewer. Other validation
+  and canonicalization conversions are outside this structural count.
+- Broad materialization has a distinct effective-envelope issue. A generated-
+  style payload passes at N=178 with 548,377 canonical bytes but fails at N=179
+  with 551,466 canonical bytes when complete safe-graph inspection exceeds its
+  1,000,000 string-code-unit cap. This is not a guard failure. A follow-up must
+  reconcile the advertised problem maximum with the materialization envelope.
 - Raw Markdown, raw HTML, general TeX, executable content, arbitrary URLs, and
   the full ContentDocument remain outside the delivery boundary.
 - A hash proves integrity but not safety; detached verification and final

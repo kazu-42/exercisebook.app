@@ -1,9 +1,9 @@
 # Content-derived presentation v1 execution ledger
 
 Status: in progress
-Branch: `feat/v2-print-document`
-Base: `feat/v2-worksheet-api` at
-`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5)
+Branch: `feat/prepared-answer-guard`
+Base: `feat/v2-print-document` at
+`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6)
 Specification: [content-derived-presentation-v1.md](content-derived-presentation-v1.md)
 Updated: 2026-08-02
 
@@ -28,9 +28,9 @@ available and byte-identical.
 | P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 planner foundation | complete |
 | P17-005 | Authorize detached StudentWorksheetDeliveryV2 | L | P17-004 | complete |
 | P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | in progress — backend checkpoint only |
-| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | in progress — semantic core complete; HTML/A4 pending |
+| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | in progress — semantic core and prepared guard complete; HTML/A4 pending |
 | P17-008 | Prove compatibility, artifacts, browser, and A4 gates | L | P17-006, P17-007 | pending |
-| P17-009 | Independent review, final checks, and stacked draft PR | M | bounded checkpoints before P17-008; closeout after P17-008 | in progress — Web backend and print-semantic checkpoints only |
+| P17-009 | Independent review, final checks, and stacked draft PR | M | bounded checkpoints before P17-008; closeout after P17-008 | in progress — Web backend, print-semantic, and prepared-guard checkpoints only |
 
 ## Dependency graph
 
@@ -332,7 +332,7 @@ Every value below must remain exact throughout Phase 1.7.
   - two V1 compatibility regressions prove that the attribution schema remains
     the same runtime object across root, safe-leaf, presentation, and worksheet
     exports rather than merely remaining structurally equivalent;
-  - the Vite/Oxc boundary suite passes 61/61 plus the live repository scan. It
+  - the Vite/Oxc boundary suite passes 67/67 plus the live repository scan. It
     enforces exact browser-safe public leaf imports and exact transitive source
     dependencies, along with the reviewed manifests, scripts, complete
     lockfile/workspace, Vite/Wrangler/PostCSS, HTML/CSS assets, and executable
@@ -343,7 +343,7 @@ Every value below must remain exact throughout Phase 1.7.
     answer, seed, scoring, and solution-trace tokens. The artifact walk rejects
     symbolic links and non-regular entries and fails closed above 1,000 total
     entries, 20 MiB of regular-file content, or depth 16. Focused integration
-    coverage passes 37/37 provenance tests and 21/21 scanner tests;
+    coverage passes 37/37 provenance tests and 24/24 scanner tests;
   - the raw token canary is defense in depth, not semantic absence proof.
     Tree-shaking is an optimization, not an authorization boundary; source
     reachability and final emitted-module provenance are separate gates;
@@ -431,8 +431,8 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-007 — PrintDocumentV2 and printable HTML
 
-- Status: in progress — renderer-neutral semantic core complete; printable
-  HTML, artifacts, and rendered A4 evidence pending
+- Status: in progress — renderer-neutral semantic core and prepared answer
+  guard complete; printable HTML, artifacts, and rendered A4 evidence pending
 - Type: feature / privacy / layout tests
 - Size: L
 - Dependencies: P17-005
@@ -488,6 +488,27 @@ Every value below must remain exact throughout Phase 1.7.
     `@exercisebook/schemas/trusted-student-projection` roots plus relative
     package modules. Planner, generator, compiler, unreviewed subpath, and
     test-only imports fail the boundary;
+  - the trusted subpath exposes an opaque prepared guard that validates and
+    detaches canonical answers once and precomputes complete/per-slot
+    signatures in O(N). Browser reachability checks reject the binding; the
+    legacy root one-shot assertion remains behavior-compatible;
+  - one prepared assertion has a 4,096-candidate cap across structured and
+    recognized-text rationals, and the phase shares an 8,192-candidate cap.
+    End-to-end production Web/Print projection entrypoints have two fixed
+    authorization phases, and the replay-authorized V2 service path has three;
+    these are not request-wide or whole-CPU bounds;
+  - the schema-valid, unique-answer boundary fixture consumes 6 candidates in
+    delivery and `12 + 10N` in the final Print phase, or `18 + 10N` across both
+    direct V2 phases. At N=200 the heavier phase consumes 2,012/8,192 and the
+    two-phase total is 2,018. Prepared trusted/full V2 p50 is 7.13/30.08 ms at
+    N=100 and 13.48/56.63 ms at N=200. These are local Apple M5 Pro / Node
+    26.5.0 reference measurements after 3 warmups and across 15 measured runs,
+    not a CI latency or SLO gate; deterministic counters and tests are the
+    regression evidence. Answer-guard BigInt conversions across trusted
+    delivery and final Print authorization are `24N + 36`: 4,836 at N=200
+    versus the former guard-only 487,636 baseline, about 100.8x fewer.
+    Validation and canonicalization conversions are outside this structural
+    count;
   - the fixed V2 worksheet instance hash is
     `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
   - the student PrintDocument hash is
@@ -497,24 +518,28 @@ Every value below must remain exact throughout Phase 1.7.
   - the answer-key PrintDocument hash is
     `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
     at 16,012 bytes, leaving 3,983,988 bytes;
-  - TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused
-    evidence is 142/142 print-package tests across 10 files, 330/330 schema
-    tests across 5 files, 50/50 equivalent-fraction guard tests, 62/62
+  - the aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
+    Vitest tests across 48 files. Focused evidence is 143/143 print-package
+    tests across 10 files, 358/358 schema tests across 5 files (including
+    162/162 schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
     source/config boundary tests plus the live scan, 37/37 final
-    module-provenance tests, and 21/21 artifact-scanner tests;
+    module-provenance tests, and 24/24 artifact-scanner tests. Production build
+    and existing sample verification pass without identity changes; the
+    production client records 112 modules and the scanner covers 328,591 bytes;
   - the real V1 pipeline freezes the WorksheetInstance, student/key
     PrintDocument, and student/key HTML identities listed in the baseline table.
 - Remaining before P17-007 completion:
   - `renderPrintableHtmlV2` and a complete V2 print-semantic snapshot;
   - V2 HTML hashes plus checked-in artifacts/manifests;
   - standalone lesson/Web/print semantic snapshot parity;
-  - remove the aggregate CPU release blocker before any public synchronous
-    render endpoint or broad 200-problem path. Answer signatures are currently
-    rebuilt per role scan, and hostile self-consistent broad/large-integer
-    inputs have measured about 0.17–2.8 seconds. Until one prepared signature
-    context is reused across projection or trusted item/integer bounds narrow,
-    trusted replay must precede projection and only the reviewed 4/6/8-problem,
-    small-integer path is allowed;
+  - decide the effective materialization envelope separately from the prepared
+    guard: a generated-style payload passes N=178 at 548,377 canonical bytes
+    and fails N=179 at 551,466 bytes because complete safe-graph inspection
+    exceeds the 1,000,000 string-code-unit cap. This is a follow-up contract
+    decision, not a guard failure;
+  - establish request-wide runtime/failure budgets before a public synchronous
+    render endpoint. The implemented fixed phase caps do not constitute a
+    whole-request CPU or memory guarantee;
   - browser-rendered A4 page count, clipping, page-break, extracted-text,
     accessibility, and working-space evidence. The semantic `paper: "a4"`
     discriminator is not that evidence.
@@ -548,12 +573,23 @@ Every value below must remain exact throughout Phase 1.7.
   - exact page counts, clipping/read-order result, response maxima, and all v2
     hashes are recorded in this ledger.
 - Current partial evidence:
-  - TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass, together with
-    142/142 print-package tests across 10 files, 330/330 schema tests across 5
-    files, 50/50 equivalent-fraction guard tests, 62/62 source/config boundary
-    tests plus the live scan, 37/37 final module-provenance tests, and 21/21
-    artifact-scanner tests; production build and existing exact content/artifact
-    verification also pass;
+  - the aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
+    Vitest tests across 48 files. Focused evidence is 143/143 print-package
+    tests across 10 files, 358/358 schema tests across 5 files (including
+    162/162 schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
+    source/config boundary tests plus the live scan, 37/37 final
+    module-provenance tests, and 24/24 artifact-scanner tests. Production build
+    and existing sample verification pass without identity changes; the
+    production client records 112 modules and the scanner covers 328,591 bytes;
+  - prepared trusted/full V2 p50 is 7.13/30.08 ms at N=100 and 13.48/56.63 ms
+    at N=200. These are local Apple M5 Pro / Node 26.5.0 reference measurements
+    after 3 warmups and across 15 measured runs, not a CI latency or SLO gate;
+    deterministic counters and tests are the regression evidence. Structural
+    instrumentation reduces N=200 answer-guard
+    BigInt conversions across trusted delivery and final Print authorization
+    from 487,636 to 4,836. Validation/canonicalization conversions are outside
+    that count. These measurements address repeated answer preparation, not the
+    separate request-wide runtime or materialization envelope gates;
   - revision-1/revision-2 content hashes and every frozen V1
     WorksheetInstance/PrintDocument/HTML identity remain unchanged under an
     explicit real-pipeline compatibility test;
@@ -571,8 +607,8 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-009 — Independent review and stacked draft PR
 
-- Status: in progress — bounded Web backend and print-semantic checkpoints
-  only; Phase 1.7 closeout remains dependent on P17-008
+- Status: in progress — bounded Web backend, print-semantic, and prepared-guard
+  checkpoints only; Phase 1.7 closeout remains dependent on P17-008
 - Type: review / delivery
 - Size: M
 - Dependencies: bounded checkpoints after the P17-006 backend subset and
@@ -583,8 +619,8 @@ Every value below must remain exact throughout Phase 1.7.
   - independent adversarial privacy/snapshot review;
   - independent Web/lesson/print accessibility and release-readiness review;
   - repaired findings and rerun focused/full gates;
-  - focused commits pushed to `feat/v2-print-document`;
-  - bounded stacked draft PR targeting `feat/v2-worksheet-api`;
+  - focused commits pushed to `feat/prepared-answer-guard`;
+  - bounded stacked draft PR targeting `feat/v2-print-document`;
   - final Phase 1.7 review and release checkpoint after P17-008.
 - Completion evidence:
   - clean worktree and exact local/remote/head SHA agreement;
@@ -593,10 +629,10 @@ Every value below must remain exact throughout Phase 1.7.
   - no merge, deployment, DNS, or license mutation;
   - remaining findings recorded as explicit next-loop work.
 - Current evidence:
-  - local full checks for the bounded Web backend and print-semantic checkpoints
-    pass with the exact counts recorded under P17-008;
-  - the branch is stacked on `feat/v2-worksheet-api` at
-    `ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5), with no
+  - the aggregate `pnpm check` for the bounded Web backend, print semantic core,
+    and prepared guard passes with the exact counts recorded under P17-008;
+  - the branch is stacked on `feat/v2-print-document` at
+    `129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6), with no
     merge or deployment;
   - no child draft PR has been created at this documentation checkpoint;
   - child draft-PR state, exact local/remote head agreement, and final CI are

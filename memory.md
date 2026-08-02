@@ -461,10 +461,74 @@ accessibility, or rendered layout. Printable V2 HTML, content-addressed HTML
 artifacts and manifests, a complete V2 print-semantic snapshot, standalone
 lesson/Web/print parity, React integration, browser/A4 acceptance, and final
 Phase 1.7 review remain open. The next safe non-UI slice is the V2 printable
-renderer and artifact boundary. It must also remove the aggregate CPU release
-blocker: answer signatures are currently rebuilt for each role scan, and hostile
-self-consistent 100–200-problem/large-integer inputs have measured about
-0.17–2.8 seconds. Trusted replay must precede projection, and only the reviewed
-4/6/8-problem small-integer path is allowed until one prepared signature context
-is reused across projection or trusted item/integer bounds are narrowed. Public
-synchronous rendering and broad 200-problem use remain blocked until then.
+renderer and artifact boundary. The following prepared-guard checkpoint removes
+the repeated answer-signature preparation blocker without weakening trusted
+replay or widening browser authority. Public synchronous rendering still
+requires request-wide resource evidence and the separately discovered
+materialization-envelope contract decision.
+
+## 2026-08-02 - Prepare canonical answers once per authorization phase
+
+**Context**: Role-sensitive V1/V2 delivery, Web, and Print authorization called
+the legacy canonical-answer assertion repeatedly. Each call rebuilt every
+answer's rational signature, so otherwise bounded 100–200-problem projections
+performed quadratic BigInt work. The guard needed reuse without exposing
+canonical answers to browser code or changing the established one-shot API.
+
+**Decision**: Add an opaque, trusted-server prepared answer guard exported only
+from `@exercisebook/schemas/trusted-student-projection`. Preparation validates
+and detaches canonical answers once and constructs complete and per-slot
+signature sets in O(N). The existing root one-shot assertion retains its
+behavior and validation order for compatibility. Each prepared assertion has
+one combined 4,096-candidate cap across structured and recognized-text
+rationals, while all assertions in one phase share an 8,192-candidate cap.
+End-to-end production Web or Print projection entrypoints execute two fixed
+authorization phases; the replay-authorized V2 service executes three. These
+phase-local caps fail closed but do not claim a request-wide deadline, memory
+limit, or whole-CPU bound.
+
+**Evidence**: The schema-valid, unique-answer boundary fixture consumes 6
+candidates in delivery and `12 + 10N` in the final Print phase, or `18 + 10N`
+across both direct V2 phases. At N=200 the heavier phase consumes 2,012/8,192
+and the two-phase total is 2,018. Prepared trusted/full V2 p50 is 7.13/30.08 ms
+at N=100 and 13.48/56.63 ms at N=200. These are local Apple M5 Pro / Node 26.5.0
+reference measurements after 3 warmups and across 15 measured runs, not a CI
+latency or SLO gate; deterministic counters and tests are the regression
+evidence. Instrumented answer-guard BigInt conversions across trusted delivery
+and final Print authorization are `24N + 36`: 4,836 at N=200 versus the former
+guard-only 487,636 baseline, about 100.8x fewer. Other validation and
+canonicalization BigInt work is outside that structural count. The aggregate
+`pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315 Vitest tests across
+48 files. Focused totals are 143/143 print-package tests across 10 files,
+358/358 schema tests across 5 files (including 162/162 schema-contract tests),
+75/75 equivalent/prepared-guard tests, 67/67 source/config boundary tests plus
+the live scan, 37/37 final module-provenance tests, and 24/24 artifact-scanner
+tests. The production build records 112 client modules, the all-regular-file
+scanner covers 328,591 bytes, and existing samples verify without identity
+changes. This local checkpoint is on
+`feat/prepared-answer-guard`, stacked on `feat/v2-print-document` at
+`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6); no child PR,
+merge, or deployment is claimed here.
+
+The frozen V1 instance, student/key PrintDocument, and student/key HTML hashes
+remain respectively
+`5252ef64b127638b785a94b3a2c7d1859cd7299e7032bed10aa41e07b2c4d12b`,
+`cd53a76b9c22c3a3e4af307f8d8bc19f60b9fd3845d5d4112637a2c5cb140c1f`,
+`f69fcc570f557f163a1f08fb766a507afbd29bd987577e40aecc8ffef96d0ec3`,
+`2ff0c371d280373cfc48283e8839f9766f328f6dd23ec35a150e28012228c22d`,
+and `ac08a37f20b62a7ab2d7b1ca701b281c7124bc550db05ffc2175472fc6112aca`.
+The V2 instance and student/key PrintDocument hashes remain
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`,
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`,
+and `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`.
+
+**Impact**: Repeated answer-signature preparation is no longer the broad-
+worksheet blocker, and no answer authority is newly browser-reachable. A
+separate generated-style materialization fixture passes N=178 with 548,377
+canonical bytes but fails N=179 with 551,466 canonical bytes because complete
+safe-graph inspection exceeds the 1,000,000 string-code-unit cap. That is an
+effective materialization-envelope contract issue, not a prepared-guard
+failure. The advertised problem maximum versus envelope bound requires a
+follow-up decision. Printable V2 HTML/artifacts, standalone lesson/Web parity,
+React integration, browser/accessibility/A4 evidence, request-wide public
+render budgets, and final Phase 1.7 review all remain open.
