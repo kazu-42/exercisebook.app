@@ -186,6 +186,23 @@ operands; matching scoring and solution fields are not sufficient by
 themselves. The final Web and Print student DTOs are independently validated
 and scanned after projection.
 
+Every raw and URI-decoded state also receives one scanner-only canonicalization
+step. It applies NFKC; folds Unicode `Dash_Punctuation` plus U+02D7, U+2043,
+U+2212, U+2796, and U+10D8F to ASCII `-`; folds U+02D6, U+16ED, U+2795, and
+U+10D8E to ASCII `+`; folds U+00F7, U+2298, U+2571, U+2797, U+27CB, U+29F8,
+U+2A38, and U+1F67C to ASCII `/`; and removes Unicode
+`Default_Ignorable_Code_Point` characters. The word grammar recognizes spaced
+`over`, `divided by`, and `division by`. These explicit sets follow reviewed
+sign, division, solidus, and confusable evidence while intentionally excluding
+unrelated letters and punctuation, ratio/colon notation, unreviewed or ambiguous
+decorated operators, and arbitrary cross-script word skeletons. This exposes
+tokens split by zero-width characters without changing delivered text. A
+`Bidi_Control` fails
+closed because removing it cannot reproduce visual order. The step is composed
+into the existing 24-state worklist rather than adding an unbounded
+normalization branch. Current V2 print is English-only; future RTL delivery
+requires a reviewed structured-bidi policy instead of relaxing this guard.
+
 ```mermaid
 sequenceDiagram
   participant Client
@@ -222,6 +239,15 @@ canonical-answer context are never serialized to browser state, DOM metadata,
 logs, analytics, public URLs, or student artifacts. Increasing a transport or
 document limit is a reviewed contract change, not an incidental response to
 presentation growth.
+
+The printable HTML adapter additionally fails closed above exactly 16,000,000
+emitted UTF-8 bytes or 65,536 emitted opening/void elements. A maximum
+validator-maximal element/cardinality answer-key fixture currently produces
+2,493,161 bytes and 59,046 elements. The byte count is specific to that fixture,
+not a claim that every text field is simultaneously maximal. These are
+defensive renderer bounds; they do not define a
+Cloudflare Worker CPU, memory, latency, request-size, or availability SLO and
+do not by themselves authorize a public synchronous rendering endpoint.
 
 ### 6. Verify the emitted client graph independently of source intent
 
@@ -290,26 +316,78 @@ and test-only imports so print projection cannot replan, regenerate, or look up
 current content. The semantic `paper: "a4"` discriminator participates in the
 document hash but does not establish page layout.
 
-This remains a bounded semantic backend checkpoint, not implementation of the
-complete ADR. The active React UI still uses V1. Printable V2 HTML and artifacts,
-rendered A4 behavior, standalone lesson delivery, React V2 integration, and
-browser/visual/accessibility gates remain incomplete. The prepared-guard
-checkpoint is on `feat/prepared-answer-guard`, stacked on
-`feat/v2-print-document` at
-`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6). No child PR is
-claimed here, and nothing in this checkpoint is merged or deployed.
+The print lane now also implements renderer `printable-html.v2` and semantic
+snapshot schema `exercisebook.print-semantic-snapshot/v2`. The renderer consumes
+only a validated detached PrintDocumentV2 and emits escaped, self-contained
+HTML without scripts, remote resources, forms, images, or fonts. The immutable
+sample manifest binds exactly nine content-addressed artifacts across the
+ContentDocumentV2, DailyPlanPreviewV2, WorksheetInstanceV2, student/key
+PrintDocumentV2, student/key semantic snapshots, and student/key HTML. Its
+publisher/verifier rejects missing, extra, changed, truncated, symbolic-link,
+FIFO, other non-regular, noncanonical-manifest, oversized, or conflicting final
+files. Nonblocking descriptor opens and bounded reads prevent hangs and
+unbounded allocation, while an exact same-byte replay remains unchanged.
+
+The sample command captures the fixed Markdown input before it loads the
+generation pipeline. It uses a nonfollowing, nonblocking regular-file
+descriptor, a 262,144-byte bound, fatal UTF-8 decoding, and stable size,
+modification-time, and change-time checks across the read. Symbolic links,
+FIFOs, oversized or invalidly encoded inputs, and concurrent source changes
+therefore fail before any artifact is published.
+
+That filesystem hardening assumes a trusted, developer-controlled local fixture
+directory and ancestor path. It is not dirfd-anchored against hostile ancestor
+replacement, does not provide directory-fsync crash-durable publication, and is
+not a protocol for concurrent writers targeting one directory. Such writers
+must use isolated output directories.
+
+The fixed student/key semantic snapshot identities are
+`313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`
+at 9,055 bytes and
+`540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`
+at 12,450 bytes. The corresponding HTML identities are
+`13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`
+at 23,436 bytes and
+`b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`
+at 29,297 bytes. The manifest also binds the already fixed content, plan,
+instance, and PrintDocument identities recorded in the execution ledger.
+
+Real Chromium inspection of both HTML variants found zero fetched resources,
+console errors or warnings, page errors, duplicate IDs, and missing ID
+references. Student/key output contains 7/13 labelled math roles respectively,
+no active elements, and no horizontal overflow. Axe reports zero violations,
+but `color-contrast` remains an incomplete manual-review item because the tool
+cannot resolve the `h1` background through the obscured background calculation;
+visual inspection of all pages does not convert that automated incomplete into
+a pass. PDF generation with the CSS page size produced 6/8 A4 pages at 594.96
+by 841.92 points. Visual inspection found no clipping, overlap, or unreadable
+glyphs; extracted text retained title, lesson, worked example, ordered problems
+and working spaces, ordered key entries, attribution, and source-instance
+order.
+
+This remains an unhosted technical prototype rather than completion of the
+ADR. The active React UI still uses V1; standalone lesson delivery,
+lesson/Web/print semantic parity, React V2 integration, product visual
+acceptance, automated cross-browser/responsive CI, and the final Phase 1.7
+release gate remain incomplete. A hosted/backend PDF service and its
+request-wide runtime, memory, queueing, retry, failure, and observability
+contracts are deferred. Nothing in this checkpoint is merged or deployed.
 
 Reviewed content hashes and all five frozen V1 worksheet/PrintDocument/HTML
 identities remain unchanged. The V1 attribution schema also retains one runtime
 object identity across the root, safe-leaf, presentation, and worksheet
-exports. The aggregate `pnpm check` is green with TypeScript 7.0.2 and
-1,315/1,315 Vitest tests across 48 files. Focused evidence is 143/143
-print-package tests across 10 files, 358/358 schema tests across 5 files
-(including 162/162 schema-contract tests), 75/75 equivalent/prepared-guard
-tests, 67/67 source/config boundary tests plus the live scan, 37/37 final
-module-provenance tests, and 24/24 artifact-scanner tests. Production build and
-existing sample verification pass without identity changes. The fixed V2
-worksheet instance hash remains
+exports. The frozen complete diff passes `pnpm check` with TypeScript 7.0.2,
+1,547/1,547 Vitest tests across 50 files, the production build, and unchanged V1
+and V2 sample replays. The HTML/artifact slice passes 274/274 focused
+print-package tests across 12 files, including 113 permanent artifact integration
+and negative tests, plus package typechecking, 68/68 source/config boundary
+tests and the live scan, reviewed-install verification, frozen offline install,
+dependency audit, dedupe, and `git diff --check`. Independent review of the
+frozen complete diff, including an exact-current whole-diff review and
+`codex review --uncommitted`, found no actionable correctness, privacy,
+determinism, boundary, or release-readiness defect. The bounded draft PR
+checkpoint may therefore proceed without implying Phase 1.7 completion.
+The fixed V2 worksheet instance hash remains
 `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
 The student PrintDocument hash is
 `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
@@ -320,10 +398,8 @@ at 16,012 bytes with 3,983,988 bytes of headroom.
 
 The 365-day maximum serialized V2 Web response remains 5,964/32,768 bytes
 (26,804 bytes headroom). The production client records 112 modules and the raw
-artifact scanner covers 328,591 bytes. These print hashes authenticate semantic
-JSON only: no V2 HTML/PDF artifact, page count, clipping, text extraction,
-accessibility, or rendered A4 conclusion follows from them. The patched
-Cloudflare development stack pins `@cloudflare/vite-plugin@1.49.0`,
+artifact scanner covers 328,591 bytes. The patched Cloudflare development stack
+pins `@cloudflare/vite-plugin@1.49.0`,
 `@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
 `miniflare@4.20260730.0` / `sharp@0.35.2`; the 2026-08-02 `pnpm audit` run
 reported no known vulnerabilities. Later advisory data may change that result.
@@ -387,11 +463,15 @@ reported no known vulnerabilities. Later advisory data may change that result.
 - Recognized fraction-like text is reduced to a bounded rational signature
   after the existing normalization closure. Slash and Unicode slash forms,
   spaced `over`, bounded TeX `\frac`, and bounded numerator/denominator
-  object-like text are covered. Decimal, percentage, and arbitrary
+  object-like text are covered. Scanner-only canonicalization folds the reviewed
+  minus, unary-plus, division, and solidus sets, removes default-ignorable
+  characters, and rejects bidi
+  controls at raw and URI-decoded states. Decimal, percentage, and arbitrary
   natural-language equivalents remain residual risks; exceeding the answer,
-  candidate, or integer bounds rejects the delivery instead of accepting a
-  partial scan. This fail-closed policy may reject an answer-equivalent
-  fraction-looking URL path or prose fragment.
+  candidate, state, URI-round, or integer bounds rejects the delivery instead
+  of accepting a partial scan. This fail-closed policy may reject an
+  answer-equivalent fraction-looking URL path or prose fragment, and current
+  English-only V2 output rejects bidi controls pending a structured RTL policy.
 - Trusted server projectors prepare one opaque answer guard per authorization
   phase. Preparation validates and detaches the canonical-answer array once and
   constructs the complete and per-slot signature sets in O(N). Only
@@ -416,11 +496,15 @@ reported no known vulnerabilities. Later advisory data may change that result.
   delivery and final Print authorization are `24N + 36`: 4,836 at N=200 versus
   the former guard-only 487,636 baseline, about 100.8x fewer. Other validation
   and canonicalization conversions are outside this structural count.
-- Broad materialization has a distinct effective-envelope issue. A generated-
-  style payload passes at N=178 with 548,377 canonical bytes but fails at N=179
-  with 551,466 canonical bytes when complete safe-graph inspection exceeds its
-  1,000,000 string-code-unit cap. This is not a guard failure. A follow-up must
-  reconcile the advertised problem maximum with the materialization envelope.
+- Broad materialization has a distinct structural maximum-envelope behavior.
+  The combined generated-style `{ instance, canonicalJson, instanceHash }` safe graph
+  passes at N=178 with 548,377 canonical instance bytes but fails at N=179 with
+  551,466 bytes because the aggregate contains duplicated semantic data and
+  exceeds the 1,000,000 string-code-unit inspection cap. The current public V2
+  policy emits only 4, 6, or 8 items, so this is neither a prepared-guard
+  failure nor a blocking public-path bug. A future problem-count expansion must
+  bound the instance graph and canonical UTF-8 representation independently;
+  it must not silently raise the aggregate cap or weaken validation.
 - Raw Markdown, raw HTML, general TeX, executable content, arbitrary URLs, and
   the full ContentDocument remain outside the delivery boundary.
 - A hash proves integrity but not safety; detached verification and final
@@ -530,6 +614,16 @@ This decision is implemented only when:
 - V2 student Web/print leak and resource-bound tests pass;
 - real responsive Web and A4 print accessibility/layout checks pass; and
 - every V1 fixed vector and checked-in artifact remains byte-identical.
+
+The fixed printable HTML artifacts now satisfy the local Chromium/A4 portion
+of this verification list. A separate validator-accepted Japanese/long-text
+probe also exercises mathematics, long explanation continuations, page breaks,
+answer areas, both variants, and attribution across 26/93 A4 pages; selected
+page images and full text extraction show no clipping or unreadable Japanese
+glyphs. The decision as a whole is not yet fully implemented because standalone
+lesson/student Web/answer-key Web parity,
+responsive React V2 behavior, product visual acceptance, automated
+cross-browser CI, final aggregate review, and release evidence remain open.
 
 ## References
 

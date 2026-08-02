@@ -13,16 +13,17 @@ before the content catalog expands.
 
 ## Project status
 
-The Phase 1 local walking skeleton, anonymous Phase 1.5 daily-plan preview, and
-Phase 1.6 student-delivery hardening are implemented on stacked draft branches.
-The repository compiles one draft English fraction lesson with author/reviewer
-metadata, materializes deterministic exact-rational problems, and projects the
-same immutable worksheet instance to:
+The Phase 1 local walking skeleton, anonymous Phase 1.5 daily-plan preview,
+Phase 1.6 student-delivery hardening, and a Phase 1.7 V2 technical print
+prototype are implemented locally across stacked development branches. The
+repository compiles one draft English fraction lesson with author/reviewer
+metadata, materializes deterministic exact-rational problems, and projects
+immutable worksheet instances to:
 
-- a Hono/React learning experience;
-- separate student and answer-key Web views;
-- renderer-neutral `PrintDocumentV1` data;
-- self-contained, print-ready A4 HTML for both variants;
+- a Hono/React V1 learning experience and separate student/answer-key views;
+- parallel renderer-neutral `PrintDocumentV1` and `PrintDocumentV2` data;
+- deterministic V2 student and answer-key semantic snapshots;
+- content-addressed, self-contained V2 A4 HTML and a verified sample manifest;
 - an unsaved `/new` preview with an explicit 8-, 12-, or 20-minute practice
   cap, a learner-readable reason, and same-instance browser printing.
 
@@ -30,14 +31,18 @@ The project is not deployed, connected to either purchased domain, or ready for
 learner data. The preview uses no account, learning history, cookie, browser
 storage, or durable write and makes no adaptive or mastery claim. Hosted PDF
 rendering, persistent assignments, evidence-based planning, accounts, and
-curriculum breadth remain later roadmap phases.
+curriculum breadth remain later roadmap phases. The current Web pages are a
+technical prototype, not an accepted product direction: product UI alignment,
+standalone V2 lesson/Web parity, and React V2 integration are still pending.
 
 The executable slices verify deterministic planner identities, stable problem
 prefixes across practice budgets, seeds and instance hashes, exact answers and
 solution traces, policy-owned exclusion of every rational exposed by the
 reviewed worked example, strict student-only delivery, hostile input/response
-rejection, keyboard access, Web/print semantic parity, A4 pagination, and
-production builds.
+rejection, keyboard access, preserved V1 Web/print semantic parity, V2
+PrintDocument/snapshot/HTML parity, exact V2 artifacts, and local A4
+browser/PDF rendering. That local PDF evidence is not a hosted PDF
+backend, persistence path, or product-layout acceptance.
 
 ## Local development
 
@@ -67,14 +72,18 @@ endpoint. Its request includes an explicit local date, IANA time zone, locale,
 reviewed goal, and practice limit; it never accepts a learner-selected seed or
 free-form learner data.
 
-Generate deterministic local worksheet, Web, and print artifacts with:
+Generate and verify both the preserved V1 sample and the reviewed V2
+content/plan/instance/print bundle with:
 
 ```bash
-pnpm worksheet:sample
+pnpm worksheet:samples
 ```
 
-Generated artifacts are ignored by Git. The canonical worksheet JSON is
-written byte-for-byte: its SHA-256 is the worksheet instance hash.
+Use `pnpm worksheet:sample` only when intentionally checking the frozen V1 path
+in isolation. Runtime output under `output/` is ignored by Git; the exact V2
+golden bundle is reviewed under
+`packages/test-fixtures/golden/print-v2/`. Canonical JSON and HTML are written
+byte-for-byte and named by SHA-256.
 
 ## Product model
 

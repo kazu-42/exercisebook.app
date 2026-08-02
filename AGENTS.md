@@ -187,8 +187,12 @@ Run the repository scripts when they exist:
 ```bash
 pnpm typecheck
 pnpm test
-pnpm worksheet:sample
+pnpm worksheet:samples
 ```
+
+`pnpm worksheet:samples` is the aggregate reviewed-sample gate. Use the
+singular `pnpm worksheet:sample` only when intentionally checking the preserved
+V1 sample in isolation.
 
 If PDF layout changes, render pages to images and visually inspect at least:
 Japanese text, mathematics, long explanations, page breaks, answer areas, and

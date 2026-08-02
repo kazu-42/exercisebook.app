@@ -3,7 +3,7 @@
 Status: implementation specification
 Branch: `feat/content-derived-presentation`
 Base: `feat/student-delivery-hardening`
-Updated: 2026-07-19
+Updated: 2026-08-02
 
 ## 1. Purpose
 
@@ -409,14 +409,26 @@ item count, or generator returns the sanitized planner result
 maps that result to the existing sanitized `503` body
 `{ code: "preview_unavailable", message: "This preview is temporarily unavailable." }`.
 
-After the registry has matched, missing/duplicate/wrong-type selected nodes,
-content-document/hash disagreement, arithmetic inconsistency, tuple mismatch,
-or materialization inconsistency is a typed trusted
-`PresentationResolutionError` or materialization error. Those indicate broken
-reviewed configuration or code, are never exposed verbatim, and the HTTP
-adapter maps them to the same sanitized `503 preview_unavailable` response.
-Malformed public request data remains the existing sanitized `4xx` path. No
-error response echoes content, policy, request bodies, hashes, or diagnostics.
+After the registry has matched, the service maps only an explicit reviewed
+allowlist of trusted presentation/configuration failures to the same sanitized
+`503 preview_unavailable` response. The current presentation allowlist is
+`content-identity-mismatch`, `invalid-selection`, `selected-node-count`,
+`selected-node-type`, `exercise-contract-mismatch`,
+`worked-example-arithmetic-mismatch`, `excluded-answer-tuple-mismatch`, and
+`presentation-invalid`. The current materialization allowlist is
+`unsupported-content-state`, `locale-mismatch`, and `generation-exhausted`.
+These codes represent reviewed content or configuration that is temporarily
+unavailable; injected outcomes must also agree exactly with a replay through
+the trusted implementation before they can be downgraded to unavailable.
+
+`unsafe-input`, presentation `invalid-content`, materialization
+`invalid-assignment`/`invalid-instance`, projector failures, and any future
+unclassified defect are not downgraded to availability failures. They
+propagate to the HTTP error boundary, which reports the unexpected failure and
+returns the sanitized generic `500 internal_error` response without exposing
+the exception. Malformed public request data remains the existing sanitized
+`4xx` path. No error response echoes content, policy, request bodies, hashes,
+or diagnostics.
 
 ## 10. WorksheetPresentationV1
 
@@ -616,6 +628,25 @@ states receive the remaining bounded transformations without surfacing a
 decoder exception. String recognition remains defense in depth, not a claim
 that arbitrary prose obfuscation is computable.
 
+At every raw and URI-decoded state, one composed scanner-only transform applies
+NFKC; maps Unicode `Dash_Punctuation` plus U+02D7, U+2043, U+2212, U+2796, and
+U+10D8F to ASCII `-`; maps U+02D6, U+16ED, U+2795, and U+10D8E to ASCII `+`;
+maps U+00F7, U+2298, U+2571, U+2797, U+27CB, U+29F8, U+2A38, and U+1F67C to
+ASCII `/`;
+and removes Unicode `Default_Ignorable_Code_Point` characters. Spaced `over`,
+`divided by`, and `division by` are recognized word separators. The explicit
+sets follow reviewed sign, division, solidus, and confusable evidence while
+intentionally excluding unrelated letters and punctuation, ratio/colon
+notation, unreviewed or ambiguous decorated operators, and arbitrary
+cross-script word skeletons. This
+exposes visually ordinary fractions separated by zero-width characters without
+changing the delivered text. Any `Bidi_Control` rejects the student projection
+because deleting a directional control cannot reconstruct visual order. The
+transform uses the same bounded worklist rather than adding a new unbounded
+branch. The current English-only V2 contract therefore fails closed on bidi
+controls; a future RTL contract requires an explicit structured-bidi policy and
+new acceptance vectors.
+
 ## 13. Web worksheet and standalone lesson
 
 `web-worksheet.v2` replaces the v1 `introduction` and application-owned
@@ -683,6 +714,79 @@ semantic reading order, escaped text, fraction accessibility, A4 page breaks,
 working space, and student/answer-key separation. More instructional content
 may increase page count; the renderer must not silently remove problems,
 steps, or working space to preserve an old page count.
+
+### 14.1 Printable HTML technical checkpoint
+
+The current technical prototype implements renderer
+`printable-html.v2` and semantic snapshot schema
+`exercisebook.print-semantic-snapshot/v2`. It emits self-contained HTML from a
+validated, detached `PrintDocumentV2`; it does not accept raw HTML, TeX, remote
+styles, scripts, images, fonts, forms, or other active resources. Exact output
+is fixed by the following nine-artifact bundle:
+
+| Artifact | UTF-8 bytes | SHA-256 |
+| --- | ---: | --- |
+| ContentDocumentV2 | 2,680 | `944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd` |
+| DailyPlanPreviewV2 | 1,527 | `a55f578df16f592c13b5d7d8dd03f196a03176af5827bfb2dc0e312d06eff8c3` |
+| WorksheetInstanceV2 | 20,941 | `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02` |
+| student PrintDocumentV2 | 12,077 | `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111` |
+| answer-key PrintDocumentV2 | 16,012 | `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd` |
+| student semantic snapshot | 9,055 | `313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67` |
+| answer-key semantic snapshot | 12,450 | `540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167` |
+| student HTML | 23,436 | `13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39` |
+| answer-key HTML | 29,297 | `b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d` |
+
+The immutable sample publisher and independent verifier require exactly those
+nine content-addressed files plus the canonical manifest; missing, extra,
+truncated, changed, symbolic-link, FIFO, other non-regular,
+noncanonical-manifest, oversized, and conflicting replay cases fail closed.
+Nonblocking descriptor opens and bounded reads prevent a special file or
+concurrently grown regular file from hanging the verifier or causing an
+unbounded allocation. A same-byte replay is idempotent and does not replace an
+existing artifact.
+
+Before pipeline loading or artifact publication, the sample generator captures
+the fixed Markdown source through a nonfollowing, nonblocking regular-file
+descriptor. It reads at most 262,144 bytes, decodes UTF-8 fatally, and requires
+the size, modification time, and change time to remain stable across the read.
+A symbolic link, FIFO, oversized source, invalid UTF-8, or concurrent source
+change fails closed.
+
+This local fixture contract assumes a trusted, developer-controlled output
+directory and ancestor path. `O_NOFOLLOW`, `O_NONBLOCK`, descriptor-bounded
+reads, and exact-byte comparison protect common mistakes, special files, and
+unexpected growth; they are not a dirfd-anchored defense against hostile
+ancestor replacement. Publication is neither a directory-fsync crash-durable
+transaction nor a concurrent-writer protocol. Writers targeting the same
+output directory are out of scope and must instead use isolated directories.
+
+Real Chromium inspection of the checked-in student and answer-key HTML found
+zero fetched resources, console errors or warnings, page errors, duplicate
+IDs, and missing ID references. The student/key variants expose 7/13 labelled
+`role="math"` nodes respectively, with visual math hidden from duplicate
+announcement. Axe reports zero violations, but `color-contrast` remains an
+incomplete manual-review item because the tool could not resolve the `h1`
+background through the obscured background calculation; visual inspection of
+every page does not convert that automated incomplete result into a pass.
+CSS-page-size PDF generation produced 6/8 A4 pages respectively, each 594.96 by
+841.92 points. Visual inspection found no clipping, overlap, or unreadable
+glyphs, and extracted text retained the order title, lesson, worked example,
+six problems and working spaces, answer key (key variant only), attribution,
+and source identity.
+
+A separate validator-accepted Japanese/long-text probe renders 137,077-byte
+student and 590,485-byte answer-key HTML with zero horizontal overflow across
+117/184 authored text and math surfaces. Its CSS-page-size PDFs contain 26/93
+A4 pages. Selected page images cover Japanese glyphs, mathematics, long
+explanation continuations, page breaks, answer areas, both variants, and
+attribution without clipping or unreadable text; full PDF text extraction
+retains the Japanese content. This probe is disposable local evidence, not a
+new frozen artifact or cross-platform font guarantee.
+
+This evidence establishes a fixed local Chromium/A4 technical prototype. It
+does not establish standalone lesson/Web/print semantic parity, React V2
+integration, product visual acceptance, automated cross-browser CI, a hosted
+or backend PDF service, or the final Phase 1.7 release gate.
 
 ## 15. Frozen v1 compatibility vectors
 
@@ -761,6 +865,22 @@ different bytes.
 - Lesson transport uses a 16 KiB delivered-byte limit, the shared 1,024
   non-final-read limit, fatal UTF-8, and the existing strict JSON depth/value
   limits.
+- Printable HTML fails closed above exactly 16,000,000 emitted UTF-8 bytes or
+  65,536 emitted opening/void elements. The validator-maximal
+  element/cardinality answer-key fixture currently renders to 2,493,161 bytes
+  and 59,046 elements. That byte count is specific to the fixture rather than
+  simultaneous maximum text in every authored field. These are defensive
+  renderer limits, not a Cloudflare Worker CPU, memory, latency, or endpoint
+  service-level objective.
+
+The broader generated-style aggregate materialization probe is a separate
+structural-envelope test: the combined `{ instance, canonicalJson, instanceHash }`
+safe graph passes at N=178 (548,377 canonical instance bytes) and fails at
+N=179 (551,466 bytes) when duplicated semantic data exceeds the aggregate
+1,000,000 string-code-unit inspection cap. The current public policy plans only
+4, 6, or 8 items, so this is not a blocking public-path bug and does not justify
+raising a global cap or weakening validation. Any future expansion must bound
+the instance graph and canonical UTF-8 representation independently.
 
 ### Accessibility
 

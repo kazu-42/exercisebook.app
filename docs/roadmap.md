@@ -6,12 +6,13 @@ Updated: 2026-08-02
 This roadmap is not a deployment-status page. Phase 1 is implemented as a
 local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
 and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3.
-The current `feat/prepared-answer-guard` checkpoint is stacked on
-`feat/v2-print-document` at
-`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6), but is neither
-merged nor deployed. No child PR is claimed by this local checkpoint.
-Production DNS, hosted Cloudflare persistence, and PDF backends remain gated
-future work.
+The current local `feat/v2-printable-html` checkpoint adds deterministic V2
+HTML, semantic snapshots, and a content-addressed sample-artifact lane on top of
+`feat/prepared-answer-guard` (draft PR #7), which is stacked on the V2
+PrintDocument checkpoint (draft PR #6). It is neither merged nor deployed, and
+no child PR is claimed by this local checkpoint. Production DNS, hosted
+Cloudflare persistence, Browser Run/Queue/R2 rendering, and PDF backends remain
+gated future work.
 
 ## Product direction
 
@@ -248,11 +249,13 @@ validation and canonicalization, explicit student and answer-key projectors,
 detached source verification, exact block grammar, final role-sensitive
 authorization, and content-addressed document identities are implemented. The
 prepared-answer guard is a third bounded checkpoint: trusted server phases now
-prepare answer signatures once in O(N) and reuse an opaque phase-local guard.
+prepare answer signatures once in O(N) and reuse an opaque phase-local guard. A
+fourth local checkpoint implements deterministic `printable-html.v2`, the
+`exercisebook.print-semantic-snapshot/v2` observation contract, and a
+content-addressed nine-artifact sample bundle with an exact immutable manifest.
 The active React `/new` flow still uses V1. Standalone lesson delivery, React
-V2 integration, printable V2 HTML and artifacts, and real-browser visual,
-accessibility, and rendered A4 acceptance are not implemented by these
-checkpoints.
+V2 integration, product-direction approval, hosted PDF rendering, and
+production artifact delivery are not implemented by these checkpoints.
 
 The print package root intentionally exposes only the reviewed V2 contract and
 projection surface. Internal block machinery, direct document materialization,
@@ -261,6 +264,44 @@ valid `PrintDocumentV2` is not thereby authorized: external delivery still
 requires projection from a detached, verified worksheet snapshot whose planner,
 content, and materializer authority was established by the application service.
 The semantic `paper: "a4"` discriminator is not layout evidence.
+
+The renderer validates and detaches the whole document before emitting
+self-contained HTML. Its module-local protective defaults are 16,000,000 exact
+UTF-8 bytes and 65,536 emitted elements; they are not Worker memory, latency,
+concurrency, or request SLOs. The validator-maximal element/cardinality fixture
+remains inside both bounds at 2,493,161 bytes and 59,046 elements. Its byte
+count is specific to that fixture and does not combine maximum text length in
+every authored field.
+
+For the pinned sample, the exact student and answer-key HTML identities are
+`13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`
+and
+`b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`.
+Their semantic-snapshot identities are
+`313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`
+and
+`540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`.
+The local bundle contains nine hash-named artifacts plus an exact manifest and
+fails closed on a missing, extra, changed, truncated, symlinked, FIFO,
+oversized, or relationship-inconsistent entry. Reads are nonblocking and
+descriptor-bounded; publication is immutable and no-clobber.
+
+Real-browser checks found self-contained output, unique IDs, resolved ARIA
+references, and labeled semantic math with its visual duplicate hidden from
+the accessibility tree. CSS-page-size PDFs are A4 at 594.96 by 841.92 points:
+six student pages and eight answer-key pages. Every page was visually inspected
+without clipping or overlap, and extracted headings remain ordered. This is
+local visual and structural-accessibility evidence, not a complete WCAG or
+tagged-PDF audit, a Browser Run result, or a backend PDF service acceptance.
+
+The required local layout-change probe also includes validator-accepted
+Japanese/long-text content. Student/key HTML is 137,077/590,485 bytes with zero
+horizontal overflow across 117/184 authored surfaces; CSS-page-size output is
+26/93 A4 pages. Representative rendered pages preserve Japanese glyphs,
+mathematics, long explanation continuations, page breaks, answer areas, both
+variants, and attribution, while full PDF text extraction retains the Japanese
+content. This remains machine-local font/layout evidence rather than a broad
+multilingual acceptance claim.
 
 The trusted-only prepared guard validates and detaches canonical answers once
 per authorization phase and precomputes complete and per-slot signatures in
@@ -287,12 +328,15 @@ fewer. Other validation/canonicalization conversions are outside that count.
 This removes the repeated-answer-preparation blocker while retaining trusted-
 replay-first ordering.
 
-Broad materialization has a separate unresolved envelope contract. The
-generated-style payload passes N=178 at 548,377 canonical bytes and fails N=179
-at 551,466 bytes because the complete safe-graph inspection reaches its
-1,000,000 string-code-unit cap. This is not a prepared-guard failure; the
-advertised problem maximum and materialization envelope must be reconciled in
-a follow-up contract decision.
+Broad materialization has a separate structural aggregate-wrapper issue. The
+fixture `{ instance, canonicalJson, instanceHash }` passes at N=178 and fails at N=179
+because it includes the same semantic material as both an object graph and a
+canonical string while the wrapper is inspected against the existing
+safe-graph string-code-unit cap. This is not a prepared-guard or renderer
+failure. It is unreachable from the current 4/6/8-problem planner and therefore
+is not a public preview blocker. The follow-up is to bound the instance graph
+and canonical UTF-8 string independently, not widen the global cap or narrow
+schema slots without a separate measured contract decision.
 
 The backend checkpoint also closes the client build-graph privacy gap at three
 layers: exact safe source leaves, final Rollup `OutputChunk.modules` provenance,
@@ -317,6 +361,10 @@ Deliver:
   instance hash commits the exact explanation shown;
 - Web worksheet, standalone lesson, and `PrintDocumentV2` projection from that
   presentation using the Phase 1.6 role-sensitive authorization boundary;
+- deterministic self-contained V2 printable HTML and role-specific semantic
+  snapshots from the authorized `PrintDocumentV2`;
+- an immutable content-addressed local sample bundle that verifies the complete
+  content-to-plan-to-instance-to-print-to-HTML relationship;
 - immutable preservation of all v1 content, worksheet, sample, and print
   artifacts and hashes.
 
@@ -621,24 +669,27 @@ policy-selection foundation, instance-bound presentation, exact prompt/answer
 relationship, detached student-delivery authorization, strict V2 Web DTO and
 projector, replay-authorized Worker service, exact V1/V2 HTTP dispatch,
 three-layer client build privacy gate, and renderer-neutral `PrintDocumentV2`
-semantic core plus the trusted-only prepared answer guard are implemented.
-Reviewed content and all five frozen V1
-worksheet/PrintDocument/HTML identities remain unchanged, including V1
-attribution runtime schema identity across public export paths. The aggregate
-`pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315 Vitest tests across
-48 files. Focused evidence is 143/143 print-package tests across 10 files,
-358/358 schema tests across 5 files (including 162/162 schema-contract tests),
-75/75 equivalent/prepared-guard tests, 67/67 source/config boundary tests plus
-the live scan, 37/37 final module-provenance tests, and 24/24 artifact-scanner
-tests. Production build and existing sample verification pass without identity
-changes. The fixed V2 instance hash remains
-`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
-the student and answer-key semantic PrintDocument hashes are respectively
-`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
-at 12,077 bytes and
-`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
-at 16,012 bytes. They leave 3,987,923 and 3,983,988 bytes beneath the
-4,000,000-byte canonical cap.
+semantic core plus the trusted-only prepared answer guard are implemented. The
+local checkpoint now also implements deterministic `printable-html.v2`, V2
+semantic snapshots, and an immutable content-addressed nine-artifact sample
+bundle. Reviewed content and all five frozen V1 worksheet/PrintDocument/HTML
+identities remain unchanged, including V1 attribution runtime schema identity
+across public export paths.
+
+The fixed V2 instance, student PrintDocument, and answer-key PrintDocument
+identities remain
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`,
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`,
+and
+`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`.
+The separately versioned student/answer-key HTML identities are
+`13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`
+and
+`b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`;
+the semantic snapshot identities are
+`313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`
+and
+`540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`.
 
 The maximum reviewed 365-day V2 Web response remains 5,964 bytes against the
 32,768-byte cap. The client build records 112 modules and the raw artifact
@@ -646,20 +697,25 @@ canary scans 328,591 bytes. At the pinned versions recorded in the architecture,
 the 2026-08-02 `pnpm audit` run reported no known vulnerabilities; later
 advisory data may change that result.
 
-The next safe non-UI slice is the V2 printable renderer and artifact boundary:
-`renderPrintableHtmlV2`, a complete V2 print-semantic snapshot, and
-content-addressed HTML fixtures/manifests. The repeated answer-signature CPU
-blocker is removed by the prepared guard, with p50 and structural evidence
-recorded above. Public synchronous rendering still needs request-wide runtime
-and failure-budget evidence; broad materialization also needs the N=178/N=179
-safe-graph envelope contract decision. Standalone lesson and Web parity, React
-V2 integration, integrated
-browser/accessibility/A4 evidence, and final Phase 1.7 release review remain
-after that. No page count, clipping, page-break, extracted-text, accessibility,
-or rendered A4 conclusion is inferred from the current semantic documents. The
-current local Web surface is a technical prototype; substantial navigation,
-information hierarchy, copy, or visual design work stays behind the
-product-direction gate above.
+The printable renderer and artifact-boundary slice is now implemented. Its
+local browser evidence covers self-contained HTML, structural accessibility,
+and visually inspected A4 output at six student pages and eight answer-key
+pages, with ordered extracted headings and no observed clipping or overlap.
+The module-local byte and element guards are protective implementation bounds,
+not request-wide runtime or failure-budget evidence; do not expose a public
+synchronous render surface based on those caps alone. The N=178/N=179 aggregate
+wrapper behavior is an unreachable structural follow-up for the current
+4/6/8-problem planner and should be fixed by independently bounding the
+instance and canonical string, not by widening the global guard.
+
+The remaining Phase 1.7 gates are final integrated review, standalone lesson
+and Web semantic parity, React V2 integration, and owner alignment on the
+learner journey and visual direction. The current local Web surface remains a
+technical prototype; substantial navigation, information hierarchy, copy, or
+visual design work stays behind that product-direction gate. Hosted rendering
+remains a later Queue-to-Browser-Run-to-R2 Phase 3 capability with its own
+idempotency, reconciliation, observability, cost, and rollback evidence; the
+local bundle is not a backend PDF service or deployment proof.
 
 Phase 1.6 remains the byte-preserved compatibility and rollback baseline; its
 executable contract is in
