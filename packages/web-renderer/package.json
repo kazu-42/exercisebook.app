@@ -17,6 +17,7 @@
     "react-dom": "19.2.7"
   },
   "dependencies": {
+    "@exercisebook/schemas": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

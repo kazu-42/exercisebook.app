@@ -8,7 +8,6 @@ import {
 
 import {
   assertSafeDataObjectGraph,
-  HttpUrlSchema,
   LocalDateSchema,
   LocaleSchema,
   RationalJsonSchema,
@@ -18,20 +17,14 @@ import {
   TimeZoneSchema,
 } from "./common.js";
 import { CONTENT_COMPILER_V1 } from "./content-document-v1.js";
+import { AttributionV1Schema } from "./attribution-v1.js";
+
+export { AttributionV1Schema } from "./attribution-v1.js";
+export type { AttributionV1 } from "./attribution-v1.js";
 
 export const WORKSHEET_INSTANCE_V1_SCHEMA = "exercisebook.worksheet-instance/v1";
 export const WORKSHEET_DELIVERY_V1_SCHEMA = "exercisebook.worksheet-delivery/v1";
 export const RNG_ALGORITHM_V1 = "xoshiro128ss-v1";
-
-export const AttributionV1Schema = z.strictObject({
-  title: z.string().min(1).max(240),
-  author: z.string().min(1).max(240),
-  sourceUrl: HttpUrlSchema,
-  licenseId: z.string().min(1).max(160),
-  attributionText: z.string().min(1).max(1_000),
-  publicationStatus: z.enum(["draft", "published"]),
-  modifications: z.array(z.string().min(1).max(500)).max(50),
-});
 
 export const FractionAdditionPromptV1Schema = z.strictObject({
   type: z.literal("fraction-addition"),
@@ -286,7 +279,6 @@ export type WorksheetInstanceV1 = z.infer<typeof WorksheetInstanceV1Schema>;
 export type WorksheetSlotV1 = z.infer<typeof WorksheetSlotV1Schema>;
 export type FractionAdditionPromptV1 = z.infer<typeof FractionAdditionPromptV1Schema>;
 export type SolutionStepV1 = z.infer<typeof SolutionStepV1Schema>;
-export type AttributionV1 = z.infer<typeof AttributionV1Schema>;
 
 export interface MaterializedWorksheetInstanceV1 {
   readonly instance: WorksheetInstanceV1;

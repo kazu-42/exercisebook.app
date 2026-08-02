@@ -124,18 +124,18 @@ const reviewedRootManifest = {
   },
   scripts: reviewedRootScripts,
   devDependencies: {
-    "@cloudflare/vitest-pool-workers": "0.18.6",
+    "@cloudflare/vitest-pool-workers": "0.19.1",
     "@types/node": "26.1.1",
     "fast-check": "4.9.0",
     prettier: "3.9.5",
     typescript: "7.0.2",
     vite: "8.1.5",
     vitest: "4.1.10",
-    wrangler: "4.112.0",
+    wrangler: "4.116.0",
   },
 };
 const reviewedWebScripts = {
-  build: "vite build",
+  build: "vite build && tsx scripts/check-client-artifact-boundary.ts",
   dev: "vite",
   preview: "vite preview",
   test: "vitest run",
@@ -159,7 +159,7 @@ const reviewedWebManifest = {
     "react-dom": "19.2.7",
   },
   devDependencies: {
-    "@cloudflare/vite-plugin": "1.45.1",
+    "@cloudflare/vite-plugin": "1.49.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
@@ -178,7 +178,10 @@ const reviewedDomainManifest = {
   version: "0.0.0",
   private: true,
   type: "module",
-  exports: { ".": "./src/index.ts" },
+  exports: {
+    ".": "./src/index.ts",
+    "./rational": "./src/rational.ts",
+  },
   scripts: {
     test: "vitest run --root ../.. packages/domain/src",
     typecheck: "tsc -p tsconfig.json --noEmit",
@@ -189,7 +192,10 @@ const reviewedPlannerManifest = {
   version: "0.0.0",
   private: true,
   type: "module",
-  exports: { ".": "./src/index.ts" },
+  exports: {
+    ".": "./src/index.ts",
+    "./public-preview-contract": "./src/public-preview-contract.ts",
+  },
   scripts: {
     test: "vitest run --root ../.. packages/planner/src",
     typecheck: "tsc -p tsconfig.json --noEmit",
@@ -210,6 +216,9 @@ const reviewedSchemasManifest = {
   type: "module",
   exports: {
     ".": "./src/index.ts",
+    "./attribution-v1": "./src/attribution-v1.ts",
+    "./presentation-contract-v1": "./src/presentation-contract-v1.ts",
+    "./public-data": "./src/common.ts",
     "./trusted-student-projection": "./src/trusted-student-projection.ts",
     "./json-schema/content-document-v1":
       "./json-schema/content-document-v1.schema.json",
@@ -255,6 +264,7 @@ const reviewedWebRendererManifest = {
     "react-dom": "19.2.7",
   },
   dependencies: {
+    "@exercisebook/schemas": "workspace:*",
     zod: "4.4.3",
   },
   devDependencies: {
@@ -275,8 +285,10 @@ const reviewedViteConfig = `
   import react from "@vitejs/plugin-react";
   import { defineConfig } from "vite";
 
+  import { clientModuleProvenance } from "./scripts/client-module-provenance.ts";
+
   export default defineConfig({
-    plugins: [react(), cloudflare()],
+    plugins: [react(), clientModuleProvenance(), cloudflare()],
     build: {
       sourcemap: false,
       target: "es2024",
@@ -324,8 +336,8 @@ overrides:
 
 allowBuilds:
   esbuild@0.28.1: true
-  sharp@0.34.5: true
-  workerd@1.20260714.1: true
+  sharp@0.35.2: true
+  workerd@1.20260730.1: true
 
 minimumReleaseAge: 1440
 `;
@@ -1312,9 +1324,9 @@ test("allows only reviewed runtime dependencies in production package sources", 
       "apps/web/src/react-app/allowed-runtime.ts": `
         import React from "react";
         import { createRoot } from "react-dom/client";
-        import { value as domain } from "@exercisebook/domain";
-        import { value as planner } from "@exercisebook/planner";
-        import { value as schemas } from "@exercisebook/schemas";
+        import { addRationals as domain } from "@exercisebook/domain/rational";
+        import { DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA as planner } from "@exercisebook/planner/public-preview-contract";
+        import { StableIdSchema as schemas } from "@exercisebook/schemas/public-data";
         import { value as renderer } from "@exercisebook/web-renderer";
         void React;
         void createRoot;
@@ -1349,9 +1361,11 @@ test("allows only reviewed runtime dependencies in production package sources", 
         void domain;
       `,
       "packages/web-renderer/src/allowed-runtime.ts": `
+        import { WorksheetPresentationV1Schema } from "@exercisebook/schemas/presentation-contract-v1";
         import React from "react";
         import { createRoot } from "react-dom/client";
         import { z } from "zod";
+        void WorksheetPresentationV1Schema;
         void React;
         void createRoot;
         void z;
@@ -1378,7 +1392,7 @@ test("blocks server-only packages from browser-safe workspace package roots", as
         'export { generate } from "@exercisebook/generators";',
       "packages/generators/src/index.ts": "export const generate = true;",
       "apps/web/src/react-app/planner.ts":
-        'import { plan } from "@exercisebook/planner";',
+        'import { DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA } from "@exercisebook/planner/public-preview-contract";',
     },
     async (repositoryRoot, findFixtureViolations) => {
       assert.deepEqual(await findFixtureViolations(), [
@@ -1393,24 +1407,18 @@ test("preserves the intentionally browser-safe workspace package surface", async
     {
       "apps/web/src/react-app/safe-workspaces.ts": `
         import {
-          projectWorksheetV2ForStudent,
-          StudentWorksheetDeliveryV2Schema,
-          validateStudentWorksheetDeliveryV2,
-        } from "@exercisebook/schemas";
-        import {
-          DailyPlanV2Schema,
-          validateDailyPlanV2,
-        } from "@exercisebook/planner";
-        import { SkillIdSchema } from "@exercisebook/domain";
+          DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2,
+          DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+        } from "@exercisebook/planner/public-preview-contract";
+        import { addRationals } from "@exercisebook/domain/rational";
+        import { StableIdSchema } from "@exercisebook/schemas/public-data";
         import { renderWorksheet } from "@exercisebook/web-renderer";
         export {
-          DailyPlanV2Schema,
-          projectWorksheetV2ForStudent,
+          addRationals,
+          DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+          DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2,
           renderWorksheet,
-          SkillIdSchema,
-          StudentWorksheetDeliveryV2Schema,
-          validateDailyPlanV2,
-          validateStudentWorksheetDeliveryV2,
+          StableIdSchema,
         };
       `,
     },
@@ -1418,6 +1426,157 @@ test("preserves the intentionally browser-safe workspace package surface", async
       assert.deepEqual(await findFixtureViolations(), []);
     },
   );
+});
+
+test("rejects domain, planner, and schema root barrels from browser production code", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/react-app/unsafe-workspace-roots.ts": `
+        import { deriveSlotSeed } from "@exercisebook/domain";
+        import { DailyPlanPreviewV2Schema } from "@exercisebook/planner";
+        import { StudentWorksheetDeliveryV2Schema } from "@exercisebook/schemas";
+        void deriveSlotSeed;
+        void DailyPlanPreviewV2Schema;
+        void StudentWorksheetDeliveryV2Schema;
+      `,
+      "apps/web/src/shared/unsafe-workspace-root-types.ts": `
+        import type { DailyPlanPreviewV2 } from "@exercisebook/planner";
+        type StudentDelivery =
+          import("@exercisebook/schemas").StudentWorksheetDeliveryV2;
+        export type { DailyPlanPreviewV2, StudentDelivery };
+      `,
+      "packages/web-renderer/src/unsafe-workspace-root-types.ts": `
+        export type { DailyPlanPreviewV2 } from "@exercisebook/planner";
+        export type { StudentWorksheetDeliveryV2 } from "@exercisebook/schemas";
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/react-app/unsafe-workspace-roots.ts imports non-allowlisted browser workspace dependency "@exercisebook/domain"',
+        'apps/web/src/react-app/unsafe-workspace-roots.ts imports non-allowlisted browser workspace dependency "@exercisebook/planner"',
+        'apps/web/src/react-app/unsafe-workspace-roots.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas"',
+        'apps/web/src/shared/unsafe-workspace-root-types.ts imports non-allowlisted browser workspace dependency "@exercisebook/planner"',
+        'apps/web/src/shared/unsafe-workspace-root-types.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas"',
+        'packages/web-renderer/src/unsafe-workspace-root-types.ts imports non-allowlisted browser workspace dependency "@exercisebook/planner"',
+        'packages/web-renderer/src/unsafe-workspace-root-types.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas"',
+      ]);
+    },
+  );
+});
+
+test("rejects every unreviewed planner and schema browser subpath exactly", async () => {
+  await withRepositoryFixture(
+    {
+      "apps/web/src/shared/unsafe-workspace-subpaths.ts": `
+        import type { DailyPlanPreviewV2 } from "@exercisebook/planner/daily-plan-preview-v2";
+        export type { WorksheetInstanceV2 } from "@exercisebook/schemas/worksheet-instance-v2";
+      `,
+      "packages/web-renderer/src/unsafe-workspace-subpaths.ts": `
+        type PlannerInternal =
+          import("@exercisebook/planner/public-preview-contract/internal").DailyPlanPreviewRequestV2;
+        export type { PlannerInternal };
+        export type { AttributionV1 } from "@exercisebook/schemas/attribution-v1/internal";
+        export type { WorksheetPresentationV1 } from "@exercisebook/schemas/presentation-contract-v1/internal";
+        export { StableIdSchema } from "@exercisebook/schemas/public-data/internal";
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'apps/web/src/shared/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/planner/daily-plan-preview-v2"',
+        'apps/web/src/shared/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas/worksheet-instance-v2"',
+        'packages/web-renderer/src/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/planner/public-preview-contract/internal"',
+        'packages/web-renderer/src/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas/attribution-v1/internal"',
+        'packages/web-renderer/src/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas/presentation-contract-v1/internal"',
+        'packages/web-renderer/src/unsafe-workspace-subpaths.ts imports non-allowlisted browser workspace dependency "@exercisebook/schemas/public-data/internal"',
+      ]);
+    },
+  );
+});
+
+test("allows only exact dependencies from browser-safe leaf entrypoints", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/planner/src/public-preview-contract.ts":
+        "export const requestSchema = 'v1';",
+      "packages/schemas/src/common.ts": `
+        import { MAX_CANONICAL_INTEGER_DIGITS } from "@exercisebook/domain/rational";
+        import { z } from "zod";
+        export { MAX_CANONICAL_INTEGER_DIGITS, z };
+      `,
+      "packages/schemas/src/attribution-v1.ts": `
+        import { z } from "zod";
+        export { HttpUrlSchema } from "./common.js";
+        export { z };
+      `,
+      "packages/schemas/src/presentation-contract-v1.ts": `
+        import { addRationals } from "@exercisebook/domain/rational";
+        import { z } from "zod";
+        export { AttributionV1Schema } from "./attribution-v1.js";
+        export { StableIdSchema } from "./common.js";
+        export { addRationals, z };
+      `,
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), []);
+    },
+  );
+
+  for (const [relativeFile, source, specifier] of [
+    [
+      "packages/planner/src/public-preview-contract.ts",
+      'export { planDailyWorksheet } from "./daily-plan-preview-v2.js";',
+      "./daily-plan-preview-v2.js",
+    ],
+    [
+      "packages/schemas/src/common.ts",
+      'export { MAX_CANONICAL_INTEGER_DIGITS } from "@exercisebook/domain";',
+      "@exercisebook/domain",
+    ],
+    [
+      "packages/schemas/src/common.ts",
+      'export { addRationals } from "@exercisebook/domain/rational/internal";',
+      "@exercisebook/domain/rational/internal",
+    ],
+    [
+      "packages/schemas/src/common.ts",
+      'export { WorksheetInstanceV2Schema } from "./worksheet-instance-v2.js";',
+      "./worksheet-instance-v2.js",
+    ],
+    [
+      "packages/schemas/src/attribution-v1.ts",
+      'export { WorksheetInstanceV1Schema } from "./worksheet-instance-v1.js";',
+      "./worksheet-instance-v1.js",
+    ],
+    [
+      "packages/schemas/src/attribution-v1.ts",
+      'export { z } from "zod/internal";',
+      "zod/internal",
+    ],
+    [
+      "packages/schemas/src/presentation-contract-v1.ts",
+      'export { addRationals } from "@exercisebook/domain";',
+      "@exercisebook/domain",
+    ],
+    [
+      "packages/schemas/src/presentation-contract-v1.ts",
+      'export { StableIdSchema } from "./common.js?raw";',
+      "./common.js?raw",
+    ],
+    [
+      "packages/schemas/src/presentation-contract-v1.ts",
+      'export { WorksheetInstanceV2Schema } from "./worksheet-instance-v2.js";',
+      "./worksheet-instance-v2.js",
+    ],
+  ]) {
+    await withRepositoryFixture(
+      { [relativeFile]: source },
+      async (repositoryRoot, findFixtureViolations) => {
+        assert.deepEqual(await findFixtureViolations(), [
+          `${relativeFile} exports non-allowlisted browser-safe leaf dependency ${JSON.stringify(specifier)}`,
+        ]);
+      },
+    );
+  }
 });
 
 test("rejects a trusted re-export through a protected workspace package", async () => {
@@ -1762,7 +1921,7 @@ test("keeps production browser paths inside their declared source roots", async 
       "apps/web/src/react-app/bridge.ts":
         'import { wrapped } from "../../../../packages/bridge/src/index.js";',
       "apps/web/src/react-app/planner.ts":
-        'import { plan } from "@exercisebook/planner";',
+        'import { DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA } from "@exercisebook/planner/public-preview-contract";',
       "apps/web/src/worker/index.ts": "export default {};",
     },
     async (repositoryRoot, findFixtureViolations) => {
@@ -2028,20 +2187,44 @@ test("locks the HTML entrypoint, CSS asset graph, and Vite resolver configuratio
       "const reviewed = defineConfig; export default reviewed(",
     ),
     reviewedViteConfig.replace(
-      "plugins: [react(), cloudflare()]",
-      "plugins: [react(), { config() {} }, cloudflare()]",
+      'from "./scripts/client-module-provenance.ts"',
+      'from "./scripts/client-module-provenance-wrapper.ts"',
     ),
     reviewedViteConfig.replace(
-      "plugins: [react(), cloudflare()]",
-      "plugins: [react(), ...extraPlugins, cloudflare()]",
+      "import { clientModuleProvenance }",
+      "import { clientModuleProvenance as unreviewedProvenance }",
     ),
     reviewedViteConfig.replace(
-      "plugins: [react(), cloudflare()]",
-      'plugins: [react({ jsxRuntime: "classic" }), cloudflare()]',
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [react(), { config() {} }, clientModuleProvenance(), cloudflare()]",
     ),
     reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [react(), ...extraPlugins, clientModuleProvenance(), cloudflare()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      'plugins: [react({ jsxRuntime: "classic" }), clientModuleProvenance(), cloudflare()]',
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [react(), clientModuleProvenance({}), cloudflare()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [clientModuleProvenance(), react(), cloudflare()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [react(), cloudflare(), clientModuleProvenance()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
       "plugins: [react(), cloudflare()]",
-      "plugins: [cloudflare(), react()]",
+    ),
+    reviewedViteConfig.replace(
+      "plugins: [react(), clientModuleProvenance(), cloudflare()]",
+      "plugins: [react(), clientModuleProvenance(), clientModuleProvenance(), cloudflare()]",
     ),
     reviewedViteConfig.replace("build: {", '["build"]: {'),
   ]) {
@@ -2053,7 +2236,7 @@ test("locks the HTML entrypoint, CSS asset graph, and Vite resolver configuratio
         await assert.rejects(
           () => findFixtureViolations(),
           new Error(
-            "apps/web/vite.config.mjs must exactly match the reviewed defineConfig/react/cloudflare configuration shape.",
+            "apps/web/vite.config.mjs must exactly match the reviewed defineConfig/react/client-module-provenance/cloudflare configuration shape.",
           ),
         );
       },
@@ -2287,6 +2470,7 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
         name: "@exercisebook/domain",
         exports: {
           ".": "../schemas/src/trusted-student-projection.ts",
+          "./rational": "./src/rational.ts",
         },
       },
     ],
@@ -2299,6 +2483,7 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
             browser: "../schemas/src/trusted-student-projection.ts",
             default: "./src/index.ts",
           },
+          "./public-preview-contract": "./src/public-preview-contract.ts",
         },
       },
     ],
@@ -2319,6 +2504,9 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
         name: "@exercisebook/schemas",
         exports: {
           ".": "./src/index.ts",
+          "./attribution-v1": "./src/attribution-v1.ts",
+          "./presentation-contract-v1": "./src/presentation-contract-v1.ts",
+          "./public-data": "./src/common.ts",
           "./trusted-student-projection": "./src/trusted-student-projection.ts",
           "./json-schema/content-document-v1":
             "./json-schema/content-document-v1.schema.json",
@@ -2336,7 +2524,10 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
       "packages/domain/package.json",
       {
         name: "@exercisebook/domain",
-        exports: { ".": "./src/index.ts" },
+        exports: {
+          ".": "./src/index.ts",
+          "./rational": "./src/rational.ts",
+        },
         main: "../schemas/src/trusted-student-projection.ts",
       },
     ],
@@ -2344,7 +2535,10 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
       "packages/planner/package.json",
       {
         name: "@exercisebook/planner",
-        exports: { ".": "./src/index.ts" },
+        exports: {
+          ".": "./src/index.ts",
+          "./public-preview-contract": "./src/public-preview-contract.ts",
+        },
         module: "../schemas/src/trusted-student-projection.ts",
       },
     ],
@@ -2352,7 +2546,10 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
       "packages/domain/package.json",
       {
         name: "@exercisebook/domain",
-        exports: { ".": "./src/index.ts" },
+        exports: {
+          ".": "./src/index.ts",
+          "./rational": "./src/rational.ts",
+        },
         "jsnext:main": "../schemas/src/trusted-student-projection.ts",
       },
     ],
@@ -2360,7 +2557,10 @@ test("locks browser package resolver metadata to reviewed public entrypoints", a
       "packages/planner/package.json",
       {
         name: "@exercisebook/planner",
-        exports: { ".": "./src/index.ts" },
+        exports: {
+          ".": "./src/index.ts",
+          "./public-preview-contract": "./src/public-preview-contract.ts",
+        },
         jsnext: "../schemas/src/trusted-student-projection.ts",
       },
     ],
@@ -2602,7 +2802,10 @@ test("locks browser dependency specifiers and build tooling to reviewed versions
       "packages/planner/package.json",
       {
         name: "@exercisebook/planner",
-        exports: { ".": "./src/index.ts" },
+        exports: {
+          ".": "./src/index.ts",
+          "./public-preview-contract": "./src/public-preview-contract.ts",
+        },
         dependencies: {
           "@exercisebook/domain": "npm:@exercisebook/bridge@1.0.0",
         },
@@ -2614,6 +2817,9 @@ test("locks browser dependency specifiers and build tooling to reviewed versions
         name: "@exercisebook/schemas",
         exports: {
           ".": "./src/index.ts",
+          "./attribution-v1": "./src/attribution-v1.ts",
+          "./presentation-contract-v1": "./src/presentation-contract-v1.ts",
+          "./public-data": "./src/common.ts",
           "./trusted-student-projection": "./src/trusted-student-projection.ts",
           "./json-schema/content-document-v1":
             "./json-schema/content-document-v1.schema.json",
@@ -2918,7 +3124,7 @@ test("ignores import-shaped text outside actual module loading syntax", async ()
         loader.require("@exercisebook/schemas/trusted-student-projection");
         const documentation = \`import("@exercisebook/schemas/trusted-student-projection")\`;
         const safeUrl = new URL("./safe-image.svg", import.meta.url);
-        import type { PublicProjection } from "@exercisebook/schemas";
+        import type { WorksheetPresentationV1 } from "@exercisebook/schemas/presentation-contract-v1";
       `,
     },
     async (repositoryRoot, findFixtureViolations) => {

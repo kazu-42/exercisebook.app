@@ -10,7 +10,7 @@ import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-resp
 import {
   DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
   type DailyPlanPreviewRequestV1,
-} from "@exercisebook/planner";
+} from "@exercisebook/planner/public-preview-contract";
 
 export { DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA };
 export { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES };

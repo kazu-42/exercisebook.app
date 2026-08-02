@@ -2,28 +2,28 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 export const REVIEWED_INSTALL_INPUT_SHA256 = Object.freeze({
-  "package.json": "48c995fadf04725948d63f4b9fe34d31ff79383346151c1dbcf01483e1882c3b",
-  "pnpm-lock.yaml": "98f5003b775e1b68b119095797949452859a9875d96aaf0b19f4796acf31e17e",
+  "package.json": "1a0684be1f1ad6c5be9689eaa113c4bc48998ce7b981364c5f908f93e0630134",
+  "pnpm-lock.yaml": "f1ab853bf33080bc153bf3a2412092dff8d0a973c3a351bbf0251f06ff1daa9b",
   "pnpm-workspace.yaml":
-    "429c25c2a28d77266a7b153f2664d2d1fa6ade41fb19589bd23964f69893a361",
+    "d79358652e7a27a03be67d38263092cb15cf0b6ebdb03f7222be29324ddebcdd",
   "apps/web/package.json":
-    "f020c01eeffedd8ef90464cb9820fdb0358005f255de87e6fe226037a390b9b0",
+    "b6d9816ac362971e2b9e368ccf5d2a852d0a43fc623e94c8e9ec0b0d390ce7b2",
   "packages/content-compiler/package.json":
     "97b339890371e4607a2587efdd56a5c54c824cf6d4004f937e8f4c75a6752f7a",
   "packages/domain/package.json":
-    "067afad13856173551a89c68197e7bd82c443582a9c3ec35b185309b221e8628",
+    "d6f812176d77d74e8f2419b91feebd68894847c342284eae9ee573adbb67caa9",
   "packages/generators/package.json":
     "2278cf4e6d542aa6a1bb570fd5075b0a4bb51d0089fa52be0c2cf3cbb0554b12",
   "packages/planner/package.json":
-    "23a7952782e695b34c86582f1a73176a6475dfb5a5e36533a0d1fcd185bfe5b2",
+    "0ec4f7520a56d59356ab9ad48f96e9b38ca647722276cdacd49b4d1953f88873",
   "packages/print-document/package.json":
     "d5213a2272cdbe93876ef441db69d7b4fa366da8de1ac36e02d3dbecc2ff598b",
   "packages/schemas/package.json":
-    "d2f51366c96b37fcb5c569816ccf5360b899648e0afbe74f65e106f2e97dc9c4",
+    "864eed2b228c2f055a1c2d2ed64f6c778ad5b24b8defcb46b195d72efdbfc17b",
   "packages/test-fixtures/package.json":
     "e5c26ea2c46e04c035a2231452ddb6698956c3612cc0aac90ea68f733bc69926",
   "packages/web-renderer/package.json":
-    "e595c93edbfc3024d9a186397674806e2ad1791c1f84d7cd286b734f9a380291",
+    "6e418e072a80ecb7841ae4b1982159301dc206f8f7589d67b003a81c111b3346",
 });
 
 export const REVIEWED_WORKSPACE_MANIFESTS = Object.freeze(

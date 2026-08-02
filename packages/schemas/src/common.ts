@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_CANONICAL_INTEGER_DIGITS } from "@exercisebook/domain";
+import { MAX_CANONICAL_INTEGER_DIGITS } from "@exercisebook/domain/rational";
 
 export { MAX_CANONICAL_INTEGER_DIGITS };
 

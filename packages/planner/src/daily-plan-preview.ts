@@ -7,9 +7,22 @@ import {
   assertSafeDataObjectGraph,
 } from "@exercisebook/schemas";
 import { z } from "zod";
+import {
+  DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
+  DAY_ONE_PREVIEW_POLICY_ID,
+  DAY_ONE_PREVIEW_POLICY_VERSION,
+  SELECTION_EXPLANATION,
+  type DailyPlanPreviewRequestV1,
+} from "./public-preview-contract.js";
 
-export const DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA =
-  "exercisebook.daily-plan-preview-request/v1";
+export {
+  DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
+  DAY_ONE_PREVIEW_POLICY_ID,
+  DAY_ONE_PREVIEW_POLICY_VERSION,
+  SELECTION_EXPLANATION,
+  type DailyPlanPreviewRequestV1,
+} from "./public-preview-contract.js";
+
 export const DAILY_PLAN_PREVIEW_V1_SCHEMA = "exercisebook.daily-plan-preview/v1";
 export const DAILY_PLAN_PREVIEW_REGISTRY_V1_SCHEMA =
   "exercisebook.daily-plan-preview-registry/v1";
@@ -19,12 +32,7 @@ export const PLAN_PREVIEW_REQUEST_IDENTITY_DOMAIN_V1 =
   "exercisebook/daily-plan-preview-request-identity/v1";
 export const PUBLIC_PREVIEW_SEED_VERSION_V1 = "public-preview-v1";
 
-export const SELECTION_EXPLANATION =
-  "This focused set practices the fraction goal you selected. It is a preview based on your goal and time limit, not a saved or mastery-based plan.";
-
 const GOAL_ID = "math.fractions.add-unlike";
-export const DAY_ONE_PREVIEW_POLICY_ID = "day-one-fraction-preview";
-export const DAY_ONE_PREVIEW_POLICY_VERSION = 2;
 export const DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS = Object.freeze([
   Object.freeze({ numerator: "1", denominator: "2" }),
   Object.freeze({ numerator: "1", denominator: "3" }),
@@ -55,10 +63,6 @@ export const DailyPlanPreviewRequestV1Schema = z.strictObject({
   timeZone: TimeZoneSchema,
   locale: z.literal("en"),
 });
-
-export type DailyPlanPreviewRequestV1 = Readonly<
-  z.infer<typeof DailyPlanPreviewRequestV1Schema>
->;
 
 export const DailyPlanPreviewRegistryV1Schema = z.strictObject({
   schema: z.literal(DAILY_PLAN_PREVIEW_REGISTRY_V1_SCHEMA),

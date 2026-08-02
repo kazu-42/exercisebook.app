@@ -1,24 +1,26 @@
 import {
-  DAY_ONE_PREVIEW_POLICY_ID,
-  DAY_ONE_PREVIEW_POLICY_VERSION,
-  SELECTION_EXPLANATION,
+  DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2,
+  DAY_ONE_PREVIEW_POLICY_ID_V3,
+  DAY_ONE_PREVIEW_POLICY_VERSION_V3,
+  DAY_ONE_PREVIEW_SELECTION_EXPLANATION_V2,
 } from "@exercisebook/planner/public-preview-contract";
 import {
   StableIdSchema,
   assertSafeDataObjectGraph,
 } from "@exercisebook/schemas/public-data";
 import {
-  validateStudentWebWorksheet,
-  type StudentWebWorksheet,
+  validateStudentWebWorksheetV2,
+  type StudentWebWorksheetV2,
 } from "@exercisebook/web-renderer";
 
-export const DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA =
-  "exercisebook.daily-plan-preview-response/v1";
+export const DAILY_PLAN_PREVIEW_RESPONSE_V2_SCHEMA =
+  "exercisebook.daily-plan-preview-response/v2";
 
-export const DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION = SELECTION_EXPLANATION;
+export const DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION_V2 =
+  DAY_ONE_PREVIEW_SELECTION_EXPLANATION_V2;
 
-export type DailyPlanPreviewResponseV1 = Readonly<{
-  schema: typeof DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA;
+export type DailyPlanPreviewResponseV2 = Readonly<{
+  schema: typeof DAILY_PLAN_PREVIEW_RESPONSE_V2_SCHEMA;
   plan: Readonly<{
     id: string;
     goalId: "math.fractions.add-unlike";
@@ -26,8 +28,8 @@ export type DailyPlanPreviewResponseV1 = Readonly<{
     plannedPracticeMinutes: 8 | 12 | 16;
     itemCount: 4 | 6 | 8;
     policy: Readonly<{
-      id: typeof DAY_ONE_PREVIEW_POLICY_ID;
-      version: typeof DAY_ONE_PREVIEW_POLICY_VERSION;
+      id: typeof DAY_ONE_PREVIEW_POLICY_ID_V3;
+      version: typeof DAY_ONE_PREVIEW_POLICY_VERSION_V3;
     }>;
     skillGraph: Readonly<{
       id: "phase-1-math";
@@ -35,10 +37,10 @@ export type DailyPlanPreviewResponseV1 = Readonly<{
     }>;
     evidenceKind: "none";
     selectionReasons: readonly ["current-frontier"];
-    selectionExplanation: typeof DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION;
+    selectionExplanation: typeof DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION_V2;
     saved: false;
   }>;
-  worksheet: StudentWebWorksheet;
+  worksheet: StudentWebWorksheetV2;
 }>;
 
 const responseKeys = ["schema", "plan", "worksheet"] as const;
@@ -57,19 +59,19 @@ const planKeys = [
 ] as const;
 
 /**
- * Validate the final public projection even when an injected application
- * service is statically typed. This is the last fail-closed boundary before a
- * value becomes an HTTP response or browser state.
+ * Validate the exact V2 student response immediately before it crosses the HTTP
+ * or browser-state boundary. Internal planner activities, generation values,
+ * and presentation-selection claims are intentionally absent.
  */
-export function validateDailyPlanPreviewResponseV1(
+export function validateDailyPlanPreviewResponseV2(
   value: unknown,
-): DailyPlanPreviewResponseV1 {
+): DailyPlanPreviewResponseV2 {
   assertSafeDataObjectGraph(value);
   const response = exactRecord(value, responseKeys, "$response");
-  literal(response.schema, DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA, "$response.schema");
+  literal(response.schema, DAILY_PLAN_PREVIEW_RESPONSE_V2_SCHEMA, "$response.schema");
 
-  const plan = validatePublicPlan(response.plan);
-  const worksheet = validateStudentWebWorksheet(response.worksheet);
+  const plan = validatePublicPlanV2(response.plan);
+  const worksheet = validateStudentWebWorksheetV2(response.worksheet);
   if (worksheet.assignmentId !== plan.id) {
     invalid("$response.worksheet.assignmentId", "must equal the plan ID");
   }
@@ -82,15 +84,16 @@ export function validateDailyPlanPreviewResponseV1(
       "must agree with plan.plannedPracticeMinutes",
     );
   }
+  validatePinnedPresentationContent(worksheet);
 
   return {
-    schema: DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA,
+    schema: DAILY_PLAN_PREVIEW_RESPONSE_V2_SCHEMA,
     plan,
     worksheet,
   };
 }
 
-function validatePublicPlan(value: unknown): DailyPlanPreviewResponseV1["plan"] {
+function validatePublicPlanV2(value: unknown): DailyPlanPreviewResponseV2["plan"] {
   const plan = exactRecord(value, planKeys, "$response.plan");
   const id = StableIdSchema.parse(plan.id);
   if (!/^preview-[0-9a-f]{64}$/u.test(id)) {
@@ -120,10 +123,10 @@ function validatePublicPlan(value: unknown): DailyPlanPreviewResponseV1["plan"] 
     ["id", "version"] as const,
     "$response.plan.policy",
   );
-  literal(policy.id, DAY_ONE_PREVIEW_POLICY_ID, "$response.plan.policy.id");
+  literal(policy.id, DAY_ONE_PREVIEW_POLICY_ID_V3, "$response.plan.policy.id");
   numberLiteral(
     policy.version,
-    DAY_ONE_PREVIEW_POLICY_VERSION,
+    DAY_ONE_PREVIEW_POLICY_VERSION_V3,
     "$response.plan.policy.version",
   );
 
@@ -146,7 +149,7 @@ function validatePublicPlan(value: unknown): DailyPlanPreviewResponseV1["plan"] 
   );
   literal(
     plan.selectionExplanation,
-    DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION,
+    DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION_V2,
     "$response.plan.selectionExplanation",
   );
   literal(plan.saved, false, "$response.plan.saved");
@@ -158,15 +161,44 @@ function validatePublicPlan(value: unknown): DailyPlanPreviewResponseV1["plan"] 
     plannedPracticeMinutes: expected.plannedPracticeMinutes,
     itemCount: expected.itemCount,
     policy: {
-      id: DAY_ONE_PREVIEW_POLICY_ID,
-      version: DAY_ONE_PREVIEW_POLICY_VERSION,
+      id: DAY_ONE_PREVIEW_POLICY_ID_V3,
+      version: DAY_ONE_PREVIEW_POLICY_VERSION_V3,
     },
     skillGraph: { id: "phase-1-math", revision: 1 },
     evidenceKind: "none",
     selectionReasons: ["current-frontier"],
-    selectionExplanation: DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION,
+    selectionExplanation: DAILY_PLAN_PREVIEW_SELECTION_EXPLANATION_V2,
     saved: false,
   };
+}
+
+function validatePinnedPresentationContent(worksheet: StudentWebWorksheetV2): void {
+  const content = worksheet.presentation.content;
+  literal(
+    content.id,
+    DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.id,
+    "$response.worksheet.presentation.content.id",
+  );
+  numberLiteral(
+    content.revision,
+    DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.revision,
+    "$response.worksheet.presentation.content.revision",
+  );
+  literal(
+    content.sourceHash,
+    DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.sourceHash,
+    "$response.worksheet.presentation.content.sourceHash",
+  );
+  literal(
+    content.contentHash,
+    DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.contentHash,
+    "$response.worksheet.presentation.content.contentHash",
+  );
+  literal(
+    content.compilerVersion,
+    DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.compilerVersion,
+    "$response.worksheet.presentation.content.compilerVersion",
+  );
 }
 
 function exactRecord<const T extends readonly string[]>(

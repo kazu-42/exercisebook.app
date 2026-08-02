@@ -30,15 +30,44 @@ const browserSafeProtectedRoots = new Set([
 ]);
 const browserWorkspaceAllowlist = new Set([
   "@exercisebook/domain",
+  "@exercisebook/domain/rational",
   "@exercisebook/planner",
+  "@exercisebook/planner/public-preview-contract",
   "@exercisebook/schemas",
+  "@exercisebook/schemas/presentation-contract-v1",
+  "@exercisebook/schemas/public-data",
+  "@exercisebook/web-renderer",
+  "@exercisebook/web-renderer/styles.css",
+]);
+const browserProductionWorkspaceAllowlist = new Set([
+  "@exercisebook/domain/rational",
+  "@exercisebook/planner/public-preview-contract",
+  "@exercisebook/schemas/presentation-contract-v1",
+  "@exercisebook/schemas/public-data",
   "@exercisebook/web-renderer",
   "@exercisebook/web-renderer/styles.css",
 ]);
 const protectedWorkspaceAllowlists = new Map([
   ["packages/domain/src", new Set()],
   ["packages/planner/src", new Set(["@exercisebook/domain", "@exercisebook/schemas"])],
-  ["packages/schemas/src", new Set(["@exercisebook/domain"])],
+  [
+    "packages/schemas/src",
+    new Set(["@exercisebook/domain", "@exercisebook/domain/rational"]),
+  ],
+]);
+const browserSafeLeafDependencyAllowlists = new Map([
+  ["packages/planner/src/public-preview-contract.ts", new Set()],
+  ["packages/schemas/src/common.ts", new Set(["@exercisebook/domain/rational", "zod"])],
+  ["packages/schemas/src/attribution-v1.ts", new Set(["./common.js", "zod"])],
+  [
+    "packages/schemas/src/presentation-contract-v1.ts",
+    new Set([
+      "@exercisebook/domain/rational",
+      "./attribution-v1.js",
+      "./common.js",
+      "zod",
+    ]),
+  ],
 ]);
 const browserReachableRoots = ["apps/web/src", "packages/web-renderer/src"];
 const browserManifestPolicies = [
@@ -49,7 +78,7 @@ const browserManifestPolicies = [
       private: true,
       type: "module",
       scripts: {
-        build: "vite build",
+        build: "vite build && tsx scripts/check-client-artifact-boundary.ts",
         dev: "vite",
         preview: "vite preview",
         test: "vitest run",
@@ -67,7 +96,7 @@ const browserManifestPolicies = [
         "react-dom": "19.2.7",
       },
       devDependencies: {
-        "@cloudflare/vite-plugin": "1.45.1",
+        "@cloudflare/vite-plugin": "1.49.0",
         "@testing-library/jest-dom": "6.9.1",
         "@testing-library/react": "16.3.2",
         "@testing-library/user-event": "14.6.1",
@@ -90,7 +119,10 @@ const browserManifestPolicies = [
       version: "0.0.0",
       private: true,
       type: "module",
-      exports: { ".": "./src/index.ts" },
+      exports: {
+        ".": "./src/index.ts",
+        "./rational": "./src/rational.ts",
+      },
       scripts: {
         test: "vitest run --root ../.. packages/domain/src",
         typecheck: "tsc -p tsconfig.json --noEmit",
@@ -105,7 +137,10 @@ const browserManifestPolicies = [
       version: "0.0.0",
       private: true,
       type: "module",
-      exports: { ".": "./src/index.ts" },
+      exports: {
+        ".": "./src/index.ts",
+        "./public-preview-contract": "./src/public-preview-contract.ts",
+      },
       scripts: {
         test: "vitest run --root ../.. packages/planner/src",
         typecheck: "tsc -p tsconfig.json --noEmit",
@@ -130,6 +165,9 @@ const browserManifestPolicies = [
       type: "module",
       exports: {
         ".": "./src/index.ts",
+        "./attribution-v1": "./src/attribution-v1.ts",
+        "./presentation-contract-v1": "./src/presentation-contract-v1.ts",
+        "./public-data": "./src/common.ts",
         "./trusted-student-projection": "./src/trusted-student-projection.ts",
         "./json-schema/content-document-v1":
           "./json-schema/content-document-v1.schema.json",
@@ -179,6 +217,7 @@ const browserManifestPolicies = [
         "react-dom": "19.2.7",
       },
       dependencies: {
+        "@exercisebook/schemas": "workspace:*",
         zod: "4.4.3",
       },
       devDependencies: {
@@ -244,8 +283,8 @@ overrides:
 
 allowBuilds:
   esbuild@0.28.1: true
-  sharp@0.34.5: true
-  workerd@1.20260714.1: true
+  sharp@0.35.2: true
+  workerd@1.20260730.1: true
 
 minimumReleaseAge: 1440
 `;
@@ -282,14 +321,14 @@ const reviewedRootManifest = {
   },
   scripts: reviewedRootScripts,
   devDependencies: {
-    "@cloudflare/vitest-pool-workers": "0.18.6",
+    "@cloudflare/vitest-pool-workers": "0.19.1",
     "@types/node": "26.1.1",
     "fast-check": "4.9.0",
     prettier: "3.9.5",
     typescript: "7.0.2",
     vite: "8.1.5",
     vitest: "4.1.10",
-    wrangler: "4.112.0",
+    wrangler: "4.116.0",
   },
 };
 const reviewedWranglerMain = "./src/worker/index.ts";
@@ -1068,11 +1107,11 @@ function isZeroArgumentCall(node, calleeName) {
 
 function assertReviewedViteConfig(source, sourceFile) {
   const error = new Error(
-    `${sourceFile} must exactly match the reviewed defineConfig/react/cloudflare configuration shape.`,
+    `${sourceFile} must exactly match the reviewed defineConfig/react/client-module-provenance/cloudflare configuration shape.`,
   );
   const ast = parseSourceAst(source, sourceFile);
   if (
-    ast.body.length !== 4 ||
+    ast.body.length !== 5 ||
     !isExactImport(
       ast.body[0],
       "@cloudflare/vite-plugin",
@@ -1094,12 +1133,19 @@ function assertReviewedViteConfig(source, sourceFile) {
       "defineConfig",
       "defineConfig",
     ) ||
-    ast.body[3]?.type !== "ExportDefaultDeclaration"
+    !isExactImport(
+      ast.body[3],
+      "./scripts/client-module-provenance.ts",
+      "ImportSpecifier",
+      "clientModuleProvenance",
+      "clientModuleProvenance",
+    ) ||
+    ast.body[4]?.type !== "ExportDefaultDeclaration"
   ) {
     throw error;
   }
 
-  const declaration = unwrapTransparentExpression(ast.body[3].declaration);
+  const declaration = unwrapTransparentExpression(ast.body[4].declaration);
   const config = unwrapTransparentExpression(declaration?.arguments?.[0]);
   if (
     declaration?.type !== "CallExpression" ||
@@ -1119,9 +1165,10 @@ function assertReviewedViteConfig(source, sourceFile) {
   if (
     !isPlainProperty(pluginsProperty, "plugins") ||
     plugins?.type !== "ArrayExpression" ||
-    plugins.elements.length !== 2 ||
+    plugins.elements.length !== 3 ||
     !isZeroArgumentCall(plugins.elements[0], "react") ||
-    !isZeroArgumentCall(plugins.elements[1], "cloudflare") ||
+    !isZeroArgumentCall(plugins.elements[1], "clientModuleProvenance") ||
+    !isZeroArgumentCall(plugins.elements[2], "cloudflare") ||
     !isPlainProperty(buildProperty, "build") ||
     build?.type !== "ObjectExpression" ||
     build.properties.length !== 2
@@ -1708,6 +1755,11 @@ function isUnapprovedWorkspaceImport(moduleLoad, allowlist, allowTestOnly) {
   );
 }
 
+function isUnapprovedBrowserSafeLeafDependency(relativeFile, moduleLoad) {
+  const allowlist = browserSafeLeafDependencyAllowlists.get(relativeFile);
+  return allowlist !== undefined && !allowlist.has(moduleLoad.specifier);
+}
+
 function isUnapprovedProductionExternalImport(moduleLoad, allowlist) {
   if (moduleLoad.kind !== "static") {
     return false;
@@ -2267,6 +2319,12 @@ export async function findImportBoundaryViolations(
       const source = await readFile(file, "utf8");
       const moduleLoads = extractModuleLoads(source, relativeFile);
       for (const moduleLoad of moduleLoads) {
+        if (isUnapprovedBrowserSafeLeafDependency(relativeFile, moduleLoad)) {
+          violations.push(
+            `${relativeFile} ${moduleLoad.operation} non-allowlisted browser-safe leaf dependency ${JSON.stringify(moduleLoad.specifier)}`,
+          );
+          continue;
+        }
         if (
           browserSafeProtectedRoots.has(relativeRoot) &&
           isUnreviewedBrowserStyleModule(moduleLoad)
@@ -2453,7 +2511,13 @@ export async function findImportBoundaryViolations(
           continue;
         }
         if (
-          isUnapprovedWorkspaceImport(moduleLoad, browserWorkspaceAllowlist, testSource)
+          isUnapprovedWorkspaceImport(
+            moduleLoad,
+            testSource
+              ? browserWorkspaceAllowlist
+              : browserProductionWorkspaceAllowlist,
+            testSource,
+          )
         ) {
           violations.push(
             `${relativeFile} imports non-allowlisted browser workspace dependency ${JSON.stringify(moduleLoad.specifier)}`,

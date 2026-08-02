@@ -1,25 +1,32 @@
 import { z } from "zod";
 
 import {
-  addRationals,
-  leastCommonMultiple,
-  type RationalJson,
-} from "@exercisebook/domain";
-
-import {
   assertSafeDataObjectGraph,
-  CanonicalIntegerStringSchema,
   HttpUrlSchema,
   LocaleSchema,
-  RationalJsonSchema,
   RevisionSchema,
   Sha256HexSchema,
   StableIdSchema,
 } from "./common.js";
 import { derivePhase1MathAccessibleText } from "./phase-1-safe-math.js";
+import {
+  CONTENT_COMPILER_V2,
+  FractionAdditionWorkedExampleModelV1Schema,
+  PresentationPlainTextV1Schema,
+} from "./presentation-contract-v1.js";
+
+export {
+  CONTENT_COMPILER_V2,
+  FractionAdditionWorkedExampleModelV1Schema,
+  PresentationPlainTextV1Schema,
+  deriveFractionAdditionWorkedExampleArithmetic,
+} from "./presentation-contract-v1.js";
+export type {
+  FractionAdditionWorkedExampleModelV1,
+  PresentationPlainTextV1,
+} from "./presentation-contract-v1.js";
 
 export const CONTENT_DOCUMENT_V2_SCHEMA = "exercisebook.content-ast/v2";
-export const CONTENT_COMPILER_V2 = "exercisebook-content-compiler/2";
 
 const TextInlineLeafV2Schema = z.strictObject({
   type: z.literal("text"),
@@ -56,121 +63,7 @@ export const ContentParagraphV2Schema = z.strictObject({
   children: z.array(ContentInlineV2Schema).min(1).max(2_000),
 });
 
-export const PresentationPlainTextV1Schema = z
-  .string()
-  .min(1)
-  .max(20_000)
-  .refine(
-    hasCanonicalPresentationWhitespace,
-    "Presentation text must use its canonical whitespace normalization",
-  );
-
 const PresentationBodyV1Schema = z.array(PresentationPlainTextV1Schema).min(1).max(8);
-
-const PositiveCanonicalIntegerStringSchema = CanonicalIntegerStringSchema.regex(
-  /^[1-9][0-9]*$/u,
-  "Expected a positive canonical integer",
-);
-
-// RationalJsonSchema's semantic refinement assumes structurally canonical
-// integers. Gate hostile V2 values through the non-throwing lexical contract
-// first so validation reports Zod issues rather than leaking BigInt errors.
-const WorkedExampleRationalJsonV1Schema = z
-  .strictObject({
-    numerator: CanonicalIntegerStringSchema,
-    denominator: CanonicalIntegerStringSchema,
-  })
-  .pipe(RationalJsonSchema);
-
-export const FractionAdditionWorkedExampleModelV1Schema = z
-  .strictObject({
-    type: z.literal("fraction-addition"),
-    left: WorkedExampleRationalJsonV1Schema,
-    right: WorkedExampleRationalJsonV1Schema,
-    result: WorkedExampleRationalJsonV1Schema,
-    commonDenominator: PositiveCanonicalIntegerStringSchema,
-    leftScaledNumerator: CanonicalIntegerStringSchema,
-    rightScaledNumerator: CanonicalIntegerStringSchema,
-    unreducedSumNumerator: CanonicalIntegerStringSchema,
-  })
-  .superRefine((model, context) => {
-    // Zod may run this outer refinement after a nested rational refinement has
-    // already reported an issue. Re-parse operands before BigInt arithmetic so
-    // hostile denominators cannot escape as division-by-zero RangeErrors.
-    const left = WorkedExampleRationalJsonV1Schema.safeParse(model.left);
-    const right = WorkedExampleRationalJsonV1Schema.safeParse(model.right);
-    if (!left.success || !right.success) {
-      return;
-    }
-    let expected: ReturnType<typeof deriveFractionAdditionWorkedExampleArithmetic>;
-    try {
-      expected = deriveFractionAdditionWorkedExampleArithmetic(left.data, right.data);
-    } catch (error) {
-      if (!(error instanceof RangeError)) {
-        throw error;
-      }
-      context.addIssue({
-        code: "custom",
-        message:
-          "The worked-example arithmetic exceeds the bounded canonical integer contract",
-        path: [],
-      });
-      return;
-    }
-    const checks: readonly {
-      readonly actual: string;
-      readonly expected: string;
-      readonly field:
-        | "commonDenominator"
-        | "leftScaledNumerator"
-        | "rightScaledNumerator"
-        | "unreducedSumNumerator";
-      readonly label: string;
-    }[] = [
-      {
-        actual: model.commonDenominator,
-        expected: expected.commonDenominator,
-        field: "commonDenominator",
-        label: "common denominator",
-      },
-      {
-        actual: model.leftScaledNumerator,
-        expected: expected.leftScaledNumerator,
-        field: "leftScaledNumerator",
-        label: "left scaled numerator",
-      },
-      {
-        actual: model.rightScaledNumerator,
-        expected: expected.rightScaledNumerator,
-        field: "rightScaledNumerator",
-        label: "right scaled numerator",
-      },
-      {
-        actual: model.unreducedSumNumerator,
-        expected: expected.unreducedSumNumerator,
-        field: "unreducedSumNumerator",
-        label: "unreduced sum numerator",
-      },
-    ];
-    for (const check of checks) {
-      if (check.actual !== check.expected) {
-        context.addIssue({
-          code: "custom",
-          message: `The ${check.label} must equal its exact arithmetic derivation`,
-          path: [check.field],
-        });
-      }
-    }
-
-    const result = WorkedExampleRationalJsonV1Schema.safeParse(model.result);
-    if (result.success && !sameRational(result.data, expected.result)) {
-      context.addIssue({
-        code: "custom",
-        message: "The worked-example result must equal the exact sum of its operands",
-        path: ["result"],
-      });
-    }
-  });
 
 const DirectiveBodyV2Schema = z.array(ContentParagraphV2Schema).min(1).max(200);
 
@@ -303,48 +196,10 @@ export type ContentDocumentV2 = z.infer<typeof ContentDocumentV2Schema>;
 export type ContentBlockV2 = z.infer<typeof ContentBlockV2Schema>;
 export type ContentParagraphV2 = z.infer<typeof ContentParagraphV2Schema>;
 export type ContentInlineV2 = z.infer<typeof ContentInlineV2Schema>;
-export type FractionAdditionWorkedExampleModelV1 = z.infer<
-  typeof FractionAdditionWorkedExampleModelV1Schema
->;
-export type PresentationPlainTextV1 = z.infer<typeof PresentationPlainTextV1Schema>;
 
 export function validateContentDocumentV2(value: unknown): ContentDocumentV2 {
   assertSafeDataObjectGraph(value);
   return ContentDocumentV2Schema.parse(value);
-}
-
-export function deriveFractionAdditionWorkedExampleArithmetic(
-  left: RationalJson,
-  right: RationalJson,
-): Readonly<{
-  commonDenominator: string;
-  leftScaledNumerator: string;
-  rightScaledNumerator: string;
-  unreducedSumNumerator: string;
-  result: RationalJson;
-}> {
-  const leftDenominator = BigInt(left.denominator);
-  const rightDenominator = BigInt(right.denominator);
-  const commonDenominator = leastCommonMultiple(leftDenominator, rightDenominator);
-  const leftScaledNumerator =
-    BigInt(left.numerator) * (commonDenominator / leftDenominator);
-  const rightScaledNumerator =
-    BigInt(right.numerator) * (commonDenominator / rightDenominator);
-  return {
-    commonDenominator: commonDenominator.toString(),
-    leftScaledNumerator: leftScaledNumerator.toString(),
-    rightScaledNumerator: rightScaledNumerator.toString(),
-    unreducedSumNumerator: (leftScaledNumerator + rightScaledNumerator).toString(),
-    result: addRationals(left, right),
-  };
-}
-
-function hasCanonicalPresentationWhitespace(value: string): boolean {
-  return value.replaceAll(/[\p{White_Space}\uFEFF]+/gu, " ").trim() === value;
-}
-
-function sameRational(left: RationalJson, right: RationalJson): boolean {
-  return left.numerator === right.numerator && left.denominator === right.denominator;
 }
 
 function validateContentMath(

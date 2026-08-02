@@ -13,25 +13,27 @@ import {
   TimeZoneSchema,
 } from "./common.js";
 import {
-  CONTENT_COMPILER_V2,
-  FractionAdditionWorkedExampleModelV1Schema,
-  PresentationPlainTextV1Schema,
-} from "./content-document-v2.js";
-import {
-  AttributionV1Schema,
   FractionAdditionPromptV1Schema,
   MisconceptionV1Schema,
   RNG_ALGORITHM_V1,
   SolutionStepV1Schema,
   WorksheetSlotV1Schema,
 } from "./worksheet-instance-v1.js";
+import {
+  AttributionV1Schema,
+  CONTENT_COMPILER_V2,
+  FractionAdditionWorkedExampleModelV1Schema,
+  WorksheetPresentationV1Schema,
+} from "./presentation-contract-v1.js";
 
-export const WORKSHEET_PRESENTATION_V1_SCHEMA =
-  "exercisebook.worksheet-presentation/v1";
+export {
+  WORKSHEET_PRESENTATION_V1_SCHEMA,
+  WorksheetPresentationV1Schema,
+  validateWorksheetPresentationV1,
+} from "./presentation-contract-v1.js";
+export type { WorksheetPresentationV1 } from "./presentation-contract-v1.js";
+
 export const WORKSHEET_INSTANCE_V2_SCHEMA = "exercisebook.worksheet-instance/v2";
-
-const PRESENTATION_CONTENT_ID = "math.fractions.add-unlike-denominators";
-const PRESENTATION_CONTENT_REVISION = 2;
 
 export const ContentReferenceV2Schema = z.strictObject({
   id: StableIdSchema,
@@ -94,34 +96,6 @@ export const WorksheetSlotV2Schema = z.strictObject({
   solutionTrace: z.array(SolutionStepV2Schema).min(1).max(20),
   misconceptions: z.array(MisconceptionV2Schema).max(20),
   provenance: SlotProvenanceV2Schema,
-});
-
-const PresentationContentReferenceV1Schema = z.strictObject({
-  id: z.literal(PRESENTATION_CONTENT_ID),
-  revision: z.literal(PRESENTATION_CONTENT_REVISION),
-  sourceHash: Sha256HexSchema,
-  contentHash: Sha256HexSchema,
-  compilerVersion: z.literal(CONTENT_COMPILER_V2),
-});
-
-export const WorksheetPresentationV1Schema = z.strictObject({
-  schema: z.literal(WORKSHEET_PRESENTATION_V1_SCHEMA),
-  content: PresentationContentReferenceV1Schema,
-  lesson: z.strictObject({
-    nodeId: z.literal("lesson-explanation-01"),
-    title: z.string().min(1).max(240),
-    paragraphs: z.array(PresentationPlainTextV1Schema).min(1).max(8),
-  }),
-  workedExample: z.strictObject({
-    nodeId: z.literal("worked-example-01"),
-    title: z.string().min(1).max(240),
-    model: FractionAdditionWorkedExampleModelV1Schema,
-    steps: z.array(PresentationPlainTextV1Schema).min(1).max(8),
-  }),
-  exercise: z.strictObject({
-    nodeId: z.literal("practice-01"),
-    instruction: z.string().min(1).max(500),
-  }),
 });
 
 export const WorksheetInstanceV2Schema = z
@@ -330,20 +304,12 @@ export const WorksheetInstanceV2Schema = z
 export type ContentReferenceV2 = z.infer<typeof ContentReferenceV2Schema>;
 export type SlotProvenanceV2 = z.infer<typeof SlotProvenanceV2Schema>;
 export type WorksheetSlotV2 = z.infer<typeof WorksheetSlotV2Schema>;
-export type WorksheetPresentationV1 = z.infer<typeof WorksheetPresentationV1Schema>;
 export type WorksheetInstanceV2 = z.infer<typeof WorksheetInstanceV2Schema>;
 
 export interface MaterializedWorksheetInstanceV2 {
   readonly instance: WorksheetInstanceV2;
   readonly canonicalJson: string;
   readonly instanceHash: string;
-}
-
-export function validateWorksheetPresentationV1(
-  value: unknown,
-): WorksheetPresentationV1 {
-  assertSafeDataObjectGraph(value);
-  return WorksheetPresentationV1Schema.parse(value);
 }
 
 export function validateWorksheetInstanceV2(value: unknown): WorksheetInstanceV2 {
