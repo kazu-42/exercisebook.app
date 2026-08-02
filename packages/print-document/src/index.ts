@@ -32,3 +32,34 @@ export {
   PrintDocumentValidationError,
   validatePrintDocumentV1,
 } from "./validate.js";
+
+export { canonicalizePrintDocumentV2 } from "./canonical-v2.js";
+export {
+  PrintDocumentV2ProjectionError,
+  projectAnswerKeyPrintDocumentV2,
+  projectStudentPrintDocumentV2,
+  verifyMaterializedWorksheetInstanceV2,
+} from "./project-v2.js";
+export type {
+  PrintDocumentV2ProjectionErrorCode,
+  ProjectAnswerKeyPrintDocumentV2Options,
+  ProjectStudentPrintDocumentV2Options,
+} from "./project-v2.js";
+export {
+  PRINT_DOCUMENT_V2_SCHEMA,
+  PRINT_DOCUMENT_V2_SOURCE_INSTANCE_SCHEMA,
+  PRINT_PROJECTOR_V2_VERSION,
+} from "./types-v2.js";
+export type {
+  AnswerKeyPrintDocumentV2,
+  MaterializedAnswerKeyPrintDocumentV2,
+  MaterializedPrintDocumentV2,
+  MaterializedStudentPrintDocumentV2,
+  PrintDocumentV2,
+  PrintPaperV2,
+  StudentPrintDocumentV2,
+} from "./types-v2.js";
+export {
+  PrintDocumentV2ValidationError,
+  validatePrintDocumentV2,
+} from "./validate-v2.js";

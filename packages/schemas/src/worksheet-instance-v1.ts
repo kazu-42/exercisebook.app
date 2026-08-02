@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   canonicalizeJson,
+  createRational,
   equalRationals,
   MAX_CANONICAL_INTEGER_DIGITS,
   sha256Hex,
@@ -416,9 +417,10 @@ export async function projectWorksheetForStudentWithCanonicalAnswers(
 }
 
 /**
- * Defense-in-depth for accidentally copied answer text. This deliberately
- * recognizes common exact encodings only; deciding whether arbitrary prose
- * semantically reveals an answer is not computable as a complete runtime gate.
+ * Defense-in-depth for accidentally copied answer text. This recognizes
+ * rational equivalence across a bounded allowlist of text encodings; deciding
+ * whether decimals, percentages, mixed numbers, or arbitrary prose semantically
+ * reveal an answer remains outside this runtime gate.
  */
 function assertNoRecognizedCanonicalAnswer(
   delivery: StudentWorksheetDeliveryV1,
@@ -486,16 +488,21 @@ export function assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
   assertSafeDataObjectGraph(visibleData);
-  assertStructuredRationalsDoNotMatchCanonicalAnswers(visibleData, canonicalAnswers);
+  assertSafeDataObjectGraph(canonicalAnswers);
+  const canonicalAnswerSignatures = createCanonicalAnswerSignatureSet(canonicalAnswers);
+  assertStructuredRationalsDoNotMatchCanonicalAnswers(
+    visibleData,
+    canonicalAnswerSignatures,
+  );
   assertStringsDoNotContainCanonicalAnswers(
     collectStringLeaves(visibleData),
-    canonicalAnswers,
+    canonicalAnswerSignatures,
   );
 }
 
 function assertStructuredRationalsDoNotMatchCanonicalAnswers(
   visibleData: unknown,
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  canonicalAnswerSignatures: ReadonlySet<string>,
 ): void {
   const pending: unknown[] = [visibleData];
   while (pending.length > 0) {
@@ -506,35 +513,33 @@ function assertStructuredRationalsDoNotMatchCanonicalAnswers(
     const record = current as Record<string, unknown>;
     if (
       typeof record.numerator === "string" &&
-      typeof record.denominator === "string" &&
-      canonicalAnswers.some((answer) =>
-        rationalStringsAreEqual(
-          record.numerator as string,
-          record.denominator as string,
-          answer,
-        ),
-      )
+      typeof record.denominator === "string"
     ) {
-      throw new Error(
-        "Student projection contains a recognized canonical-answer representation",
+      const signature = structuredRationalSignature(
+        record.numerator as string,
+        record.denominator as string,
       );
+      if (signature !== undefined && canonicalAnswerSignatures.has(signature)) {
+        throw new Error(
+          "Student projection contains a recognized canonical-answer representation",
+        );
+      }
     }
     pending.push(...Object.values(record));
   }
 }
 
-function rationalStringsAreEqual(
+function structuredRationalSignature(
   numerator: string,
   denominator: string,
-  answer: CanonicalRationalValue,
-): boolean {
+): string | undefined {
   if (
     !isCanonicalIntegerSyntax(numerator) ||
     !isCanonicalIntegerSyntax(denominator) ||
     denominator === "0" ||
     denominator.startsWith("-")
   ) {
-    return false;
+    return undefined;
   }
   if (
     canonicalIntegerDigitCount(numerator) > MAX_CANONICAL_INTEGER_DIGITS ||
@@ -544,10 +549,7 @@ function rationalStringsAreEqual(
       "Student projection contains an unsupported oversized rational representation",
     );
   }
-  return (
-    BigInt(numerator) * BigInt(answer.denominator) ===
-    BigInt(answer.numerator) * BigInt(denominator)
-  );
+  return rationalSignature(BigInt(numerator), BigInt(denominator));
 }
 
 function isCanonicalIntegerSyntax(value: string): boolean {
@@ -558,26 +560,220 @@ function canonicalIntegerDigitCount(value: string): number {
   return value.startsWith("-") ? value.length - 1 : value.length;
 }
 
+// Both WorksheetInstanceV1 and WorksheetInstanceV2 cap practice slots at 200.
+const MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS = 200;
+
+function createCanonicalAnswerSignatureSet(
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): ReadonlySet<string> {
+  if (canonicalAnswers.length > MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS) {
+    throw new Error(
+      `Student projection canonical-answer context exceeds ${MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS} answers`,
+    );
+  }
+  const signatures = new Set<string>();
+  for (const answer of canonicalAnswers) {
+    if (
+      !isCanonicalIntegerSyntax(answer.numerator) ||
+      !isCanonicalIntegerSyntax(answer.denominator) ||
+      answer.denominator === "0" ||
+      answer.denominator.startsWith("-") ||
+      canonicalIntegerDigitCount(answer.numerator) > MAX_CANONICAL_INTEGER_DIGITS ||
+      canonicalIntegerDigitCount(answer.denominator) > MAX_CANONICAL_INTEGER_DIGITS
+    ) {
+      throw new Error("Student projection canonical-answer context is invalid");
+    }
+    const normalized = createRational(
+      BigInt(answer.numerator),
+      BigInt(answer.denominator),
+    );
+    if (
+      normalized.numerator !== answer.numerator ||
+      normalized.denominator !== answer.denominator
+    ) {
+      throw new Error("Student projection canonical-answer context is invalid");
+    }
+    signatures.add(`${normalized.numerator}\u0000${normalized.denominator}`);
+  }
+  return signatures;
+}
+
 function assertStringsDoNotContainCanonicalAnswers(
   visibleStrings: readonly string[],
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  canonicalAnswerSignatures: ReadonlySet<string>,
 ): void {
-  const answerPatterns = canonicalAnswers.map(canonicalAnswerPatterns);
-  if (answerPatterns.length === 0) {
+  if (canonicalAnswerSignatures.size === 0) {
     return;
   }
+  const scanBudget: RationalTextScanBudget = {
+    remainingCandidates: MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN,
+  };
   for (const visibleString of visibleStrings) {
     for (const normalized of normalizedStringVariants(visibleString)) {
-      if (
-        answerPatterns.some((patterns) =>
-          patterns.some((pattern) => pattern.test(normalized)),
-        )
-      ) {
-        throw new Error(
-          "Student projection contains a recognized canonical-answer representation",
-        );
-      }
+      assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
+        normalized,
+        canonicalAnswerSignatures,
+        scanBudget,
+      );
     }
+  }
+}
+
+// These lexical matchers accept bounded signed decimal digit tokens. This lets
+// equivalent noncanonical text such as 078/070 or -78/-70 be recognized without
+// blanket-rejecting non-equivalent date/path-like prose. Numeric conversion only
+// happens after the captured tokens pass the digit cap below.
+// The alternatives are flat and contain no nested repetition, keeping scans
+// linear in the already-bounded student-visible string size. The zero-width
+// lookahead preserves overlapping starts so a prefix such as `1/` cannot hide
+// the answer-equivalent suffix in `1/78/70`.
+const RATIONAL_TEXT_CANDIDATE_PATTERN =
+  /(?=(?<![0-9-])(-?[0-9]+)(?:\s*([/⁄∕]+)\s*|\s+(over)\s+)(-?[0-9]+)(?![0-9]))/giu;
+const TEX_FRACTION_TEXT_CANDIDATE_PATTERN =
+  /\\frac\s*\{\s*(-?[0-9]+)\s*\}\s*\{\s*(-?[0-9]+)\s*\}/giu;
+const NUMERATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN =
+  /\{\s*["']?numerator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*,\s*["']?denominator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*\}/giu;
+const DENOMINATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN =
+  /\{\s*["']?denominator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*,\s*["']?numerator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*\}/giu;
+// Far above legitimate worksheet prose, while bounding normalization-amplified
+// GCD work for adversarial but structurally valid string leaves.
+const MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN = 4_096;
+
+interface RationalTextScanBudget {
+  remainingCandidates: number;
+}
+
+function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
+  value: string,
+  canonicalAnswerSignatures: ReadonlySet<string>,
+  scanBudget: RationalTextScanBudget,
+): void {
+  for (const match of value.matchAll(RATIONAL_TEXT_CANDIDATE_PATTERN)) {
+    consumeRationalTextCandidateBudget(scanBudget);
+    const numerator = match[1];
+    const slashSeparator = match[2];
+    const overSeparator = match[3];
+    const denominator = match[4];
+    if (
+      numerator === undefined ||
+      denominator === undefined ||
+      (slashSeparator === undefined && overSeparator === undefined)
+    ) {
+      throw new Error(
+        "Student projection contains an unsupported malformed rational representation",
+      );
+    }
+
+    assertBoundedRationalTextCandidate(numerator, denominator, slashSeparator);
+    assertRationalTextCandidateDoesNotMatchCanonicalAnswers(
+      numerator,
+      denominator,
+      canonicalAnswerSignatures,
+    );
+  }
+
+  for (const match of value.matchAll(TEX_FRACTION_TEXT_CANDIDATE_PATTERN)) {
+    consumeRationalTextCandidateBudget(scanBudget);
+    assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
+      match,
+      1,
+      2,
+      canonicalAnswerSignatures,
+    );
+  }
+  for (const match of value.matchAll(NUMERATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN)) {
+    consumeRationalTextCandidateBudget(scanBudget);
+    assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
+      match,
+      1,
+      2,
+      canonicalAnswerSignatures,
+    );
+  }
+  for (const match of value.matchAll(DENOMINATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN)) {
+    consumeRationalTextCandidateBudget(scanBudget);
+    assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
+      match,
+      2,
+      1,
+      canonicalAnswerSignatures,
+    );
+  }
+}
+
+function consumeRationalTextCandidateBudget(scanBudget: RationalTextScanBudget): void {
+  if (scanBudget.remainingCandidates <= 0) {
+    throw new Error(
+      `Student projection canonical-answer rational scan exceeds ${MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN} candidates`,
+    );
+  }
+  scanBudget.remainingCandidates -= 1;
+}
+
+function assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
+  match: RegExpExecArray,
+  numeratorIndex: number,
+  denominatorIndex: number,
+  canonicalAnswerSignatures: ReadonlySet<string>,
+): void {
+  const numerator = match[numeratorIndex];
+  const denominator = match[denominatorIndex];
+  if (numerator === undefined || denominator === undefined) {
+    throw new Error(
+      "Student projection contains an unsupported malformed rational representation",
+    );
+  }
+  assertBoundedRationalTextCandidate(numerator, denominator, undefined);
+  assertRationalTextCandidateDoesNotMatchCanonicalAnswers(
+    numerator,
+    denominator,
+    canonicalAnswerSignatures,
+  );
+}
+
+function assertRationalTextCandidateDoesNotMatchCanonicalAnswers(
+  numerator: string,
+  denominator: string,
+  canonicalAnswerSignatures: ReadonlySet<string>,
+): void {
+  const parsedNumerator = BigInt(numerator);
+  const parsedDenominator = BigInt(denominator);
+  if (parsedDenominator === 0n) {
+    throw new Error(
+      "Student projection contains an unsupported malformed rational representation",
+    );
+  }
+  if (
+    canonicalAnswerSignatures.has(rationalSignature(parsedNumerator, parsedDenominator))
+  ) {
+    throw new Error(
+      "Student projection contains a recognized canonical-answer representation",
+    );
+  }
+}
+
+function rationalSignature(numerator: bigint, denominator: bigint): string {
+  const normalized = createRational(numerator, denominator);
+  return `${normalized.numerator}\u0000${normalized.denominator}`;
+}
+
+function assertBoundedRationalTextCandidate(
+  numerator: string,
+  denominator: string,
+  slashSeparator: string | undefined,
+): void {
+  if (
+    canonicalIntegerDigitCount(numerator) > MAX_CANONICAL_INTEGER_DIGITS ||
+    canonicalIntegerDigitCount(denominator) > MAX_CANONICAL_INTEGER_DIGITS
+  ) {
+    throw new Error(
+      "Student projection contains an unsupported oversized rational representation",
+    );
+  }
+  if (slashSeparator !== undefined && slashSeparator.length !== 1) {
+    throw new Error(
+      "Student projection contains an unsupported malformed rational representation",
+    );
   }
 }
 
@@ -746,42 +942,4 @@ function decodeValidUriByteRuns(value: string): string {
     }
     return UTF8_REPLACEMENT_DECODER.decode(bytes);
   });
-}
-
-function canonicalAnswerPatterns(answer: {
-  readonly numerator: string;
-  readonly denominator: string;
-}): readonly RegExp[] {
-  const numerator = escapeRegularExpression(answer.numerator);
-  const denominator = escapeRegularExpression(answer.denominator);
-  const leftNumberBoundary = "(?<![0-9])";
-  const rightNumberBoundary = "(?![0-9])";
-  const optionalQuote = `["']?`;
-  const numeratorField =
-    `${optionalQuote}numerator${optionalQuote}\\s*:\\s*` +
-    `${optionalQuote}${numerator}${optionalQuote}`;
-  const denominatorField =
-    `${optionalQuote}denominator${optionalQuote}\\s*:\\s*` +
-    `${optionalQuote}${denominator}${optionalQuote}`;
-
-  return [
-    new RegExp(
-      `${leftNumberBoundary}${numerator}\\s*[/⁄∕]\\s*${denominator}${rightNumberBoundary}`,
-      "iu",
-    ),
-    new RegExp(
-      `${leftNumberBoundary}${numerator}\\s+over\\s+${denominator}${rightNumberBoundary}`,
-      "iu",
-    ),
-    new RegExp(
-      `\\\\frac\\s*\\{\\s*${numerator}\\s*\\}\\s*\\{\\s*${denominator}\\s*\\}`,
-      "iu",
-    ),
-    new RegExp(`\\{\\s*${numeratorField}\\s*,\\s*${denominatorField}\\s*\\}`, "iu"),
-    new RegExp(`\\{\\s*${denominatorField}\\s*,\\s*${numeratorField}\\s*\\}`, "iu"),
-  ];
-}
-
-function escapeRegularExpression(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

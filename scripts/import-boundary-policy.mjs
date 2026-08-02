@@ -246,6 +246,11 @@ const productionRuntimeDependencyAllowlists = new Map(
     ]),
   ]),
 );
+const printDocumentProductionRuntimeAllowlist = new Set([
+  "@exercisebook/domain",
+  "@exercisebook/schemas",
+  "@exercisebook/schemas/trusted-student-projection",
+]);
 const htmlAssetMetaNames = new Set([
   "msapplication-tileimage",
   "msapplication-square70x70logo",
@@ -1774,6 +1779,17 @@ function isUnapprovedProductionExternalImport(moduleLoad, allowlist) {
   );
 }
 
+function isUnapprovedPrintDocumentProductionImport(moduleLoad) {
+  if (moduleLoad.kind === "vite-glob") {
+    return false;
+  }
+  const specifier = moduleLoad.specifier;
+  return (
+    !specifier.startsWith(".") &&
+    !printDocumentProductionRuntimeAllowlist.has(specifier)
+  );
+}
+
 function isForbiddenProductionViteLoad(moduleLoad, rootAbsoluteForbidden) {
   return (
     moduleLoad.kind === "vite-glob" ||
@@ -2637,9 +2653,20 @@ export async function findImportBoundaryViolations(
         moduleLoad,
         absoluteRepositoryRoot,
       );
-      if (isTestModuleLoad(file, moduleLoad, absoluteRepositoryRoot, testSourceFiles)) {
+      const testModuleLoad = isTestModuleLoad(
+        file,
+        moduleLoad,
+        absoluteRepositoryRoot,
+        testSourceFiles,
+      );
+      if (testModuleLoad) {
         violations.push(
           `${relativeFile} imports test-only module ${JSON.stringify(moduleLoad.specifier)}`,
+        );
+      }
+      if (!testModuleLoad && isUnapprovedPrintDocumentProductionImport(moduleLoad)) {
+        violations.push(
+          `${relativeFile} imports non-allowlisted production dependency ${JSON.stringify(moduleLoad.specifier)}`,
         );
       }
       if (
