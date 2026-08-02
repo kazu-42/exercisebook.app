@@ -9,10 +9,10 @@ and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3.
 The current local `feat/v2-printable-html` checkpoint adds deterministic V2
 HTML, semantic snapshots, and a content-addressed sample-artifact lane on top of
 `feat/prepared-answer-guard` (draft PR #7), which is stacked on the V2
-PrintDocument checkpoint (draft PR #6). It is neither merged nor deployed, and
-no child PR is claimed by this local checkpoint. Production DNS, hosted
-Cloudflare persistence, Browser Run/Queue/R2 rendering, and PDF backends remain
-gated future work.
+PrintDocument checkpoint (draft PR #6). This checkpoint is published as stacked
+draft PR #8. Its initial two-commit head passed GitHub CI; it is neither merged
+nor deployed. Production DNS, hosted Cloudflare persistence, Browser
+Run/Queue/R2 rendering, and PDF backends remain gated future work.
 
 ## Product direction
 

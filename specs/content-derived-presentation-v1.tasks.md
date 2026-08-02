@@ -698,8 +698,8 @@ renderer and prepared-guard caps do not establish those service guarantees.
 
 - Status: in progress — bounded Web backend, print-semantic, prepared-guard,
   and printable-HTML/artifact checkpoints exist; printable exact-current
-  checks and reviews pass, while the child draft PR and Phase 1.7 closeout
-  remain pending
+  checks and reviews pass, and child draft PR #8 has an initial green CI
+  checkpoint; full Phase 1.7 closeout remains pending
 - Type: review / delivery
 - Size: M
 - Dependencies: bounded checkpoints after the P17-006 backend subset and
@@ -727,10 +727,14 @@ renderer and prepared-guard caps do not establish those service guarantees.
   - the branch is stacked on `feat/prepared-answer-guard` at
     `5814f86e3d3d0e822d048450fa71fbf85fd672e3` (parent draft PR #7), with no
     merge or deployment;
-  - no child draft PR has been created at this documentation checkpoint;
-  - child draft-PR state, exact local/remote head agreement, and final CI are
-    volatile GitHub evidence that must be read back at delivery time rather than
-    inferred from this ledger; a bounded draft checkpoint still does not
+  - child draft PR #8 is open at
+    `https://github.com/kazu-42/exercisebook.app/pull/8` with base
+    `feat/prepared-answer-guard` and head `feat/v2-printable-html`. Its initial
+    two-commit head `ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head
+    GitHub CI and was reported clean and mergeable;
+  - current draft-PR state, exact local/remote head agreement, and final CI are
+    volatile GitHub evidence that must still be read back at delivery time
+    rather than inferred from this ledger. A bounded draft checkpoint does not
     complete P17-009 or Phase 1.7.
 
 ## Execution lanes

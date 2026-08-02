@@ -642,4 +642,9 @@ tagged/accessible PDF evaluation, hosted Queue -> Browser Run -> R2 rendering,
 authenticated persistence, request-wide public render budgets, final
 Phase 1.7 integration/release review, merge, deployment, DNS, and licensing
 remain pending. The printable-artifact frozen diff itself passed exact-current
-whole-diff and Codex reviews with no actionable finding.
+whole-diff and Codex reviews with no actionable finding. The bounded checkpoint
+is published as stacked draft PR #8 with base `feat/prepared-answer-guard` and
+head `feat/v2-printable-html`; its initial two-commit head
+`ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head GitHub CI and was
+reported clean and mergeable. No merge, deployment, DNS, persistence, or
+license mutation is claimed.

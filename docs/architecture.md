@@ -228,9 +228,13 @@ source binding and student authorization.
 This 2026-08-02 local printable-HTML checkpoint is on
 `feat/v2-printable-html`, stacked on `feat/prepared-answer-guard` (draft PR #7),
 which is itself stacked on the V2 PrintDocument checkpoint (draft PR #6). It is
-neither merged nor deployed, and no child PR is claimed here. Reviewed content
-hashes and all five frozen V1 worksheet/PrintDocument/HTML identities remain
-exact. The fixed V2 worksheet instance hash is
+published as draft PR #8 with base `feat/prepared-answer-guard` and head
+`feat/v2-printable-html`. The initial two-commit head
+`ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head GitHub CI and was
+reported clean and mergeable; the checkpoint remains neither merged nor
+deployed. Reviewed content hashes and all five frozen V1
+worksheet/PrintDocument/HTML identities remain exact. The fixed V2 worksheet
+instance hash is
 `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
 The student PrintDocument hash is
 `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`

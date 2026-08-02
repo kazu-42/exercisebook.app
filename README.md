@@ -16,7 +16,8 @@ before the content catalog expands.
 The Phase 1 local walking skeleton, anonymous Phase 1.5 daily-plan preview,
 Phase 1.6 student-delivery hardening, and a Phase 1.7 V2 technical print
 prototype are implemented locally across stacked development branches. The
-repository compiles one draft English fraction lesson with author/reviewer
+latest bounded printable-artifact checkpoint is tracked by stacked draft PR #8.
+The repository compiles one draft English fraction lesson with author/reviewer
 metadata, materializes deterministic exact-rational problems, and projects
 immutable worksheet instances to:
 
