@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "render:sample": "tsx ../../scripts/render-sample.ts",
+    "render:sample:v2": "tsx ../../scripts/render-sample-v2.ts",
     "test": "vitest run --root ../.. packages/print-document/src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@exercisebook/content-compiler": "workspace:*",
     "@exercisebook/generators": "workspace:*",
+    "@exercisebook/planner": "workspace:*",
     "@types/node": "26.1.1",
     "tsx": "4.21.1"
   }

@@ -198,6 +198,9 @@ importers:
       '@exercisebook/generators':
         specifier: workspace:*
         version: link:../generators
+      '@exercisebook/planner':
+        specifier: workspace:*
+        version: link:../planner
       '@types/node':
         specifier: 26.1.1
         version: 26.1.1

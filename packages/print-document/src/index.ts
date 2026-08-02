@@ -35,6 +35,13 @@ export {
 
 export { canonicalizePrintDocumentV2 } from "./canonical-v2.js";
 export {
+  PRINTABLE_HTML_V2_RENDERER_VERSION,
+  PrintDocumentV2RenderError,
+  renderPrintableHtmlV2,
+  snapshotPrintSemanticsV2,
+} from "./render-html-v2.js";
+export type { PrintDocumentV2RenderErrorCode } from "./render-html-v2.js";
+export {
   PrintDocumentV2ProjectionError,
   projectAnswerKeyPrintDocumentV2,
   projectStudentPrintDocumentV2,
@@ -49,15 +56,19 @@ export {
   PRINT_DOCUMENT_V2_SCHEMA,
   PRINT_DOCUMENT_V2_SOURCE_INSTANCE_SCHEMA,
   PRINT_PROJECTOR_V2_VERSION,
+  PRINT_SEMANTIC_SNAPSHOT_V2_SCHEMA,
 } from "./types-v2.js";
 export type {
   AnswerKeyPrintDocumentV2,
+  AnswerKeyPrintSemanticSnapshotV2,
   MaterializedAnswerKeyPrintDocumentV2,
   MaterializedPrintDocumentV2,
   MaterializedStudentPrintDocumentV2,
   PrintDocumentV2,
   PrintPaperV2,
+  PrintSemanticSnapshotV2,
   StudentPrintDocumentV2,
+  StudentPrintSemanticSnapshotV2,
 } from "./types-v2.js";
 export {
   PrintDocumentV2ValidationError,

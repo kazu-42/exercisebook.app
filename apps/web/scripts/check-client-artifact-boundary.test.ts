@@ -33,13 +33,16 @@ describe("client artifact boundary", () => {
         "assertDoesNotRevealAnyAnswer",
         "baseSeed",
         "canonicalAnswer",
+        "canonicalResponse",
         "excludedCanonicalAnswers",
+        "incorrectAnswer",
         "scoringRule",
         "seedSecretVersion",
         "seedVersion",
         "slotSeed",
         "solutionTrace",
         "prepareStudentVisibleAnswerGuard",
+        "answer-key.semantic-snapshot",
       ]),
     );
   });

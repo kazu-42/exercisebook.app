@@ -91,7 +91,7 @@ export function classifyClientModuleId(
   ) {
     return { category: "unreviewed schema", relativePath };
   }
-  if (isWorkspaceSource(relativePath)) {
+  if (isWorkspacePackagePath(relativePath)) {
     return { category: "unreviewed workspace", relativePath };
   }
   return undefined;
@@ -232,9 +232,9 @@ function workspaceLinkPath(relativePath: string): string | undefined {
   return `packages/${packageName}/${pathWithinPackage}`;
 }
 
-function isWorkspaceSource(relativePath: string): boolean {
+function isWorkspacePackagePath(relativePath: string): boolean {
   const segments = relativePath.split("/");
-  return segments.length >= 3 && segments[0] === "packages" && segments[2] === "src";
+  return segments.length >= 3 && segments[0] === "packages";
 }
 
 function isAbsolutePath(value: string): boolean {

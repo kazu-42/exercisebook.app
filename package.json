@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "check": "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:sample",
+    "check": "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:samples",
     "check:boundaries": "node --test scripts/check-import-boundaries.test.mjs && node scripts/check-import-boundaries.mjs",
     "content:check": "pnpm --filter @exercisebook/content-compiler content:check",
     "content:generate": "pnpm --filter @exercisebook/content-compiler content:generate",
@@ -23,7 +23,10 @@
     "test:watch": "vitest",
     "typecheck": "node scripts/check-typescript-version.mjs && tsc -p tsconfig.json --noEmit",
     "worksheet:sample": "pnpm content:check && pnpm --filter @exercisebook/web worksheet:sample && pnpm --filter @exercisebook/print-document render:sample -- ../../output/print-sample && pnpm worksheet:verify",
-    "worksheet:verify": "node scripts/verify-sample-artifacts.mjs"
+    "worksheet:sample:v2": "pnpm content:check && pnpm --filter @exercisebook/print-document render:sample:v2 -- ../../output/print-sample-v2 && pnpm worksheet:verify:v2",
+    "worksheet:samples": "pnpm worksheet:sample && pnpm worksheet:sample:v2",
+    "worksheet:verify": "node scripts/verify-sample-artifacts.mjs",
+    "worksheet:verify:v2": "node scripts/verify-sample-artifacts-v2.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.19.1",

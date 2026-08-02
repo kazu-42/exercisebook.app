@@ -1,0 +1,289 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;; object-src &#39;none&#39;; script-src &#39;none&#39;; connect-src &#39;none&#39;; font-src &#39;none&#39;; img-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Add fractions with unlike denominators</title><style>
+@page {
+  size: A4;
+  margin: 14mm 14mm 16mm;
+}
+
+:root {
+  color-scheme: light;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 11pt;
+  line-height: 1.45;
+  color: #18202b;
+  background: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+body {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+main {
+  max-width: 182mm;
+  margin: 0 auto;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-block-start: 0;
+}
+
+h1,
+h2,
+h3 {
+  break-after: avoid-page;
+}
+
+h1 {
+  margin-block-end: 5mm;
+  font-size: 22pt;
+  line-height: 1.15;
+}
+
+h2 {
+  margin-block: 6mm 3mm;
+  font-size: 15pt;
+}
+
+h3 {
+  margin-block: 0 2mm;
+  font-size: 11pt;
+}
+
+h1,
+h2,
+h3,
+p,
+li,
+dt,
+dd,
+figcaption,
+.attributions {
+  overflow-wrap: anywhere;
+}
+
+.print-paragraph {
+  margin-block-end: 4mm;
+}
+
+.worked-example,
+.problem,
+.fraction-bar-figure,
+.print-fallback-text,
+.working-space,
+.key-entry,
+.attributions {
+  break-inside: avoid;
+}
+
+.worked-example {
+  margin-block: 5mm;
+  padding: 4mm;
+  border: 0.4mm solid #657181;
+}
+
+.worked-example ol,
+.key-entry ol {
+  margin-block-end: 0;
+}
+
+.key-entry ol {
+  line-height: 1.3;
+}
+
+.math-expression {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.16em;
+  min-width: 0;
+  max-width: 100%;
+  margin-inline: 0.12em;
+  vertical-align: middle;
+}
+
+.fraction {
+  display: inline-grid;
+  grid-template-rows: auto auto;
+  min-width: 1.4em;
+  max-width: 100%;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.05;
+}
+
+.fraction-numerator,
+.fraction-denominator {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.fraction-numerator {
+  padding: 0 0.16em 0.08em;
+  border-bottom: 0.08em solid currentColor;
+}
+
+.fraction-denominator {
+  padding: 0.08em 0.16em;
+}
+
+.operator {
+  display: inline-block;
+  padding-inline: 0.15em;
+  font-size: 1.2em;
+}
+
+.problem-group {
+  margin-block: 7mm 4mm;
+  break-after: avoid-page;
+}
+
+.problem {
+  margin-block: 0 6mm;
+  padding-block-end: 5mm;
+  border-bottom: 0.25mm solid #9aa3af;
+}
+
+.problem-heading {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+  margin-block-end: 2mm;
+}
+
+.problem-number {
+  min-width: 1.5em;
+  font-weight: 700;
+}
+
+.problem-instruction {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.problem-prompt {
+  margin-block: 2mm 3mm;
+  font-size: 15pt;
+  overflow-wrap: anywhere;
+}
+
+.response-space,
+.working-lines {
+  display: grid;
+  gap: 5mm;
+  margin-block-start: 3mm;
+}
+
+.response-line,
+.working-line {
+  display: block;
+  min-height: 6mm;
+  border-bottom: 0.25mm solid #4f5967;
+}
+
+.fraction-bar-figure {
+  margin: 5mm 0;
+  padding: 4mm;
+  border: 0.3mm solid #737e8c;
+}
+
+.fraction-bar-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  width: 100%;
+  min-width: 0;
+  height: 8mm;
+  margin-block: 2mm;
+  border: 0.3mm solid #273140;
+}
+
+.fraction-bar-segment {
+  min-width: 0;
+  border-inline-end: 0.2mm solid #273140;
+}
+
+.fraction-bar-segment:last-child {
+  border-inline-end: 0;
+}
+
+.fraction-bar-segment.filled {
+  background: repeating-linear-gradient(
+    135deg,
+    #768293 0,
+    #768293 1.2mm,
+    #d7dce2 1.2mm,
+    #d7dce2 2.4mm
+  );
+}
+
+.print-fallback-text,
+.working-space {
+  margin-block: 6mm;
+}
+
+.page-break {
+  break-before: page;
+}
+
+.key-entry {
+  margin-block: 2mm;
+  padding: 2mm;
+  border-inline-start: 1.2mm solid #4d5663;
+}
+
+.key-response {
+  font-size: 14pt;
+  font-weight: 700;
+}
+
+.attributions {
+  margin-block-start: 4mm;
+  padding-block-start: 2mm;
+  border-top: 0.25mm solid #8d96a2;
+  font-size: 8.5pt;
+}
+
+.attribution-details {
+  margin-block: 1mm 2mm;
+}
+
+.attribution-details div {
+  display: grid;
+  grid-template-columns: minmax(18mm, auto) 1fr;
+  gap: 2mm;
+}
+
+.attribution-details dt {
+  font-weight: 700;
+}
+
+.attribution-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.document-provenance {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  font-size: 7.5pt;
+}
+</style></head><body><main aria-labelledby="eb-v2-worksheet-title"><h1 id="eb-v2-worksheet-title" data-print-block-id="worksheet-title">Add fractions with unlike denominators</h1><p id="eb-v2-worksheet-summary" data-print-block-id="worksheet-summary" class="print-paragraph">2026-07-19 · 12 minutes</p><h2 id="eb-v2-lesson-heading" data-print-block-id="lesson-heading">The three moves</h2><p id="eb-v2-lesson-paragraph-001" data-print-block-id="lesson-paragraph-001" class="print-paragraph">Find a denominator both fractions can use.</p><p id="eb-v2-lesson-paragraph-002" data-print-block-id="lesson-paragraph-002" class="print-paragraph">Rename each fraction without changing its value.</p><p id="eb-v2-lesson-paragraph-003" data-print-block-id="lesson-paragraph-003" class="print-paragraph">Add the numerators and keep the shared denominator.</p><section id="eb-v2-worked-example" data-print-block-id="worked-example" class="worked-example" aria-labelledby="eb-v2-worked-example-title"><h2 id="eb-v2-worked-example-title">One half plus one third</h2><p class="problem-prompt" role="math" aria-label="1 over 2 plus 1 over 3 equals 5 over 6"><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">2</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">3</span></span><span class="operator">=</span><span class="fraction"><span class="fraction-numerator">5</span><span class="fraction-denominator">6</span></span></span></p><ol><li>Find the least common denominator.</li><li>Rewrite both addends as equivalent fractions.</li><li>Add the numerators and reduce if needed.</li></ol></section><section id="eb-v2-problem-group-001" data-print-block-id="problem-group-001" class="problem-group" aria-labelledby="eb-v2-problem-group-001-title"><h2 id="eb-v2-problem-group-001-title">Problem 1</h2><section class="problem" data-problem-id="practice-01" aria-labelledby="eb-v2-problem-group-001-title eb-v2-problem-001-instruction"><h3 id="eb-v2-problem-001-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">1.</span><span id="eb-v2-problem-001-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 1 over 4 and 1 over 2. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">4</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">2</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 1"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-001" data-print-block-id="print-fallback-001" data-problem-id="practice-01" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 1 over 4 and 1 over 2. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-001" data-print-block-id="working-space-001" data-problem-id="practice-01" class="working-space" role="group" aria-label="Working space for problem 1"><h3 id="eb-v2-working-space-001-title">Working space for problem 1</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><section id="eb-v2-problem-group-002" data-print-block-id="problem-group-002" class="problem-group" aria-labelledby="eb-v2-problem-group-002-title"><h2 id="eb-v2-problem-group-002-title">Problem 2</h2><section class="problem" data-problem-id="practice-02" aria-labelledby="eb-v2-problem-group-002-title eb-v2-problem-002-instruction"><h3 id="eb-v2-problem-002-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">2.</span><span id="eb-v2-problem-002-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 1 over 4 and 7 over 8. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">4</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">7</span><span class="fraction-denominator">8</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 2"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-002" data-print-block-id="print-fallback-002" data-problem-id="practice-02" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 1 over 4 and 7 over 8. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-002" data-print-block-id="working-space-002" data-problem-id="practice-02" class="working-space" role="group" aria-label="Working space for problem 2"><h3 id="eb-v2-working-space-002-title">Working space for problem 2</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><section id="eb-v2-problem-group-003" data-print-block-id="problem-group-003" class="problem-group" aria-labelledby="eb-v2-problem-group-003-title"><h2 id="eb-v2-problem-group-003-title">Problem 3</h2><section class="problem" data-problem-id="practice-03" aria-labelledby="eb-v2-problem-group-003-title eb-v2-problem-003-instruction"><h3 id="eb-v2-problem-003-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">3.</span><span id="eb-v2-problem-003-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 1 over 3 and 1 over 4. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">3</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">4</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 3"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-003" data-print-block-id="print-fallback-003" data-problem-id="practice-03" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 1 over 3 and 1 over 4. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-003" data-print-block-id="working-space-003" data-problem-id="practice-03" class="working-space" role="group" aria-label="Working space for problem 3"><h3 id="eb-v2-working-space-003-title">Working space for problem 3</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><section id="eb-v2-problem-group-004" data-print-block-id="problem-group-004" class="problem-group" aria-labelledby="eb-v2-problem-group-004-title"><h2 id="eb-v2-problem-group-004-title">Problem 4</h2><section class="problem" data-problem-id="practice-04" aria-labelledby="eb-v2-problem-group-004-title eb-v2-problem-004-instruction"><h3 id="eb-v2-problem-004-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">4.</span><span id="eb-v2-problem-004-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 1 over 7 and 1 over 3. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">7</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">3</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 4"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-004" data-print-block-id="print-fallback-004" data-problem-id="practice-04" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 1 over 7 and 1 over 3. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-004" data-print-block-id="working-space-004" data-problem-id="practice-04" class="working-space" role="group" aria-label="Working space for problem 4"><h3 id="eb-v2-working-space-004-title">Working space for problem 4</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><section id="eb-v2-problem-group-005" data-print-block-id="problem-group-005" class="problem-group" aria-labelledby="eb-v2-problem-group-005-title"><h2 id="eb-v2-problem-group-005-title">Problem 5</h2><section class="problem" data-problem-id="practice-05" aria-labelledby="eb-v2-problem-group-005-title eb-v2-problem-005-instruction"><h3 id="eb-v2-problem-005-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">5.</span><span id="eb-v2-problem-005-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 5 over 8 and 2 over 5. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">5</span><span class="fraction-denominator">8</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">2</span><span class="fraction-denominator">5</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 5"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-005" data-print-block-id="print-fallback-005" data-problem-id="practice-05" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 5 over 8 and 2 over 5. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-005" data-print-block-id="working-space-005" data-problem-id="practice-05" class="working-space" role="group" aria-label="Working space for problem 5"><h3 id="eb-v2-working-space-005-title">Working space for problem 5</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><section id="eb-v2-problem-group-006" data-print-block-id="problem-group-006" class="problem-group" aria-labelledby="eb-v2-problem-group-006-title"><h2 id="eb-v2-problem-group-006-title">Problem 6</h2><section class="problem" data-problem-id="practice-06" aria-labelledby="eb-v2-problem-group-006-title eb-v2-problem-006-instruction"><h3 id="eb-v2-problem-006-heading" class="problem-heading"><span class="problem-number" aria-hidden="true">6.</span><span id="eb-v2-problem-006-instruction" class="problem-instruction">Add each pair of fractions. Give every answer in lowest terms.</span></h3><p class="problem-prompt" role="math" aria-label="Add 5 over 6 and 1 over 3. Give the answer in lowest terms."><span class="math-expression" aria-hidden="true"><span class="fraction"><span class="fraction-numerator">5</span><span class="fraction-denominator">6</span></span><span class="operator">+</span><span class="fraction"><span class="fraction-numerator">1</span><span class="fraction-denominator">3</span></span></span></p><div class="response-space" role="group" aria-label="Response space for problem 6"><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span><span class="response-line" aria-hidden="true"></span></div></section></section><figure id="eb-v2-print-fallback-006" data-print-block-id="print-fallback-006" data-problem-id="practice-06" class="fraction-bar-figure"><div class="fraction-bar-diagram" role="img" aria-label="Add 5 over 6 and 1 over 3. Give the answer in lowest terms."><div class="fraction-bar-rows" aria-hidden="true"><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span></div><div class="fraction-bar-row"><span class="fraction-bar-segment filled"></span><span class="fraction-bar-segment"></span><span class="fraction-bar-segment"></span></div></div></div><figcaption>Draw equal fraction bars for both addends, partition them into the least common denominator, then combine the shaded parts.</figcaption></figure><section id="eb-v2-working-space-006" data-print-block-id="working-space-006" data-problem-id="practice-06" class="working-space" role="group" aria-label="Working space for problem 6"><h3 id="eb-v2-working-space-006-title">Working space for problem 6</h3><div class="working-lines"><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span><span class="working-line" aria-hidden="true"></span></div></section><footer class="attributions"><h2 id="eb-v2-attribution-heading">Attribution and provenance</h2><ul><li><p class="attribution-text">Draft original lesson by Exercise Book contributors. Not yet licensed for publication.</p><dl class="attribution-details"><div><dt>Title</dt><dd>Add fractions with unlike denominators</dd></div><div><dt>Author</dt><dd>Exercise Book contributors, Exercise Book curriculum review</dd></div><div><dt>Source</dt><dd>https://exercisebook.app/content/math/fractions/add-unlike-denominators</dd></div><div><dt>License</dt><dd>LicenseRef-ExerciseBook-Draft</dd></div><div><dt>Status</dt><dd>draft</dd></div></dl></li></ul><p class="document-provenance">Source instance: 934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02</p></footer></main></body></html>

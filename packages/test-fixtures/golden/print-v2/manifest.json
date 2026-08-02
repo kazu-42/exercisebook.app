@@ -1,0 +1,58 @@
+{
+  "schema": "exercisebook.print-sample-manifest.v2",
+  "sourceHash": "456c8908debd52c7fcc5eba6e2e9a38434b5fcd8343e7a14a427faae34502523",
+  "contentHash": "944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd",
+  "planId": "preview-d8e7bffb76e814cf8fed232ed5817008d9291247f94d4e63bda6fbeb647daf33",
+  "planHash": "a55f578df16f592c13b5d7d8dd03f196a03176af5827bfb2dc0e312d06eff8c3",
+  "sourceInstanceHash": "934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02",
+  "projectorVersion": "print-projector.v2",
+  "rendererVersion": "printable-html.v2",
+  "semanticSnapshotSchema": "exercisebook.print-semantic-snapshot/v2",
+  "artifacts": {
+    "contentDocument": {
+      "filename": "944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd.content-document.json",
+      "sha256": "944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd",
+      "utf8Bytes": 2680
+    },
+    "dailyPlan": {
+      "filename": "a55f578df16f592c13b5d7d8dd03f196a03176af5827bfb2dc0e312d06eff8c3.daily-plan.json",
+      "sha256": "a55f578df16f592c13b5d7d8dd03f196a03176af5827bfb2dc0e312d06eff8c3",
+      "utf8Bytes": 1527
+    },
+    "canonicalInstance": {
+      "filename": "934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02.worksheet-instance.json",
+      "sha256": "934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02",
+      "utf8Bytes": 20941
+    },
+    "studentPrintDocument": {
+      "filename": "51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111.student.print-document.json",
+      "sha256": "51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111",
+      "utf8Bytes": 12077
+    },
+    "answerKeyPrintDocument": {
+      "filename": "d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd.answer-key.print-document.json",
+      "sha256": "d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd",
+      "utf8Bytes": 16012
+    },
+    "studentSemanticSnapshot": {
+      "filename": "313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67.student.semantic-snapshot.json",
+      "sha256": "313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67",
+      "utf8Bytes": 9055
+    },
+    "answerKeySemanticSnapshot": {
+      "filename": "540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167.answer-key.semantic-snapshot.json",
+      "sha256": "540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167",
+      "utf8Bytes": 12450
+    },
+    "studentHtml": {
+      "filename": "13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39.student.html",
+      "sha256": "13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39",
+      "utf8Bytes": 23436
+    },
+    "answerKeyHtml": {
+      "filename": "b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d.answer-key.html",
+      "sha256": "b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d",
+      "utf8Bytes": 29297
+    }
+  }
+}

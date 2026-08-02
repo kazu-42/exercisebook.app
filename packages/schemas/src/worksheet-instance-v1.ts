@@ -724,7 +724,7 @@ function assertStringsDoNotContainCanonicalAnswers(
 // lookahead preserves overlapping starts so a prefix such as `1/` cannot hide
 // the answer-equivalent suffix in `1/78/70`.
 const RATIONAL_TEXT_CANDIDATE_PATTERN =
-  /(?=(?<![0-9-])(-?[0-9]+)(?:\s*([/⁄∕]+)\s*|\s+(over)\s+)(-?[0-9]+)(?![0-9]))/giu;
+  /(?=(?<![0-9-])(-?[0-9]+)(?:\s*([/⁄∕]+)\s*|\s+(over|divided\s+by|division\s+by)\s+)(-?[0-9]+)(?![0-9]))/giu;
 const TEX_FRACTION_TEXT_CANDIDATE_PATTERN =
   /\\frac\s*\{\s*(-?[0-9]+)\s*\}\s*\{\s*(-?[0-9]+)\s*\}/giu;
 const NUMERATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN =
@@ -751,12 +751,12 @@ function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
     consumeRationalCandidateBudget(scanBudget);
     const numerator = match[1];
     const slashSeparator = match[2];
-    const overSeparator = match[3];
+    const wordSeparator = match[3];
     const denominator = match[4];
     if (
       numerator === undefined ||
       denominator === undefined ||
-      (slashSeparator === undefined && overSeparator === undefined)
+      (slashSeparator === undefined && wordSeparator === undefined)
     ) {
       throw new Error(
         "Student projection contains an unsupported malformed rational representation",
@@ -896,6 +896,13 @@ const URI_ENCODED_BYTE_WITH_PERCENT_LAYERS_PATTERN = /%((?:25)+)([0-9a-f]{2})/gi
 const URI_COMPONENT_UNESCAPED_ASCII_PATTERN = /^[a-z0-9\-_.!~*'()]*$/iu;
 const URI_ENCODED_BYTE_RUN_PATTERN = /(?:%[0-9a-f]{2})+/giu;
 const UTF8_REPLACEMENT_DECODER = new TextDecoder("utf-8", { fatal: false });
+const STUDENT_VISIBLE_BIDI_CONTROL_PATTERN = /\p{Bidi_Control}/u;
+const STUDENT_VISIBLE_DASH_OR_MINUS_PATTERN =
+  /[\p{Dash_Punctuation}\u02D7\u2043\u2212\u2796\u{10D8F}]/gu;
+const STUDENT_VISIBLE_PLUS_PATTERN = /[\u02D6\u16ED\u2795\u{10D8E}]/gu;
+const STUDENT_VISIBLE_DIVISION_OR_SOLIDUS_PATTERN =
+  /[\u00F7\u2298\u2571\u2797\u27CB\u29F8\u2A38\u{1F67C}]/gu;
+const STUDENT_VISIBLE_DEFAULT_IGNORABLE_PATTERN = /\p{Default_Ignorable_Code_Point}/gu;
 const MAX_URI_COMPATIBILITY_DECODE_ROUNDS = 3;
 const MAX_STUDENT_VISIBLE_NORMALIZATION_STATES = 24;
 
@@ -935,9 +942,9 @@ function normalizedStringVariants(value: string): readonly string[] {
     variants.add(current.value);
 
     // Re-enqueue every same-round transform until the deduplicated worklist
-    // reaches its local fixed point. NFKC and form-style plus normalization
-    // are not assumed to commute.
-    schedule(current.value.normalize("NFKC"), current.uriDecodeRound);
+    // reaches its local fixed point. Scanner canonicalization and form-style
+    // plus normalization are not assumed to commute.
+    schedule(normalizeStudentVisibleScannerText(current.value), current.uriDecodeRound);
     schedule(current.value.replaceAll("+", " "), current.uriDecodeRound);
 
     if (!current.value.includes("%")) {
@@ -980,6 +987,28 @@ function normalizedStringVariants(value: string): readonly string[] {
   }
 
   return [...variants];
+}
+
+/**
+ * Canonicalize display-equivalent fraction text for scanning only. The
+ * transform never changes delivered data. Default-ignorable code points are
+ * removed so an invisible separator cannot split a rational token, while bidi
+ * controls fail closed because deleting them cannot reproduce visual order.
+ * NFKC plus dash/minus folding is nonexpanding beyond the NFKC work already
+ * covered by the bounded normalization state machine.
+ */
+function normalizeStudentVisibleScannerText(value: string): string {
+  const normalized = value.normalize("NFKC");
+  if (STUDENT_VISIBLE_BIDI_CONTROL_PATTERN.test(normalized)) {
+    throw new Error(
+      "Student projection contains an unsupported bidi control in student-visible text",
+    );
+  }
+  return normalized
+    .replace(STUDENT_VISIBLE_DASH_OR_MINUS_PATTERN, "-")
+    .replace(STUDENT_VISIBLE_PLUS_PATTERN, "+")
+    .replace(STUDENT_VISIBLE_DIVISION_OR_SOLIDUS_PATTERN, "/")
+    .replace(STUDENT_VISIBLE_DEFAULT_IGNORABLE_PATTERN, "");
 }
 
 function collapseCommonUriPercentEncodingLayers(value: string): string {

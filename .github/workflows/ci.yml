@@ -86,4 +86,4 @@ jobs:
         run: pnpm build
 
       - name: Generate and verify sample artifacts
-        run: pnpm worksheet:sample
+        run: pnpm worksheet:samples

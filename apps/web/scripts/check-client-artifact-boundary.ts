@@ -19,6 +19,9 @@ export const FORBIDDEN_CLIENT_ARTIFACT_TOKENS = Object.freeze([
   "solutionTrace",
   "scoringRule",
   "canonicalAnswer",
+  "canonicalResponse",
+  "incorrectAnswer",
+  "answer-key.semantic-snapshot",
 ] as const);
 
 const JAVASCRIPT_EXTENSIONS = new Set([".cjs", ".js", ".mjs"]);
