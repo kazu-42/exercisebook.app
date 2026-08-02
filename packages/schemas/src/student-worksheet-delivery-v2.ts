@@ -11,10 +11,11 @@ import {
 } from "./common.js";
 import {
   AttributionV1Schema,
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionAccessibilitySummary,
   deriveFractionAdditionPromptAccessibleText,
+  prepareStudentVisibleAnswerGuard,
   type CanonicalRationalValue,
+  type PreparedStudentVisibleAnswerGuard,
 } from "./worksheet-instance-v1.js";
 import {
   WorksheetPresentationV1Schema,
@@ -143,18 +144,13 @@ function assertNoRecognizedCanonicalAnswerV2(
     throw new Error("Student projection slot-to-answer mapping is inconsistent");
   }
 
+  const answerGuard = prepareStudentVisibleAnswerGuard(canonicalAnswers);
   const { slots, presentation, ...globalDelivery } = delivery;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    globalDelivery,
-    canonicalAnswers,
-  );
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
+  answerGuard.assertDoesNotRevealAnyAnswer(globalDelivery);
+  answerGuard.assertDoesNotRevealAnyAnswer(presentation);
+  assertPresentationIntermediatesDoNotMatchPreparedCanonicalAnswers(
     presentation,
-    canonicalAnswers,
-  );
-  assertPresentationIntermediatesDoNotMatchCanonicalAnswers(
-    presentation,
-    canonicalAnswers,
+    answerGuard,
   );
 
   for (const [index, slot] of slots.entries()) {
@@ -164,10 +160,7 @@ function assertNoRecognizedCanonicalAnswerV2(
     }
 
     const { prompt, accessibility, ...nonPromptSlot } = slot;
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      nonPromptSlot,
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer(nonPromptSlot);
 
     if (
       [prompt.left, prompt.right].some((operand) => equalRationals(operand, answer))
@@ -192,10 +185,10 @@ function assertNoRecognizedCanonicalAnswerV2(
         "Student projection accessibility summary must equal its deterministic fraction-addition derivation",
       );
     }
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      { type: prompt.type, instruction: prompt.instruction },
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer({
+      type: prompt.type,
+      instruction: prompt.instruction,
+    });
   }
 }
 
@@ -207,22 +200,29 @@ export function assertPresentationIntermediatesDoNotMatchCanonicalAnswers(
   presentation: WorksheetPresentationV1,
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
-  const model = presentation.workedExample.model;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    [
-      {
-        numerator: model.leftScaledNumerator,
-        denominator: model.commonDenominator,
-      },
-      {
-        numerator: model.rightScaledNumerator,
-        denominator: model.commonDenominator,
-      },
-      {
-        numerator: model.unreducedSumNumerator,
-        denominator: model.commonDenominator,
-      },
-    ],
-    canonicalAnswers,
+  assertPresentationIntermediatesDoNotMatchPreparedCanonicalAnswers(
+    presentation,
+    prepareStudentVisibleAnswerGuard(canonicalAnswers),
   );
+}
+
+function assertPresentationIntermediatesDoNotMatchPreparedCanonicalAnswers(
+  presentation: WorksheetPresentationV1,
+  answerGuard: PreparedStudentVisibleAnswerGuard,
+): void {
+  const model = presentation.workedExample.model;
+  answerGuard.assertDoesNotRevealAnyAnswer([
+    {
+      numerator: model.leftScaledNumerator,
+      denominator: model.commonDenominator,
+    },
+    {
+      numerator: model.rightScaledNumerator,
+      denominator: model.commonDenominator,
+    },
+    {
+      numerator: model.unreducedSumNumerator,
+      denominator: model.commonDenominator,
+    },
+  ]);
 }

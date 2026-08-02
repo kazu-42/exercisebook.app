@@ -468,6 +468,23 @@ const trustedProjectionSpecifierPrefixes = [
   "@exercisebook/schemas/trusted-student-projection",
   "@exercisebook/schemas/src/trusted-student-projection",
 ];
+const trustedProjectionPackageSpecifier =
+  "@exercisebook/schemas/trusted-student-projection";
+const trustedProjectionConsumerBindings = new Set([
+  "PreparedStudentVisibleAnswerGuard",
+  "StudentWorksheetProjectionV1",
+  "StudentWorksheetProjectionV2",
+  "prepareStudentVisibleAnswerGuard",
+  "projectWorksheetForStudentWithCanonicalAnswers",
+  "projectWorksheetV2ForStudentWithCanonicalAnswers",
+]);
+const preparedAnswerGuardBindings = new Set([
+  "PreparedStudentVisibleAnswerGuard",
+  "prepareStudentVisibleAnswerGuard",
+]);
+const preparedAnswerGuardInternalConsumer =
+  "packages/schemas/src/student-worksheet-delivery-v2.ts";
+const preparedAnswerGuardInternalSpecifier = "./worksheet-instance-v1.js";
 const mixedSchemaModulePolicies = [
   {
     safeBindings: new Set([
@@ -2026,6 +2043,11 @@ function findSchemasTrustedBindingViolations(
     const bindings = moduleLoad.bindings.length === 0 ? ["*"] : moduleLoad.bindings;
     for (const binding of bindings) {
       if (
+        isReviewedPreparedAnswerGuardInternalImport(relativeFile, moduleLoad, binding)
+      ) {
+        continue;
+      }
+      if (
         !mixedModulePolicy.safeBindings.has(binding) ||
         moduleLoad.aliasedBindings?.includes(binding)
       ) {
@@ -2037,6 +2059,200 @@ function findSchemasTrustedBindingViolations(
   }
 
   return violations;
+}
+
+function isReviewedPreparedAnswerGuardInternalImport(
+  relativeFile,
+  moduleLoad,
+  binding,
+) {
+  return (
+    relativeFile === preparedAnswerGuardInternalConsumer &&
+    moduleLoad.operation === "imports" &&
+    moduleLoad.specifier === preparedAnswerGuardInternalSpecifier &&
+    preparedAnswerGuardBindings.has(binding) &&
+    !moduleLoad.aliasedBindings?.includes(binding)
+  );
+}
+
+function schemaAnswerAuthorityViolation(
+  repositoryRoot,
+  file,
+  relativeFile,
+  moduleLoad,
+  resolutionRoot,
+) {
+  const normalizedSpecifier = withoutModuleExtension(
+    moduleLoadPathSpecifier(moduleLoad),
+  );
+  const loadsSchemasPackage =
+    normalizedSpecifier === "@exercisebook/schemas" ||
+    normalizedSpecifier.startsWith("@exercisebook/schemas/");
+  const loadsTrustedProjection = isTrustedImportFromModules(
+    repositoryRoot,
+    file,
+    moduleLoad,
+    resolutionRoot,
+    trustedProjectionSpecifierPrefixes,
+    trustedProjectionSourceModules,
+  );
+  const loadsSchemaImplementation = isTrustedImportFromModules(
+    repositoryRoot,
+    file,
+    moduleLoad,
+    resolutionRoot,
+    trustedImplementationSpecifierPrefixes,
+    trustedImplementationSourceModules,
+  );
+  if (
+    loadsTrustedProjection &&
+    moduleLoad.specifier === trustedProjectionPackageSpecifier &&
+    moduleLoad.operation === "imports" &&
+    moduleLoad.bindings.length > 0 &&
+    moduleLoad.bindings.every((binding) =>
+      trustedProjectionConsumerBindings.has(binding),
+    ) &&
+    (moduleLoad.aliasedBindings?.length ?? 0) === 0
+  ) {
+    return undefined;
+  }
+  if (loadsTrustedProjection) {
+    return `${relativeFile} ${moduleLoad.operation} trusted answer authority outside an exact non-aliased trusted-leaf import ${JSON.stringify(moduleLoad.specifier)}`;
+  }
+  if (loadsSchemaImplementation) {
+    return `${relativeFile} ${moduleLoad.operation} schemas implementation outside reviewed public or trusted entrypoints ${JSON.stringify(moduleLoad.specifier)}`;
+  }
+  if (!loadsSchemasPackage) {
+    return undefined;
+  }
+
+  const exposesPreparedAuthority = moduleLoad.bindings.some((binding) =>
+    preparedAnswerGuardBindings.has(binding),
+  );
+  if (!exposesPreparedAuthority) {
+    return undefined;
+  }
+
+  return `${relativeFile} ${moduleLoad.operation} prepared answer authority outside the exact trusted leaf ${JSON.stringify(moduleLoad.specifier)}`;
+}
+
+function directIdentityBinding(node) {
+  const expression = unwrapTransparentExpression(node);
+  return expression?.type === "Identifier" ? expression.name : undefined;
+}
+
+function addTrustedAuthorityIdentityAliases(statement, authorityBindings) {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  let changed = false;
+  if (declaration?.type === "VariableDeclaration") {
+    for (const declarator of declaration.declarations) {
+      const alias = moduleBindingName(declarator.id);
+      const sourceBinding = directIdentityBinding(declarator.init);
+      if (
+        alias !== undefined &&
+        sourceBinding !== undefined &&
+        authorityBindings.has(sourceBinding) &&
+        !authorityBindings.has(alias)
+      ) {
+        authorityBindings.add(alias);
+        changed = true;
+      }
+    }
+  }
+  if (declaration?.type === "TSTypeAliasDeclaration") {
+    const alias = moduleBindingName(declaration.id);
+    const sourceBinding =
+      declaration.typeAnnotation?.type === "TSTypeReference"
+        ? moduleBindingName(declaration.typeAnnotation.typeName)
+        : undefined;
+    if (
+      alias !== undefined &&
+      sourceBinding !== undefined &&
+      authorityBindings.has(sourceBinding) &&
+      !authorityBindings.has(alias)
+    ) {
+      authorityBindings.add(alias);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function findTrustedAuthorityLocalReexportViolations(source, relativeFile) {
+  const ast = parseSourceAst(source, relativeFile);
+  const authorityBindings = new Set();
+  for (const statement of ast.body) {
+    if (
+      statement.type !== "ImportDeclaration" ||
+      staticStringValue(statement.source) !== trustedProjectionPackageSpecifier
+    ) {
+      continue;
+    }
+    for (const specifier of statement.specifiers) {
+      if (specifier.type !== "ImportSpecifier") {
+        continue;
+      }
+      const imported = moduleBindingName(specifier.imported);
+      const local = moduleBindingName(specifier.local);
+      if (
+        imported !== undefined &&
+        imported === local &&
+        trustedProjectionConsumerBindings.has(imported)
+      ) {
+        authorityBindings.add(local);
+      }
+    }
+  }
+
+  let changed;
+  do {
+    changed = false;
+    for (const statement of ast.body) {
+      changed =
+        addTrustedAuthorityIdentityAliases(statement, authorityBindings) || changed;
+    }
+  } while (changed);
+
+  const exportedAuthorityBindings = new Set();
+  for (const statement of ast.body) {
+    if (statement.type === "ExportNamedDeclaration" && statement.source === null) {
+      for (const specifier of statement.specifiers) {
+        const local = moduleBindingName(specifier.local);
+        if (local !== undefined && authorityBindings.has(local)) {
+          exportedAuthorityBindings.add(local);
+        }
+      }
+      const declaration = statement.declaration;
+      if (declaration?.type === "VariableDeclaration") {
+        for (const declarator of declaration.declarations) {
+          const local = moduleBindingName(declarator.id);
+          if (local !== undefined && authorityBindings.has(local)) {
+            exportedAuthorityBindings.add(local);
+          }
+        }
+      }
+      if (declaration?.type === "TSTypeAliasDeclaration") {
+        const local = moduleBindingName(declaration.id);
+        if (local !== undefined && authorityBindings.has(local)) {
+          exportedAuthorityBindings.add(local);
+        }
+      }
+    }
+    if (statement.type === "ExportDefaultDeclaration") {
+      const local = directIdentityBinding(statement.declaration);
+      if (local !== undefined && authorityBindings.has(local)) {
+        exportedAuthorityBindings.add(local);
+      }
+    }
+  }
+
+  return [...exportedAuthorityBindings]
+    .sort((left, right) => left.localeCompare(right))
+    .map(
+      (binding) =>
+        `${relativeFile} re-exports trusted answer authority through local binding ${JSON.stringify(binding)}`,
+    );
 }
 
 function toRepositoryPath(repositoryRoot, file) {
@@ -2589,6 +2805,9 @@ export async function findImportBoundaryViolations(
     }
     const source = await readFile(file, "utf8");
     const moduleLoads = extractModuleLoads(source, relativeFile);
+    violations.push(
+      ...findTrustedAuthorityLocalReexportViolations(source, relativeFile),
+    );
     for (const moduleLoad of moduleLoads) {
       if (isUnreviewedBrowserStyleModule(moduleLoad)) {
         violations.push(
@@ -2617,6 +2836,17 @@ export async function findImportBoundaryViolations(
         moduleLoad,
         absoluteWebApplicationRoot,
       );
+      const preparedAuthorityViolation = schemaAnswerAuthorityViolation(
+        absoluteRepositoryRoot,
+        file,
+        relativeFile,
+        moduleLoad,
+        absoluteWebApplicationRoot,
+      );
+      if (preparedAuthorityViolation !== undefined) {
+        violations.push(preparedAuthorityViolation);
+        continue;
+      }
       if (
         isUnapprovedProductionExternalImport(
           moduleLoad,
@@ -2639,6 +2869,9 @@ export async function findImportBoundaryViolations(
     }
     const source = await readFile(file, "utf8");
     const moduleLoads = extractModuleLoads(source, relativeFile);
+    violations.push(
+      ...findTrustedAuthorityLocalReexportViolations(source, relativeFile),
+    );
     for (const moduleLoad of moduleLoads) {
       if (isForbiddenProductionViteLoad(moduleLoad, false)) {
         violations.push(
@@ -2653,6 +2886,17 @@ export async function findImportBoundaryViolations(
         moduleLoad,
         absoluteRepositoryRoot,
       );
+      const preparedAuthorityViolation = schemaAnswerAuthorityViolation(
+        absoluteRepositoryRoot,
+        file,
+        relativeFile,
+        moduleLoad,
+        absoluteRepositoryRoot,
+      );
+      if (preparedAuthorityViolation !== undefined) {
+        violations.push(preparedAuthorityViolation);
+        continue;
+      }
       const testModuleLoad = isTestModuleLoad(
         file,
         moduleLoad,

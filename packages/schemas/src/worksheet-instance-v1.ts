@@ -429,12 +429,10 @@ function assertNoRecognizedCanonicalAnswer(
   if (delivery.slots.length !== canonicalAnswers.length) {
     throw new Error("Student projection slot-to-answer mapping is inconsistent");
   }
+  const answerGuard = prepareStudentVisibleAnswerGuard(canonicalAnswers);
 
   const { slots, ...globalDelivery } = delivery;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    globalDelivery,
-    canonicalAnswers,
-  );
+  answerGuard.assertDoesNotRevealAnyAnswer(globalDelivery);
 
   for (const [index, slot] of slots.entries()) {
     const answer = canonicalAnswers[index];
@@ -443,10 +441,7 @@ function assertNoRecognizedCanonicalAnswer(
     }
 
     const { prompt, accessibility, ...nonPromptSlot } = slot;
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      nonPromptSlot,
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer(nonPromptSlot);
 
     const promptOperands = [prompt.left, prompt.right];
     if (promptOperands.some((operand) => equalRationals(operand, answer))) {
@@ -471,10 +466,10 @@ function assertNoRecognizedCanonicalAnswer(
         "Student projection accessibility summary must equal its deterministic fraction-addition derivation",
       );
     }
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      { type: prompt.type, instruction: prompt.instruction },
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer({
+      type: prompt.type,
+      instruction: prompt.instruction,
+    });
   }
 }
 
@@ -483,26 +478,117 @@ export interface CanonicalRationalValue {
   readonly denominator: string;
 }
 
+class PreparedStudentVisibleAnswerGuardImpl {
+  readonly #allAnswerSignatures: ReadonlySet<string>;
+  readonly #answerSignaturesByIndex: readonly ReadonlySet<string>[];
+  #remainingSessionCandidates = MAX_RATIONAL_CANDIDATES_PER_SESSION;
+
+  constructor(
+    allAnswerSignatures: ReadonlySet<string>,
+    answerSignaturesByIndex: readonly ReadonlySet<string>[],
+  ) {
+    this.#allAnswerSignatures = allAnswerSignatures;
+    this.#answerSignaturesByIndex = answerSignaturesByIndex;
+  }
+
+  assertDoesNotRevealAnyAnswer(visibleData: unknown): void {
+    this.#assertDoesNotRevealAnswers(visibleData, this.#allAnswerSignatures);
+  }
+
+  assertDoesNotRevealAnswerAt(visibleData: unknown, answerIndex: number): void {
+    if (
+      !Number.isInteger(answerIndex) ||
+      answerIndex < 0 ||
+      answerIndex >= this.#answerSignaturesByIndex.length
+    ) {
+      throw new Error("Student projection canonical-answer index is invalid");
+    }
+    const answerSignatures = this.#answerSignaturesByIndex[answerIndex];
+    if (answerSignatures === undefined) {
+      throw new Error("Student projection canonical-answer index is invalid");
+    }
+    this.#assertDoesNotRevealAnswers(visibleData, answerSignatures);
+  }
+
+  #assertDoesNotRevealAnswers(
+    visibleData: unknown,
+    canonicalAnswerSignatures: ReadonlySet<string>,
+  ): void {
+    assertSafeDataObjectGraph(visibleData);
+    const scanBudget: RationalCandidateScanBudget = {
+      remainingAssertionCandidates: MAX_RATIONAL_CANDIDATES_PER_ASSERTION,
+      assertionLimitMessage: `Student projection prepared canonical-answer assertion exceeds ${MAX_RATIONAL_CANDIDATES_PER_ASSERTION} candidates`,
+      consumeSessionCandidate: () => {
+        if (this.#remainingSessionCandidates <= 0) {
+          throw new Error(
+            `Student projection prepared canonical-answer phase exceeds ${MAX_RATIONAL_CANDIDATES_PER_SESSION} candidates`,
+          );
+        }
+        this.#remainingSessionCandidates -= 1;
+      },
+    };
+    assertStructuredRationalsDoNotMatchCanonicalAnswers(
+      visibleData,
+      canonicalAnswerSignatures,
+      scanBudget,
+    );
+    assertStringsDoNotContainCanonicalAnswers(
+      collectStringLeaves(visibleData),
+      canonicalAnswerSignatures,
+      scanBudget,
+    );
+  }
+}
+
+/**
+ * Opaque trusted-server authorization context. Its answer signatures are
+ * detached during preparation and never exposed as enumerable instance data.
+ * The candidate budget is stateful: create one guard for one synchronous
+ * authorization phase, then discard it. Never cache it, share it across
+ * requests or artifacts, or retry a failed phase with the same guard.
+ */
+export type PreparedStudentVisibleAnswerGuard = PreparedStudentVisibleAnswerGuardImpl;
+
+export function prepareStudentVisibleAnswerGuard(
+  canonicalAnswers: readonly CanonicalRationalValue[],
+): PreparedStudentVisibleAnswerGuard {
+  assertSafeDataObjectGraph(canonicalAnswers);
+  const { allAnswerSignatures, answerSignaturesByIndex } =
+    createPreparedCanonicalAnswerSignatureSets(canonicalAnswers);
+  const guard = new PreparedStudentVisibleAnswerGuardImpl(
+    allAnswerSignatures,
+    answerSignaturesByIndex,
+  );
+  Object.freeze(guard);
+  return guard;
+}
+
 export function assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
   visibleData: unknown,
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
+  // Preserve the legacy visible-data-before-answer-context validation order
+  // and its text-only per-call candidate budget.
   assertSafeDataObjectGraph(visibleData);
   assertSafeDataObjectGraph(canonicalAnswers);
-  const canonicalAnswerSignatures = createCanonicalAnswerSignatureSet(canonicalAnswers);
-  assertStructuredRationalsDoNotMatchCanonicalAnswers(
-    visibleData,
-    canonicalAnswerSignatures,
-  );
+  const { allAnswerSignatures } =
+    createPreparedCanonicalAnswerSignatureSets(canonicalAnswers);
+  assertStructuredRationalsDoNotMatchCanonicalAnswers(visibleData, allAnswerSignatures);
   assertStringsDoNotContainCanonicalAnswers(
     collectStringLeaves(visibleData),
-    canonicalAnswerSignatures,
+    allAnswerSignatures,
+    {
+      remainingAssertionCandidates: MAX_RATIONAL_CANDIDATES_PER_ASSERTION,
+      assertionLimitMessage: `Student projection canonical-answer rational scan exceeds ${MAX_RATIONAL_CANDIDATES_PER_ASSERTION} candidates`,
+      consumeSessionCandidate: () => undefined,
+    },
   );
 }
 
 function assertStructuredRationalsDoNotMatchCanonicalAnswers(
   visibleData: unknown,
   canonicalAnswerSignatures: ReadonlySet<string>,
+  scanBudget?: RationalCandidateScanBudget,
 ): void {
   const pending: unknown[] = [visibleData];
   while (pending.length > 0) {
@@ -515,6 +601,9 @@ function assertStructuredRationalsDoNotMatchCanonicalAnswers(
       typeof record.numerator === "string" &&
       typeof record.denominator === "string"
     ) {
+      if (scanBudget !== undefined) {
+        consumeRationalCandidateBudget(scanBudget);
+      }
       const signature = structuredRationalSignature(
         record.numerator as string,
         record.denominator as string,
@@ -563,15 +652,19 @@ function canonicalIntegerDigitCount(value: string): number {
 // Both WorksheetInstanceV1 and WorksheetInstanceV2 cap practice slots at 200.
 const MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS = 200;
 
-function createCanonicalAnswerSignatureSet(
+function createPreparedCanonicalAnswerSignatureSets(
   canonicalAnswers: readonly CanonicalRationalValue[],
-): ReadonlySet<string> {
+): {
+  readonly allAnswerSignatures: ReadonlySet<string>;
+  readonly answerSignaturesByIndex: readonly ReadonlySet<string>[];
+} {
   if (canonicalAnswers.length > MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS) {
     throw new Error(
       `Student projection canonical-answer context exceeds ${MAX_STUDENT_VISIBLE_CANONICAL_ANSWERS} answers`,
     );
   }
-  const signatures = new Set<string>();
+  const allAnswerSignatures = new Set<string>();
+  const answerSignaturesByIndex: ReadonlySet<string>[] = [];
   for (const answer of canonicalAnswers) {
     if (
       !isCanonicalIntegerSyntax(answer.numerator) ||
@@ -593,21 +686,24 @@ function createCanonicalAnswerSignatureSet(
     ) {
       throw new Error("Student projection canonical-answer context is invalid");
     }
-    signatures.add(`${normalized.numerator}\u0000${normalized.denominator}`);
+    const signature = `${normalized.numerator}\u0000${normalized.denominator}`;
+    allAnswerSignatures.add(signature);
+    answerSignaturesByIndex.push(new Set([signature]));
   }
-  return signatures;
+  return {
+    allAnswerSignatures,
+    answerSignaturesByIndex: Object.freeze(answerSignaturesByIndex),
+  };
 }
 
 function assertStringsDoNotContainCanonicalAnswers(
   visibleStrings: readonly string[],
   canonicalAnswerSignatures: ReadonlySet<string>,
+  scanBudget: RationalCandidateScanBudget,
 ): void {
   if (canonicalAnswerSignatures.size === 0) {
     return;
   }
-  const scanBudget: RationalTextScanBudget = {
-    remainingCandidates: MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN,
-  };
   for (const visibleString of visibleStrings) {
     for (const normalized of normalizedStringVariants(visibleString)) {
       assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
@@ -637,19 +733,22 @@ const DENOMINATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN =
   /\{\s*["']?denominator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*,\s*["']?numerator["']?\s*:\s*["']?(-?[0-9]+)["']?\s*\}/giu;
 // Far above legitimate worksheet prose, while bounding normalization-amplified
 // GCD work for adversarial but structurally valid string leaves.
-const MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN = 4_096;
+const MAX_RATIONAL_CANDIDATES_PER_ASSERTION = 4_096;
+const MAX_RATIONAL_CANDIDATES_PER_SESSION = 8_192;
 
-interface RationalTextScanBudget {
-  remainingCandidates: number;
+interface RationalCandidateScanBudget {
+  remainingAssertionCandidates: number;
+  readonly assertionLimitMessage: string;
+  readonly consumeSessionCandidate: () => void;
 }
 
 function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
   value: string,
   canonicalAnswerSignatures: ReadonlySet<string>,
-  scanBudget: RationalTextScanBudget,
+  scanBudget: RationalCandidateScanBudget,
 ): void {
   for (const match of value.matchAll(RATIONAL_TEXT_CANDIDATE_PATTERN)) {
-    consumeRationalTextCandidateBudget(scanBudget);
+    consumeRationalCandidateBudget(scanBudget);
     const numerator = match[1];
     const slashSeparator = match[2];
     const overSeparator = match[3];
@@ -673,7 +772,7 @@ function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
   }
 
   for (const match of value.matchAll(TEX_FRACTION_TEXT_CANDIDATE_PATTERN)) {
-    consumeRationalTextCandidateBudget(scanBudget);
+    consumeRationalCandidateBudget(scanBudget);
     assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
       match,
       1,
@@ -682,7 +781,7 @@ function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
     );
   }
   for (const match of value.matchAll(NUMERATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN)) {
-    consumeRationalTextCandidateBudget(scanBudget);
+    consumeRationalCandidateBudget(scanBudget);
     assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
       match,
       1,
@@ -691,7 +790,7 @@ function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
     );
   }
   for (const match of value.matchAll(DENOMINATOR_FIRST_OBJECT_TEXT_CANDIDATE_PATTERN)) {
-    consumeRationalTextCandidateBudget(scanBudget);
+    consumeRationalCandidateBudget(scanBudget);
     assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(
       match,
       2,
@@ -701,13 +800,12 @@ function assertRationalTextCandidatesDoNotMatchCanonicalAnswers(
   }
 }
 
-function consumeRationalTextCandidateBudget(scanBudget: RationalTextScanBudget): void {
-  if (scanBudget.remainingCandidates <= 0) {
-    throw new Error(
-      `Student projection canonical-answer rational scan exceeds ${MAX_RATIONAL_TEXT_CANDIDATES_PER_SCAN} candidates`,
-    );
+function consumeRationalCandidateBudget(scanBudget: RationalCandidateScanBudget): void {
+  if (scanBudget.remainingAssertionCandidates <= 0) {
+    throw new Error(scanBudget.assertionLimitMessage);
   }
-  scanBudget.remainingCandidates -= 1;
+  scanBudget.consumeSessionCandidate();
+  scanBudget.remainingAssertionCandidates -= 1;
 }
 
 function assertFixedRationalTextMatchDoesNotRevealCanonicalAnswer(

@@ -7,8 +7,9 @@ Date: 2026-08-02
 This is a target architecture, not a deployment record. The Phase 1 repository
 implements a local walking skeleton through printable A4 HTML, Phase 1.5 adds
 an anonymous deterministic daily-plan preview, and the current Phase 1.7 stack
-adds a strict V2 worksheet-preview backend and renderer-neutral
-`PrintDocumentV2` semantic core beside the preserved V1 lane. It does not claim
+adds a strict V2 worksheet-preview backend, renderer-neutral `PrintDocumentV2`
+semantic core, and trusted prepared-answer guard beside the preserved V1 lane.
+It does not claim
 production DNS/application deployment, durable Cloudflare storage, learner
 adaptation, printable V2 HTML or artifacts, rendered A4 behavior, a hosted PDF
 service, Browser Run rendering, a LuaLaTeX backend, a standalone lesson, or a
@@ -87,13 +88,40 @@ closure. It intentionally does not claim complete detection of decimals,
 percentages, or arbitrary natural-language equivalents; answer, candidate, and
 integer limits fail closed instead of accepting a partial scan.
 
-Those limits bound one role scan, not aggregate projection CPU. Answer
-signatures are currently rebuilt for each role scan, and hostile but
-self-consistent 100–200-problem inputs with large integers have measured about
-0.17–2.8 seconds. This checkpoint therefore permits only the trusted-replay-first
-4/6/8-problem, small-integer path. Reusing one prepared signature context across
-the projection, or narrowing trusted item/integer bounds, is a release blocker
-before any public synchronous render endpoint or broad 200-problem use.
+Trusted server projectors now prepare one opaque answer guard per authorization
+phase. Preparation validates and detaches the canonical answers once, then
+builds the complete and per-slot rational-signature sets in O(N). The prepared
+API is exported only from `@exercisebook/schemas/trusted-student-projection`;
+browser source and emitted-artifact checks reject it. The existing root
+one-shot assertion remains behavior-compatible for callers that do not own a
+phase, but production Web and Print paths reuse the prepared guard across their
+role-sensitive assertions.
+
+Each prepared assertion has one combined 4,096-candidate cap across structured
+and recognized-text rationals, and the phase shares an 8,192-candidate cap.
+End-to-end production Web or Print projection entrypoints use two fixed
+authorization phases; the replay-authorized V2 service path uses three. These
+are phase-local fail-closed bounds, not a request-wide deadline, memory limit,
+or proof of total CPU safety, so trusted planner/materializer replay still
+precedes projection. The schema-valid,
+unique-answer boundary benchmark uses 6 candidates in delivery and `12 + 10N`
+in the final Print phase. That is `18 + 10N` across the two direct V2 phases:
+at N=200, the heavier phase consumes 2,012/8,192 and the two-phase total is
+2,018. Prepared trusted/full V2 p50 is 7.13/30.08 ms at N=100 and 13.48/56.63
+ms at N=200. These are local Apple M5 Pro / Node 26.5.0 reference measurements
+after 3 warmups and across 15 measured runs, not a CI latency or SLO gate.
+Deterministic counters and tests are the regression evidence. Structural
+instrumentation records `24N + 36` answer-guard BigInt
+conversions across trusted delivery and final Print authorization: 4,836 at
+N=200 versus the former guard-only 487,636 baseline, about 100.8x fewer. Other
+validation and canonicalization BigInt work is outside that structural count.
+
+A separate effective materialization-envelope limit was exposed by the broad
+fixture. A generated-style payload passes at N=178 with 548,377 canonical
+bytes, while N=179 with 551,466 canonical bytes fails the existing 1,000,000
+string-code-unit safe-graph cap. This is not an answer-guard failure: deciding
+whether to narrow the advertised problem-count contract or revise the complete
+materialization-envelope bound is a follow-up contract decision.
 
 The V2 service treats injected dependencies as hostile test seams, not as
 alternate authorities. Supplied planner, materializer, and projector outputs
@@ -138,16 +166,19 @@ the final trusted-answer authorization helper remain unexported. Structural
 projection from a verified, application-authorized worksheet snapshot proves
 source binding and student authorization.
 
-This 2026-08-02 semantic-core checkpoint is on `feat/v2-print-document`,
-stacked on `feat/v2-worksheet-api` at
-`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5). It is neither
+This 2026-08-02 prepared-guard checkpoint is on
+`feat/prepared-answer-guard`, stacked on `feat/v2-print-document` at
+`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6). It is neither
 merged nor deployed, and no child PR is claimed here. Reviewed content hashes
 and all five frozen V1 worksheet/PrintDocument/HTML identities remain exact.
-TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused evidence
-includes 142/142 print-package tests across 10 files, 330/330 schema tests
-across 5 files, 50/50 equivalent-fraction guard tests, 62/62 source/config
-boundary tests plus the live scan, 37/37 final module-provenance tests, and
-21/21 artifact-scanner tests. The fixed V2 worksheet instance hash is
+The aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
+Vitest tests across 48 files. Focused evidence includes 143/143 print-package
+tests across 10 files, 358/358 schema tests across 5 files (including 162/162
+schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
+source/config boundary tests plus the live scan, 37/37 final module-provenance
+tests, and 24/24 artifact-scanner tests. Production build and existing sample
+verification pass without identity changes. The fixed V2 worksheet instance
+hash is
 `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
 The student PrintDocument hash is
 `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`

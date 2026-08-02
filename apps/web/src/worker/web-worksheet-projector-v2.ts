@@ -1,11 +1,14 @@
 import { equalRationals } from "@exercisebook/domain";
 import {
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionPromptAccessibleText,
   type CanonicalRationalValue,
   type MaterializedWorksheetInstanceV2,
 } from "@exercisebook/schemas";
-import { projectWorksheetV2ForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
+import {
+  prepareStudentVisibleAnswerGuard,
+  projectWorksheetV2ForStudentWithCanonicalAnswers,
+  type PreparedStudentVisibleAnswerGuard,
+} from "@exercisebook/schemas/trusted-student-projection";
 import {
   validateStudentWebWorksheetV2,
   type StudentWebWorksheetV2,
@@ -59,7 +62,11 @@ export async function projectStudentWorksheetForWebV2(
     attributions: delivery.attributions,
   });
 
-  assertStudentWebWorksheetV2DoesNotRevealPracticeAnswers(worksheet, canonicalAnswers);
+  assertStudentWebWorksheetV2DoesNotRevealPracticeAnswersWithPreparedGuard(
+    worksheet,
+    canonicalAnswers,
+    prepareStudentVisibleAnswerGuard(canonicalAnswers),
+  );
   return worksheet;
 }
 
@@ -72,22 +79,28 @@ export function assertStudentWebWorksheetV2DoesNotRevealPracticeAnswers(
   worksheet: StudentWebWorksheetV2,
   canonicalAnswers: readonly CanonicalRationalValue[],
 ): void {
+  assertStudentWebWorksheetV2DoesNotRevealPracticeAnswersWithPreparedGuard(
+    worksheet,
+    canonicalAnswers,
+    prepareStudentVisibleAnswerGuard(canonicalAnswers),
+  );
+}
+
+function assertStudentWebWorksheetV2DoesNotRevealPracticeAnswersWithPreparedGuard(
+  worksheet: StudentWebWorksheetV2,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
+): void {
   if (worksheet.items.length !== canonicalAnswers.length) {
     throw new Error("V2 Web worksheet item-to-answer mapping is inconsistent");
   }
 
   const { items, presentation, ...globalWorksheet } = worksheet;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    globalWorksheet,
-    canonicalAnswers,
-  );
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    presentation,
-    canonicalAnswers,
-  );
+  answerGuard.assertDoesNotRevealAnyAnswer(globalWorksheet);
+  answerGuard.assertDoesNotRevealAnyAnswer(presentation);
   assertPresentationIntermediatesDoNotRevealPracticeAnswers(
     presentation.workedExample.model,
-    canonicalAnswers,
+    answerGuard,
   );
 
   for (const [index, item] of items.entries()) {
@@ -97,10 +110,7 @@ export function assertStudentWebWorksheetV2DoesNotRevealPracticeAnswers(
     }
 
     const { prompt, ...nonPromptItem } = item;
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-      nonPromptItem,
-      canonicalAnswers,
-    );
+    answerGuard.assertDoesNotRevealAnyAnswer(nonPromptItem);
 
     const accessibleText = deriveFractionAdditionPromptAccessibleText(
       prompt.left,
@@ -124,29 +134,26 @@ export function assertStudentWebWorksheetV2DoesNotRevealPracticeAnswers(
     // accessible text is derived from those operands, so only the current
     // slot's answer is forbidden in this role. Every non-prompt field above is
     // checked against the complete answer set.
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(prompt, [ownAnswer]);
+    answerGuard.assertDoesNotRevealAnswerAt(prompt, index);
   }
 }
 
 function assertPresentationIntermediatesDoNotRevealPracticeAnswers(
   model: StudentWebWorksheetV2["presentation"]["workedExample"]["model"],
-  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
 ): void {
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    [
-      {
-        numerator: model.leftScaledNumerator,
-        denominator: model.commonDenominator,
-      },
-      {
-        numerator: model.rightScaledNumerator,
-        denominator: model.commonDenominator,
-      },
-      {
-        numerator: model.unreducedSumNumerator,
-        denominator: model.commonDenominator,
-      },
-    ],
-    canonicalAnswers,
-  );
+  answerGuard.assertDoesNotRevealAnyAnswer([
+    {
+      numerator: model.leftScaledNumerator,
+      denominator: model.commonDenominator,
+    },
+    {
+      numerator: model.rightScaledNumerator,
+      denominator: model.commonDenominator,
+    },
+    {
+      numerator: model.unreducedSumNumerator,
+      denominator: model.commonDenominator,
+    },
+  ]);
 }

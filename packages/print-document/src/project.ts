@@ -6,7 +6,6 @@ import {
 } from "@exercisebook/domain";
 import {
   assertSafeDataObjectGraph,
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers,
   deriveFractionAdditionPromptAccessibleText,
   validateWorksheetInstanceV1,
   type AttributionV1,
@@ -16,7 +15,11 @@ import {
   type WorksheetInstanceV1,
   type WorksheetSlotV1,
 } from "@exercisebook/schemas";
-import { projectWorksheetForStudentWithCanonicalAnswers } from "@exercisebook/schemas/trusted-student-projection";
+import {
+  prepareStudentVisibleAnswerGuard,
+  projectWorksheetForStudentWithCanonicalAnswers,
+  type PreparedStudentVisibleAnswerGuard,
+} from "@exercisebook/schemas/trusted-student-projection";
 
 import {
   PRINT_DOCUMENT_SCHEMA,
@@ -179,21 +182,29 @@ export function assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
     throw new Error("Student PrintDocument source mapping is inconsistent");
   }
 
-  const { blocks, ...globalDocument } = document;
-  assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-    globalDocument,
+  assertStudentPrintDocumentWithPreparedAnswerGuard(
+    document,
+    delivery,
     canonicalAnswers,
+    prepareStudentVisibleAnswerGuard(canonicalAnswers),
   );
+}
+
+function assertStudentPrintDocumentWithPreparedAnswerGuard(
+  document: StudentPrintDocumentV1,
+  delivery: StudentWorksheetDeliveryV1,
+  canonicalAnswers: readonly CanonicalRationalValue[],
+  answerGuard: PreparedStudentVisibleAnswerGuard,
+): void {
+  const { blocks, ...globalDocument } = document;
+  answerGuard.assertDoesNotRevealAnyAnswer(globalDocument);
 
   const seenProblems = new Set<number>();
   const seenFallbacks = new Set<number>();
   for (const block of blocks) {
     if (block.type === "problem-group") {
       const { problems, ...groupMetadata } = block;
-      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-        groupMetadata,
-        canonicalAnswers,
-      );
+      answerGuard.assertDoesNotRevealAnyAnswer(groupMetadata);
       for (const problem of problems) {
         const index = problem.ordinal - 1;
         const slot = delivery.slots[index];
@@ -212,10 +223,7 @@ export function assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
         const { prompt, promptAccessibleText, ...nonPromptProblem } = problem;
         void prompt;
         void promptAccessibleText;
-        assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-          nonPromptProblem,
-          canonicalAnswers,
-        );
+        answerGuard.assertDoesNotRevealAnyAnswer(nonPromptProblem);
       }
       continue;
     }
@@ -236,10 +244,11 @@ export function assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
       }
       seenFallbacks.add(index);
       assertProjectedFractionBarMatchesPrompt(block, slot, answer);
-      assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(
-        { type: block.type, id: block.id, caption: block.caption },
-        canonicalAnswers,
-      );
+      answerGuard.assertDoesNotRevealAnyAnswer({
+        type: block.type,
+        id: block.id,
+        caption: block.caption,
+      });
       continue;
     }
 
@@ -263,7 +272,7 @@ export function assertStudentPrintDocumentHasNoRecognizedCanonicalAnswers(
       }
     }
 
-    assertStudentVisibleDataHasNoRecognizedCanonicalAnswers(block, canonicalAnswers);
+    answerGuard.assertDoesNotRevealAnyAnswer(block);
   }
 
   if (
