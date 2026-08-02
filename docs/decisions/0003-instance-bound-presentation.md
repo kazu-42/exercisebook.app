@@ -245,12 +245,10 @@ separate evidence and must not be substituted for one another.
 
 As of 2026-08-02, the strict V2 worksheet Web DTO, trusted projector,
 application service, and exact V1/V2 Hono request/response dispatch are
-implemented on `feat/v2-worksheet-api`, stacked on
-`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4). Injected
-planner, materializer, and projector outputs are detached and exact-replayed
-against trusted implementations. Presentation unavailability is limited to
-`content-identity-mismatch`, `invalid-selection`, `selected-node-count`,
-`selected-node-type`, `exercise-contract-mismatch`,
+implemented. Injected planner, materializer, and projector outputs are detached
+and exact-replayed against trusted implementations. Presentation unavailability
+is limited to `content-identity-mismatch`, `invalid-selection`,
+`selected-node-count`, `selected-node-type`, `exercise-contract-mismatch`,
 `worked-example-arithmetic-mismatch`, `excluded-answer-tuple-mismatch`, and
 `presentation-invalid`; materialization unavailability is limited to
 `unsupported-content-state`, `locale-mismatch`, and `generation-exhausted`.
@@ -261,19 +259,66 @@ future unclassified code remain exceptions until explicitly reviewed.
 Unexpected route failures emit a fixed, sanitized structured 500 report without
 raw exception or request data.
 
-This is a bounded backend checkpoint, not implementation of the complete ADR.
-The active React UI still uses V1. The standalone lesson, React V2 integration,
-`PrintDocumentV2`, printable V2 HTML, and browser/visual/accessibility/A4 gates
-remain incomplete. Nothing in this checkpoint is merged or deployed.
+The parallel print checkpoint implements schema `exercisebook.print/v2`, source
+schema `exercisebook.worksheet-instance/v2`, and projector
+`print-projector.v2` through separate V2 validator, canonicalizer, student
+projector, and answer-key projector entrypoints. Each projection rejects unsafe
+option/materialization graphs before property access, detaches the complete
+instance before the first asynchronous hash, requires exact canonical bytes and
+SHA-256, and preserves `sourceInstanceHash`. Student and shared answer-key
+blocks are reconstructed solely from the answer-free
+`StudentWorksheetDeliveryV2`; only the ordered key appendix reads the same
+verified full-instance snapshot. Student and key canonical documents therefore
+share presentation, problem order, attribution, and source identity but have
+distinct document hashes.
 
-Reviewed content hashes and V1 instance/Print/HTML identities remain unchanged.
-The V1 attribution schema also retains one runtime object identity across the
-root, safe-leaf, presentation, and worksheet exports. TypeScript 7.0.2 and
-1,135 Vitest tests across 42 files pass; the focused privacy gates pass 61/61
-source/config boundary tests, 37/37 final module-provenance tests, and 21/21
-artifact-scanner tests. The 365-day maximum serialized V2 response is
-5,964/32,768 bytes (26,804 bytes headroom). The production client records 112
-modules and the raw artifact scanner covers 328,591 bytes. The patched
+The package root deliberately exports only the reviewed V2 contract,
+validation, canonicalization, projection, and worksheet-verification surface.
+Direct document materialization, block internals, resource-limit constants, and
+the trusted-answer final authorization helper remain private. Structural V2
+validation proves exact shape and internal consistency, not source authority or
+student authorization. Those properties require the verified projector path,
+and an external request additionally requires the application service's trusted
+planner/content/materializer replay. A self-consistent hash alone is not that
+authority.
+
+Production print source may import only exact `@exercisebook/domain`,
+`@exercisebook/schemas`, and
+`@exercisebook/schemas/trusted-student-projection` roots plus relative package
+modules. The boundary rejects generator, planner, compiler, unreviewed subpath,
+and test-only imports so print projection cannot replan, regenerate, or look up
+current content. The semantic `paper: "a4"` discriminator participates in the
+document hash but does not establish page layout.
+
+This remains a bounded semantic backend checkpoint, not implementation of the
+complete ADR. The active React UI still uses V1. Printable V2 HTML and artifacts,
+rendered A4 behavior, standalone lesson delivery, React V2 integration, and
+browser/visual/accessibility gates remain incomplete. The checkpoint is on
+`feat/v2-print-document`, stacked on `feat/v2-worksheet-api` at
+`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5). No child PR is
+claimed here, and nothing in this checkpoint is merged or deployed.
+
+Reviewed content hashes and all five frozen V1 worksheet/PrintDocument/HTML
+identities remain unchanged. The V1 attribution schema also retains one runtime
+object identity across the root, safe-leaf, presentation, and worksheet
+exports. TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused
+evidence includes 142/142 print-package tests across 10 files, 330/330 schema
+tests across 5 files, 50/50 equivalent-fraction guard tests, 62/62 source/config
+boundary tests plus the live scan, 37/37 final module-provenance tests, and
+21/21 artifact-scanner tests. The fixed V2 worksheet instance hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
+The student PrintDocument hash is
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+at 12,077 canonical bytes with 3,987,923 bytes of headroom below the
+4,000,000-byte cap; the answer-key hash is
+`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
+at 16,012 bytes with 3,983,988 bytes of headroom.
+
+The 365-day maximum serialized V2 Web response remains 5,964/32,768 bytes
+(26,804 bytes headroom). The production client records 112 modules and the raw
+artifact scanner covers 328,591 bytes. These print hashes authenticate semantic
+JSON only: no V2 HTML/PDF artifact, page count, clipping, text extraction,
+accessibility, or rendered A4 conclusion follows from them. The patched
 Cloudflare development stack pins `@cloudflare/vite-plugin@1.49.0`,
 `@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
 `miniflare@4.20260730.0` / `sharp@0.35.2`; the 2026-08-02 `pnpm audit` run
@@ -335,6 +380,22 @@ reported no known vulnerabilities. Later advisory data may change that result.
 - Embedding presentation increases the student-visible surface subject to
   answer-disclosure checks. Intermediate forms such as `3/6` are compared by
   rational equality, not only string equality.
+- Recognized fraction-like text is reduced to a bounded rational signature
+  after the existing normalization closure. Slash and Unicode slash forms,
+  spaced `over`, bounded TeX `\frac`, and bounded numerator/denominator
+  object-like text are covered. Decimal, percentage, and arbitrary
+  natural-language equivalents remain residual risks; exceeding the answer,
+  candidate, or integer bounds rejects the delivery instead of accepting a
+  partial scan. This fail-closed policy may reject an answer-equivalent
+  fraction-looking URL path or prose fragment.
+- The candidate budget bounds one role scan; it is not an aggregate projector
+  CPU bound. Answer signatures are currently rebuilt for each role scan, and
+  hostile but self-consistent 100–200-problem inputs with large integers have
+  measured about 0.17–2.8 seconds. Trusted planner/materializer replay must
+  precede print projection, and this checkpoint permits only the reviewed
+  4/6/8-problem, small-integer path. A prepared signature context reused across
+  projection, or narrower trusted item/integer bounds, is a release blocker
+  before any public synchronous render endpoint or broad 200-problem use.
 - Raw Markdown, raw HTML, general TeX, executable content, arbitrary URLs, and
   the full ContentDocument remain outside the delivery boundary.
 - A hash proves integrity but not safety; detached verification and final

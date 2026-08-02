@@ -6,12 +6,13 @@ Date: 2026-08-02
 
 This is a target architecture, not a deployment record. The Phase 1 repository
 implements a local walking skeleton through printable A4 HTML, Phase 1.5 adds
-an anonymous deterministic daily-plan preview, and the current Phase 1.7
-checkpoint adds a strict V2 worksheet-preview backend beside the preserved V1
-lane. It does not claim production DNS/application deployment, durable
-Cloudflare storage, learner adaptation, a hosted PDF service, Browser Run
-rendering, a LuaLaTeX backend, `PrintDocumentV2`, a standalone lesson, or a V2
-React experience.
+an anonymous deterministic daily-plan preview, and the current Phase 1.7 stack
+adds a strict V2 worksheet-preview backend and renderer-neutral
+`PrintDocumentV2` semantic core beside the preserved V1 lane. It does not claim
+production DNS/application deployment, durable Cloudflare storage, learner
+adaptation, printable V2 HTML or artifacts, rendered A4 behavior, a hosted PDF
+service, Browser Run rendering, a LuaLaTeX backend, a standalone lesson, or a
+V2 React experience.
 
 Primary application: `https://exercisebook.app`
 
@@ -36,17 +37,28 @@ learner identity or evidence, writes no cookie or browser storage, and does not
 claim mastery or adaptation. Its sequence seed is internal to materialization;
 the public response exposes only the preview identity, pinned public
 provenance, selection reason, counts, minutes, and student worksheet. The
-active React `/new` experience still requests and renders V1. The V2 DTO,
-trusted projector, service, and HTTP route are backend contract work only;
-standalone lesson delivery, React integration, browser/visual/accessibility
-acceptance, and `PrintDocumentV2` remain open. The preserved executable V1
-contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+active React `/new` experience still requests and renders V1. The V2 Web DTO,
+trusted projector, service, HTTP route, and print semantic core are backend and
+renderer-neutral contract work only; standalone lesson delivery, React
+integration, printable V2 HTML and artifacts, and browser, visual,
+accessibility, and rendered A4 acceptance remain open. The preserved executable
+V1 contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
 The V2 lane uses `day-one-fraction-preview@3`, pinned to the immutable V2
 content identity and the selected lesson, worked-example, and exercise nodes.
 Its `WorksheetInstanceV2` hash commits the renderer-neutral selected
 presentation, and detached `StudentWorksheetDeliveryV2` authorization removes
 answer authority before the strict Web DTO is projected.
+
+The parallel print lane uses schema `exercisebook.print/v2`, source schema
+`exercisebook.worksheet-instance/v2`, and projector `print-projector.v2`.
+Separate student and answer-key entrypoints verify and detach one materialized
+instance, preserve its source instance hash, and produce distinct canonical
+document hashes. Student and common answer-key blocks are built only from
+`StudentWorksheetDeliveryV2`; answer-bearing key entries are appended only from
+the same detached full-instance snapshot. The fixed `paper: "a4"` value
+participates in the semantic document identity but is not evidence of rendered
+A4 layout.
 
 In the preserved V1 lane, the enabled `day-one-fraction-preview@2` policy
 owns every reduced canonical rational structurally exposed by the reviewed
@@ -66,6 +78,22 @@ may legitimately equal another slot's answer, but never its own; prompt
 `accessibleText` and accessibility summaries are exact derivations from the
 validated operands. This distinction rejects cross-slot leaks in fields such
 as `printFallback` without rejecting mathematically valid operand reuse.
+
+Recognized fraction-like strings are also reduced to bounded rational
+signatures before comparison. The current recognizer covers slash and Unicode
+slash forms, spaced `over`, bounded TeX `\frac`, and bounded
+numerator/denominator object-like text after the existing normalization
+closure. It intentionally does not claim complete detection of decimals,
+percentages, or arbitrary natural-language equivalents; answer, candidate, and
+integer limits fail closed instead of accepting a partial scan.
+
+Those limits bound one role scan, not aggregate projection CPU. Answer
+signatures are currently rebuilt for each role scan, and hostile but
+self-consistent 100–200-problem inputs with large integers have measured about
+0.17–2.8 seconds. This checkpoint therefore permits only the trusted-replay-first
+4/6/8-problem, small-integer path. Reusing one prepared signature context across
+the projection, or narrowing trusted item/integer bounds, is a release blocker
+before any public synchronous render endpoint or broad 200-problem use.
 
 The V2 service treats injected dependencies as hostile test seams, not as
 alternate authorities. Supplied planner, materializer, and projector outputs
@@ -97,17 +125,43 @@ secret is semantically absent. Tree-shaking is an optimization and is never an
 authorization boundary; source reachability and emitted-module provenance must
 both remain reviewable.
 
-This 2026-08-02 checkpoint is on `feat/v2-worksheet-api`, stacked on
-`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4). It is
-neither merged nor deployed. Reviewed content hashes and V1 instance/Print/HTML
-identities remain unchanged, and the V1 attribution schema retains the same
-runtime object identity across its root, safe-leaf, presentation, and worksheet
-exports. TypeScript 7.0.2 and 1,135 Vitest tests across 42 files pass. The
-focused privacy gates pass 61/61 source/config boundary tests, 37/37 final
-module-provenance tests, and 21/21 artifact-scanner tests. Across the reviewed
-365-day V2 corpus, the largest exact serialized response is 5,964 of 32,768
-bytes, leaving 26,804 bytes of headroom. The production client build records
-112 modules, and the all-regular-file canary scans 328,591 artifact bytes.
+Production print source has a separate exact dependency allowlist:
+`@exercisebook/domain`, `@exercisebook/schemas`, and
+`@exercisebook/schemas/trusted-student-projection`, plus relative modules inside
+the package. The boundary rejects planner, generator, compiler, unreviewed
+subpath, and test-only imports so the projector cannot silently replan,
+regenerate, or resolve current content. The package root exports only the
+reviewed V2 schema/types, validator, canonicalizer, projection entrypoints, and
+materialization verifier. Internal block machinery, direct materialization, and
+the final trusted-answer authorization helper remain unexported. Structural
+`PrintDocumentV2` validation proves shape and internal consistency; only
+projection from a verified, application-authorized worksheet snapshot proves
+source binding and student authorization.
+
+This 2026-08-02 semantic-core checkpoint is on `feat/v2-print-document`,
+stacked on `feat/v2-worksheet-api` at
+`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5). It is neither
+merged nor deployed, and no child PR is claimed here. Reviewed content hashes
+and all five frozen V1 worksheet/PrintDocument/HTML identities remain exact.
+TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused evidence
+includes 142/142 print-package tests across 10 files, 330/330 schema tests
+across 5 files, 50/50 equivalent-fraction guard tests, 62/62 source/config
+boundary tests plus the live scan, 37/37 final module-provenance tests, and
+21/21 artifact-scanner tests. The fixed V2 worksheet instance hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
+The student PrintDocument hash is
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+at 12,077 canonical bytes, leaving 3,987,923 bytes below the 4,000,000-byte
+cap. The answer-key hash is
+`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
+at 16,012 bytes, leaving 3,983,988 bytes.
+
+Across the reviewed 365-day V2 Web corpus, the largest exact serialized
+response remains 5,964 of 32,768 bytes, leaving 26,804 bytes of headroom. The
+production client build records 112 modules, and the all-regular-file canary
+scans 328,591 artifact bytes. These print hashes describe semantic JSON only;
+no V2 HTML, PDF, checked-in print artifact, page count, clipping, extraction, or
+rendered A4 claim follows from them.
 
 The patched local Cloudflare development stack is pinned to
 `@cloudflare/vite-plugin@1.49.0`,

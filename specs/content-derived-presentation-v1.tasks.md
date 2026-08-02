@@ -1,8 +1,9 @@
 # Content-derived presentation v1 execution ledger
 
 Status: in progress
-Branch: `feat/v2-worksheet-api`
-Base: `feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4)
+Branch: `feat/v2-print-document`
+Base: `feat/v2-worksheet-api` at
+`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5)
 Specification: [content-derived-presentation-v1.md](content-derived-presentation-v1.md)
 Updated: 2026-08-02
 
@@ -27,9 +28,9 @@ available and byte-identical.
 | P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 planner foundation | complete |
 | P17-005 | Authorize detached StudentWorksheetDeliveryV2 | L | P17-004 | complete |
 | P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | in progress — backend checkpoint only |
-| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | pending |
+| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | in progress — semantic core complete; HTML/A4 pending |
 | P17-008 | Prove compatibility, artifacts, browser, and A4 gates | L | P17-006, P17-007 | pending |
-| P17-009 | Independent review, final checks, and stacked draft PR | M | checkpoint after P17-006 backend; closeout after P17-008 | in progress — backend checkpoint only |
+| P17-009 | Independent review, final checks, and stacked draft PR | M | bounded checkpoints before P17-008; closeout after P17-008 | in progress — Web backend and print-semantic checkpoints only |
 
 ## Dependency graph
 
@@ -430,18 +431,28 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-007 — PrintDocumentV2 and printable HTML
 
-- Status: pending
+- Status: in progress — renderer-neutral semantic core complete; printable
+  HTML, artifacts, and rendered A4 evidence pending
 - Type: feature / privacy / layout tests
 - Size: L
 - Dependencies: P17-005
 - Suggested ownership: print lane; parallel with P17-006
 - Primary files:
-  - `packages/print-document/src/types.ts`
-  - `packages/print-document/src/validate.ts`
-  - `packages/print-document/src/project.ts`
-  - `packages/print-document/src/canonical.ts`
-  - `packages/print-document/src/render-html.ts`
-  - print projection, validation, leak, canonical, and render tests
+  - `packages/print-document/src/types-v2.ts`
+  - `packages/print-document/src/validate-v2.ts`
+  - `packages/print-document/src/canonical-v2.ts`
+  - `packages/print-document/src/project-v2.ts`
+  - `packages/print-document/src/index.ts`
+  - `packages/print-document/src/__tests__/v2-fixture.ts`
+  - `packages/print-document/src/validation-v2.test.ts`
+  - `packages/print-document/src/canonical-v2.test.ts`
+  - `packages/print-document/src/project-v2.test.ts`
+  - `packages/print-document/src/compatibility-v1.test.ts`
+  - `packages/schemas/src/worksheet-instance-v1.ts`
+  - `packages/schemas/src/equivalent-fraction-leak.test.ts`
+  - `scripts/import-boundary-policy.mjs`
+  - `scripts/check-import-boundaries.test.mjs`
+  - printable V2 HTML implementation and render tests in the next slice
 - Deliverables:
   - separate `PrintDocumentV2` validator/canonical/projector entrypoints;
   - presentation heading, paragraphs, and structured worked-example blocks
@@ -455,10 +466,58 @@ Every value below must remain exact throughout Phase 1.7.
   - semantic snapshot parity with Web/lesson passes;
   - injected presentation answers fail final print authorization;
   - all four current v1 PrintDocument/HTML hashes remain exact.
-- Next slice:
-  - implement the renderer-neutral `PrintDocumentV2` validator, canonical form,
-    and role-sensitive student/key semantic projectors first; printable HTML and
-    A4 layout evidence follow without being claimed by that semantic checkpoint.
+- Current semantic-core evidence:
+  - schema `exercisebook.print/v2`, source schema
+    `exercisebook.worksheet-instance/v2`, and projector `print-projector.v2`
+    have separate V2 validation, canonicalization, student, and answer-key
+    entrypoints without widening V1;
+  - one unsafe-graph-checked, detached pre-await materialization snapshot owns
+    canonical-byte, hash, source, student, and key decisions. Student and common
+    key blocks consume only `StudentWorksheetDeliveryV2`; key entries alone read
+    the same verified full instance;
+  - the package root selectively exports the reviewed V2 contract,
+    canonicalizer, validator, projectors, and worksheet verifier. Direct
+    document materialization, block internals/resource limits, and final trusted
+    authorization remain private;
+  - structural validation is not authorization. Only the verified projection
+    path binds a document to its source and performs final role-sensitive
+    student authorization; an external request additionally depends on trusted
+    application-service replay;
+  - production print source may import only exact `@exercisebook/domain`,
+    `@exercisebook/schemas`, and
+    `@exercisebook/schemas/trusted-student-projection` roots plus relative
+    package modules. Planner, generator, compiler, unreviewed subpath, and
+    test-only imports fail the boundary;
+  - the fixed V2 worksheet instance hash is
+    `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
+  - the student PrintDocument hash is
+    `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+    at 12,077 canonical bytes, leaving 3,987,923 bytes beneath the
+    4,000,000-byte cap;
+  - the answer-key PrintDocument hash is
+    `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
+    at 16,012 bytes, leaving 3,983,988 bytes;
+  - TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass. Focused
+    evidence is 142/142 print-package tests across 10 files, 330/330 schema
+    tests across 5 files, 50/50 equivalent-fraction guard tests, 62/62
+    source/config boundary tests plus the live scan, 37/37 final
+    module-provenance tests, and 21/21 artifact-scanner tests;
+  - the real V1 pipeline freezes the WorksheetInstance, student/key
+    PrintDocument, and student/key HTML identities listed in the baseline table.
+- Remaining before P17-007 completion:
+  - `renderPrintableHtmlV2` and a complete V2 print-semantic snapshot;
+  - V2 HTML hashes plus checked-in artifacts/manifests;
+  - standalone lesson/Web/print semantic snapshot parity;
+  - remove the aggregate CPU release blocker before any public synchronous
+    render endpoint or broad 200-problem path. Answer signatures are currently
+    rebuilt per role scan, and hostile self-consistent broad/large-integer
+    inputs have measured about 0.17–2.8 seconds. Until one prepared signature
+    context is reused across projection or trusted item/integer bounds narrow,
+    trusted replay must precede projection and only the reviewed 4/6/8-problem,
+    small-integer path is allowed;
+  - browser-rendered A4 page count, clipping, page-break, extracted-text,
+    accessibility, and working-space evidence. The semantic `paper: "a4"`
+    discriminator is not that evidence.
 
 ## P17-008 — Integrated compatibility and release evidence
 
@@ -489,37 +548,43 @@ Every value below must remain exact throughout Phase 1.7.
   - exact page counts, clipping/read-order result, response maxima, and all v2
     hashes are recorded in this ledger.
 - Current partial evidence:
-  - TypeScript 7.0.2 and 1,135 Vitest tests across 42 files pass, together with
-    61/61 source/config boundary tests, 37/37 final module-provenance tests, and
-    21/21 artifact-scanner tests; production build and exact content/artifact
+  - TypeScript 7.0.2 and 1,282 Vitest tests across 48 files pass, together with
+    142/142 print-package tests across 10 files, 330/330 schema tests across 5
+    files, 50/50 equivalent-fraction guard tests, 62/62 source/config boundary
+    tests plus the live scan, 37/37 final module-provenance tests, and 21/21
+    artifact-scanner tests; production build and existing exact content/artifact
     verification also pass;
   - revision-1/revision-2 content hashes and every frozen V1
-    WorksheetInstance/PrintDocument/HTML identity remain unchanged;
+    WorksheetInstance/PrintDocument/HTML identity remain unchanged under an
+    explicit real-pipeline compatibility test;
+  - the V2 instance and student/key semantic PrintDocument identities and
+    canonical byte sizes are recorded under P17-007;
   - the 2026-08-02 `pnpm audit` run reported no known vulnerabilities after
     patching the Cloudflare development stack to
     `@cloudflare/vite-plugin@1.49.0`,
     `@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
     `miniflare@4.20260730.0` / `sharp@0.35.2`;
-  - these checks support the backend checkpoint only. V2 print artifacts,
-    standalone lesson/React browser flows, visual/accessibility inspection, and
-    A4 evidence are missing, so P17-008 remains pending.
+  - these checks support the Web backend and print semantic checkpoints only.
+    Printable V2 HTML and checked-in artifacts, standalone lesson/React browser
+    flows, visual/accessibility inspection, and rendered A4 evidence are
+    missing, so P17-008 remains pending.
 
 ## P17-009 — Independent review and stacked draft PR
 
-- Status: in progress — bounded backend checkpoint only; Phase 1.7 closeout
-  remains dependent on P17-008
+- Status: in progress — bounded Web backend and print-semantic checkpoints
+  only; Phase 1.7 closeout remains dependent on P17-008
 - Type: review / delivery
 - Size: M
-- Dependencies: bounded checkpoint after the P17-006 backend subset; full
-  closeout after P17-008
+- Dependencies: bounded checkpoints after the P17-006 backend subset and
+  P17-007 semantic core; full closeout after P17-008
 - Suggested ownership: independent reviewers then coordinator
 - Deliverables:
   - independent versioning/contract review;
   - independent adversarial privacy/snapshot review;
   - independent Web/lesson/print accessibility and release-readiness review;
   - repaired findings and rerun focused/full gates;
-  - focused commits pushed to `feat/v2-worksheet-api`;
-  - bounded stacked draft PR targeting `feat/content-derived-presentation`;
+  - focused commits pushed to `feat/v2-print-document`;
+  - bounded stacked draft PR targeting `feat/v2-worksheet-api`;
   - final Phase 1.7 review and release checkpoint after P17-008.
 - Completion evidence:
   - clean worktree and exact local/remote/head SHA agreement;
@@ -528,10 +593,12 @@ Every value below must remain exact throughout Phase 1.7.
   - no merge, deployment, DNS, or license mutation;
   - remaining findings recorded as explicit next-loop work.
 - Current evidence:
-  - local full checks for the bounded backend checkpoint pass with the exact
-    counts recorded under P17-008;
-  - the branch is stacked on `feat/content-derived-presentation` at
-    `fe389bcb` (parent draft PR #4), with no merge or deployment;
+  - local full checks for the bounded Web backend and print-semantic checkpoints
+    pass with the exact counts recorded under P17-008;
+  - the branch is stacked on `feat/v2-worksheet-api` at
+    `ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5), with no
+    merge or deployment;
+  - no child draft PR has been created at this documentation checkpoint;
   - child draft-PR state, exact local/remote head agreement, and final CI are
     volatile GitHub evidence that must be read back at delivery time rather than
     inferred from this ledger; a bounded draft checkpoint still does not

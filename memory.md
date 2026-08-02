@@ -397,3 +397,74 @@ still uses V1, and standalone lesson delivery, React V2 integration,
 remain open. No merge or deployment is implied. The next non-UI slice is the
 `PrintDocumentV2` semantic core, followed by integrated evidence and the final
 Phase 1.7 review.
+
+## 2026-08-02 - Freeze the PrintDocumentV2 semantic boundary before layout
+
+**Context**: The V2 worksheet instance commits the selected lesson, worked
+example, practice, provenance, and attribution, but print still needed a
+versioned semantic document before HTML or PDF layout could safely evolve. The
+preserved V1 pipeline is byte-addressed and cannot be widened, while the current
+Web pages and future A4 presentation have not been accepted as a product or
+layout direction.
+
+**Decision**: Add a parallel `exercisebook.print/v2` contract with source schema
+`exercisebook.worksheet-instance/v2` and projector `print-projector.v2`.
+Separate student and answer-key projectors reject unsafe input graphs before
+property access, detach one materialization before the first asynchronous hash,
+and require exact canonical bytes and SHA-256. Student and shared key blocks are
+reconstructed solely from `StudentWorksheetDeliveryV2`; the ordered key
+appendix alone reads the same verified full-instance snapshot. The package root
+selectively exports the reviewed V2 contract, validator, canonicalizer,
+projectors, and worksheet verifier while keeping direct document
+materialization, block internals/resource limits, and final trusted-answer
+authorization private. Structural validation proves shape and internal
+consistency, not source authority or student authorization; those properties
+belong to the verified projector and, for external requests, trusted
+application-service replay.
+
+Production print source may import only exact `@exercisebook/domain`,
+`@exercisebook/schemas`, and
+`@exercisebook/schemas/trusted-student-projection` roots plus relative package
+modules. Planner, generator, compiler, unreviewed subpath, and test-only imports
+fail the boundary, so print cannot replan, regenerate, or resolve current
+content. The shared student-visible scan reduces recognized fraction-like text
+to bounded rational signatures after its normalization closure, including
+slash/Unicode slash, spaced `over`, bounded TeX `\frac`, and bounded
+numerator/denominator object-like forms. Decimal, percentage, and arbitrary
+natural-language equivalents remain explicit residual risks; bounds fail closed
+instead of accepting a partial scan.
+
+**Evidence**: On `feat/v2-print-document`, stacked on
+`feat/v2-worksheet-api` at
+`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5), TypeScript
+7.0.2 and 1,282 Vitest tests across 48 files pass. Focused evidence is 142/142
+print-package tests across 10 files, 330/330 schema tests across 5 files, 50/50
+equivalent-fraction guard tests, 62/62 source/config boundary tests plus the
+live scan, 37/37 final module-provenance tests, and 21/21 artifact-scanner
+tests. The fixed V2 worksheet instance hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
+The student PrintDocument hash is
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+at 12,077 canonical bytes with 3,987,923 bytes below the 4,000,000-byte cap;
+the answer-key hash is
+`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
+at 16,012 bytes with 3,983,988 bytes below the cap. The production client still
+records 112 modules, and the raw artifact scanner covers 328,591 bytes. A real
+V1 pipeline test freezes the worksheet instance, both PrintDocuments, and both
+HTML identities. No child PR, merge, deployment, DNS, persistence, or license
+mutation is claimed by this checkpoint.
+
+**Impact**: This completes only the renderer-neutral PrintDocumentV2 semantic
+core. The semantic `paper: "a4"` discriminator participates in document
+identity but proves no page count, clipping, page break, text extraction,
+accessibility, or rendered layout. Printable V2 HTML, content-addressed HTML
+artifacts and manifests, a complete V2 print-semantic snapshot, standalone
+lesson/Web/print parity, React integration, browser/A4 acceptance, and final
+Phase 1.7 review remain open. The next safe non-UI slice is the V2 printable
+renderer and artifact boundary. It must also remove the aggregate CPU release
+blocker: answer signatures are currently rebuilt for each role scan, and hostile
+self-consistent 100–200-problem/large-integer inputs have measured about
+0.17–2.8 seconds. Trusted replay must precede projection, and only the reviewed
+4/6/8-problem small-integer path is allowed until one prepared signature context
+is reused across projection or trusted item/integer bounds are narrowed. Public
+synchronous rendering and broad 200-problem use remain blocked until then.

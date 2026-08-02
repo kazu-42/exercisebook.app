@@ -1385,6 +1385,68 @@ test("allows only reviewed runtime dependencies in production package sources", 
   );
 });
 
+test("allows only exact reviewed runtime roots in print-document production sources", async () => {
+  await withRepositoryFixture(
+    {
+      "packages/print-document/src/allowed-local.ts":
+        'export const localValue = "local";',
+      "packages/print-document/src/allowed-production.ts": `
+        import { value as domain } from "@exercisebook/domain";
+        import { value as schemas } from "@exercisebook/schemas";
+        import { value as trustedProjection } from "@exercisebook/schemas/trusted-student-projection";
+        import { localValue } from "./allowed-local.js";
+        void domain;
+        void schemas;
+        void trustedProjection;
+        void localValue;
+      `,
+      "packages/print-document/src/production-leaks.ts": `
+        import type { CompiledContentV1 } from "@exercisebook/content-compiler";
+        import { value as domainSubpath } from "@exercisebook/domain/rational";
+        import { value as schemaSubpath } from "@exercisebook/schemas/public-data";
+        import { value as trustedProjectionInternal } from "@exercisebook/schemas/trusted-student-projection/internal";
+        import { testOnlyValue } from "./test-helper.test.js";
+        const generators = import("@exercisebook/generators");
+        const planner = require("@exercisebook/planner");
+        type UndeclaredPackage = import("left-pad").Default;
+        type Content = CompiledContentV1;
+        void generators;
+        void planner;
+        void domainSubpath;
+        void schemaSubpath;
+        void trustedProjectionInternal;
+        void testOnlyValue;
+        void (undefined as unknown as Content);
+        void (undefined as unknown as UndeclaredPackage);
+      `,
+      "packages/print-document/src/production-boundary.test.ts": `
+        import { readFileSync } from "node:fs";
+        import { compileContentSource } from "@exercisebook/content-compiler";
+        import { materializeFractionAdditionV2 } from "@exercisebook/generators";
+        import { describe } from "vitest";
+        void readFileSync;
+        void compileContentSource;
+        void materializeFractionAdditionV2;
+        void describe;
+      `,
+      "packages/print-document/src/test-helper.test.ts":
+        "export const testOnlyValue = true;",
+    },
+    async (repositoryRoot, findFixtureViolations) => {
+      assert.deepEqual(await findFixtureViolations(), [
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/content-compiler"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/domain/rational"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/schemas/public-data"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/schemas/trusted-student-projection/internal"',
+        'packages/print-document/src/production-leaks.ts imports test-only module "./test-helper.test.js"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/generators"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "@exercisebook/planner"',
+        'packages/print-document/src/production-leaks.ts imports non-allowlisted production dependency "left-pad"',
+      ]);
+    },
+  );
+});
+
 test("blocks server-only packages from browser-safe workspace package roots", async () => {
   await withRepositoryFixture(
     {

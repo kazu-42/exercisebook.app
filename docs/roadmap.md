@@ -6,10 +6,12 @@ Updated: 2026-08-02
 This roadmap is not a deployment-status page. Phase 1 is implemented as a
 local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
 and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3.
-The current `feat/v2-worksheet-api` checkpoint is stacked on
-`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4), but is
-neither merged nor deployed. Production DNS, hosted Cloudflare persistence, and
-PDF backends remain gated future work.
+The current `feat/v2-print-document` checkpoint is stacked on
+`feat/v2-worksheet-api` at
+`ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5), but is neither
+merged nor deployed. No child PR is claimed by this local checkpoint.
+Production DNS, hosted Cloudflare persistence, and PDF backends remain gated
+future work.
 
 ## Product direction
 
@@ -240,10 +242,31 @@ concrete instance, rather than application-owned constants.
 Checkpoint status (2026-08-02): the immutable V2 content, policy, instance, and
 student-delivery foundations are complete. The strict `web-worksheet.v2` DTO,
 trusted projector, replay-authorized service, and exact V1/V2 Hono dispatch are
-implemented as a bounded backend checkpoint. The active React `/new` flow still
-uses V1. Standalone lesson delivery, React V2 integration, real-browser visual
-and accessibility acceptance, `PrintDocumentV2`, and printable V2 HTML are not
-implemented by this checkpoint.
+implemented as one bounded backend checkpoint. The renderer-neutral
+`PrintDocumentV2` semantic core is a second bounded checkpoint: separate V2
+validation and canonicalization, explicit student and answer-key projectors,
+detached source verification, exact block grammar, final role-sensitive
+authorization, and content-addressed document identities are implemented. The
+active React `/new` flow still uses V1. Standalone lesson delivery, React V2
+integration, printable V2 HTML and artifacts, and real-browser visual,
+accessibility, and rendered A4 acceptance are not implemented by these
+checkpoints.
+
+The print package root intentionally exposes only the reviewed V2 contract and
+projection surface. Internal block machinery, direct document materialization,
+and the trusted-answer final authorization helper stay private. A structurally
+valid `PrintDocumentV2` is not thereby authorized: external delivery still
+requires projection from a detached, verified worksheet snapshot whose planner,
+content, and materializer authority was established by the application service.
+The semantic `paper: "a4"` discriminator is not layout evidence.
+
+The current rational guard bounds each role scan, not total projection work:
+answer signatures are rebuilt per role. Hostile self-consistent 100–200-problem
+inputs with large integers have measured about 0.17–2.8 seconds, so this
+checkpoint allows only the trusted-replay-first 4/6/8-problem, small-integer
+path. A prepared signature context reused across projection, or narrower
+trusted item/integer bounds, is a release blocker before any public synchronous
+render endpoint or broad 200-problem use.
 
 The backend checkpoint also closes the client build-graph privacy gap at three
 layers: exact safe source leaves, final Rollup `OutputChunk.modules` provenance,
@@ -570,25 +593,42 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 The active milestone is Phase 1.7. The immutable content/compiler,
 policy-selection foundation, instance-bound presentation, exact prompt/answer
 relationship, detached student-delivery authorization, strict V2 Web DTO and
-projector, replay-authorized Worker service, exact V1/V2 HTTP dispatch, and
-three-layer client build privacy gate are implemented. Reviewed content and V1
-instance/Print/HTML identities remain unchanged, including V1 attribution
-runtime schema identity across public export paths. TypeScript 7.0.2 and 1,135
-Vitest tests across 42 files pass; focused privacy evidence is 61/61
-source/config boundary tests, 37/37 final module-provenance tests, and 21/21
-artifact-scanner tests. The maximum reviewed 365-day V2 response is 5,964 bytes
-against the 32,768-byte cap. The client build records 112 modules and the raw
-artifact canary scans 328,591 bytes. At the pinned versions recorded in the
-architecture, the 2026-08-02 `pnpm audit` run reported no known vulnerabilities;
-later advisory data may change that result.
+projector, replay-authorized Worker service, exact V1/V2 HTTP dispatch,
+three-layer client build privacy gate, and renderer-neutral `PrintDocumentV2`
+semantic core are implemented. Reviewed content and all five frozen V1
+worksheet/PrintDocument/HTML identities remain unchanged, including V1
+attribution runtime schema identity across public export paths. TypeScript
+7.0.2 and 1,282 Vitest tests across 48 files pass. Focused evidence includes
+142/142 print-package tests across 10 files, 330/330 schema tests across 5
+files, 50/50 equivalent-fraction guard tests, 62/62 source/config boundary
+tests plus the live scan, 37/37 final module-provenance tests, and 21/21
+artifact-scanner tests. The fixed V2 instance hash is
+`934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
+the student and answer-key semantic PrintDocument hashes are respectively
+`51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+at 12,077 bytes and
+`d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
+at 16,012 bytes. They leave 3,987,923 and 3,983,988 bytes beneath the
+4,000,000-byte canonical cap.
 
-The next safe non-UI slice is the `PrintDocumentV2` semantic core: validator,
-canonical form, role-sensitive student/key projections, and semantic parity
-tests, before printable layout is treated as complete. Standalone lesson,
-React V2 integration, integrated browser/accessibility/A4 evidence, and final
-Phase 1.7 release review remain after that. The current local Web surface is a
-technical prototype; substantial navigation, information hierarchy, copy, or
-visual design work stays behind the product-direction gate above.
+The maximum reviewed 365-day V2 Web response remains 5,964 bytes against the
+32,768-byte cap. The client build records 112 modules and the raw artifact
+canary scans 328,591 bytes. At the pinned versions recorded in the architecture,
+the 2026-08-02 `pnpm audit` run reported no known vulnerabilities; later
+advisory data may change that result.
+
+The next safe non-UI slice is the V2 printable renderer and artifact boundary:
+`renderPrintableHtmlV2`, a complete V2 print-semantic snapshot, and
+content-addressed HTML fixtures/manifests. It must also remove the aggregate CPU
+release blocker through one prepared signature context or narrower trusted
+bounds before exposing synchronous render or broad worksheets. Standalone
+lesson and Web parity, React V2 integration, integrated
+browser/accessibility/A4 evidence, and final Phase 1.7 release review remain
+after that. No page count, clipping, page-break, extracted-text, accessibility,
+or rendered A4 conclusion is inferred from the current semantic documents. The
+current local Web surface is a technical prototype; substantial navigation,
+information hierarchy, copy, or visual design work stays behind the
+product-direction gate above.
 
 Phase 1.6 remains the byte-preserved compatibility and rollback baseline; its
 executable contract is in
