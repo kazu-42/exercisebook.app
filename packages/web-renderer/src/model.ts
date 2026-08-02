@@ -1,3 +1,7 @@
+import {
+  AttributionV1Schema,
+  WorksheetPresentationV1Schema,
+} from "@exercisebook/schemas/presentation-contract-v1";
 import { z } from "zod";
 
 const MAX_WEB_WORKSHEET_ITEMS = 96;
@@ -115,6 +119,63 @@ export const WebWorksheetSchema = z.discriminatedUnion("variant", [
   AnswerKeyWebWorksheetSchema,
 ]);
 
+/**
+ * Parallel V2 browser contract. It intentionally remains outside the V1
+ * WebWorksheet union until a V2 view is introduced, so existing V1 consumers
+ * cannot accidentally receive a structurally different worksheet.
+ */
+export const StudentWebWorksheetItemV2Schema = z
+  .strictObject({
+    ...WebWorksheetItemBaseShape,
+  })
+  .superRefine((value, context) => {
+    for (const operand of ["left", "right"] as const) {
+      if (!isReducedCanonicalWebFraction(value.prompt[operand])) {
+        context.addIssue({
+          code: "custom",
+          message: "Prompt operands must be reduced canonical rationals.",
+          path: ["prompt", operand],
+        });
+      }
+    }
+
+    const expectedAccessibleText = deriveFractionAdditionPromptAccessibleText(
+      value.prompt.left,
+      value.prompt.right,
+    );
+    if (value.prompt.accessibleText !== expectedAccessibleText) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "accessibleText must equal its deterministic fraction-addition derivation.",
+        path: ["prompt", "accessibleText"],
+      });
+    }
+  });
+
+export const StudentWebWorksheetV2Schema = z
+  .strictObject({
+    schemaVersion: z.literal("web-worksheet.v2"),
+    instanceHash: z.string().regex(/^[0-9a-f]{64}$/u),
+    assignmentId: StableIdSchema,
+    title: z.string().min(1).max(240),
+    studyDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .refine(isRealCalendarDate, "Expected a real calendar date."),
+    locale: z
+      .string()
+      .min(2)
+      .max(255)
+      .refine(isCanonicalLocale, "Expected a canonical BCP 47 locale."),
+    expectedMinutes: z.number().int().min(1).max(480),
+    variant: z.literal("student"),
+    presentation: WorksheetPresentationV1Schema,
+    items: z.array(StudentWebWorksheetItemV2Schema).min(1).max(MAX_WEB_WORKSHEET_ITEMS),
+    attributions: z.array(AttributionV1Schema).min(1).max(100),
+  })
+  .superRefine(validateItemIdentityAndOrder);
+
 export type WebWorksheetVariant = z.infer<typeof WebWorksheetVariantSchema>;
 export type WebFraction = z.infer<typeof WebFractionSchema>;
 export type WebFractionAdditionPrompt = z.infer<typeof WebFractionAdditionPromptSchema>;
@@ -134,6 +195,35 @@ export type StudentWebWorksheet = Omit<
   Readonly<{ items: readonly StudentWebWorksheetItem[] }>;
 export type AnswerKeyWebWorksheet = z.infer<typeof AnswerKeyWebWorksheetSchema>;
 export type WebWorksheet = StudentWebWorksheet | AnswerKeyWebWorksheet;
+export type StudentWebWorksheetItemV2 = Readonly<
+  z.infer<typeof StudentWebWorksheetItemV2Schema> & {
+    answer?: never;
+    accessibility?: never;
+    canonicalAnswer?: never;
+    expectedMinutes?: never;
+    hints?: never;
+    misconceptions?: never;
+    provenance?: never;
+    scoringRule?: never;
+    selectionReasons?: never;
+    skillIds?: never;
+    slotSeed?: never;
+    solution?: never;
+    solutionTrace?: never;
+  }
+>;
+export type StudentWebWorksheetV2 = Readonly<
+  Omit<z.infer<typeof StudentWebWorksheetV2Schema>, "items"> & {
+    items: readonly StudentWebWorksheetItemV2[];
+    baseSeed?: never;
+    canonicalAnswers?: never;
+    introduction?: never;
+    seedSecretVersion?: never;
+    skillTitle?: never;
+    timeZone?: never;
+    workedExample?: never;
+  }
+>;
 
 export function validateStudentWebWorksheet(value: unknown): StudentWebWorksheet {
   assertBoundedPlainData(value);
@@ -164,6 +254,11 @@ export function validateWebWorksheet(
   return expectedVariant === "student"
     ? validateStudentWebWorksheet(value)
     : validateAnswerKeyWebWorksheet(value);
+}
+
+export function validateStudentWebWorksheetV2(value: unknown): StudentWebWorksheetV2 {
+  assertBoundedPlainData(value);
+  return StudentWebWorksheetV2Schema.parse(value);
 }
 
 function validateItemIdentityAndOrder(
@@ -222,6 +317,42 @@ function isCanonicalLocale(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function deriveFractionAdditionPromptAccessibleText(
+  left: WebFraction,
+  right: WebFraction,
+): string {
+  return `Add ${left.numerator} over ${left.denominator} and ${right.numerator} over ${right.denominator}. Give the answer in lowest terms.`;
+}
+
+function isReducedCanonicalWebFraction(value: WebFraction): boolean {
+  if (
+    !CANONICAL_INTEGER.test(value.numerator) ||
+    !CANONICAL_INTEGER.test(value.denominator)
+  ) {
+    return false;
+  }
+
+  const numerator = BigInt(value.numerator);
+  const denominator = BigInt(value.denominator);
+  if (denominator <= 0n) {
+    return false;
+  }
+
+  const absoluteNumerator = numerator < 0n ? -numerator : numerator;
+  return greatestCommonDivisor(absoluteNumerator, denominator) === 1n;
+}
+
+function greatestCommonDivisor(left: bigint, right: bigint): bigint {
+  let current = left;
+  let remainderSource = right;
+  while (remainderSource !== 0n) {
+    const remainder = current % remainderSource;
+    current = remainderSource;
+    remainderSource = remainder;
+  }
+  return current;
 }
 
 function assertBoundedPlainData(value: unknown): void {

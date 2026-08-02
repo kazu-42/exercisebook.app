@@ -1,11 +1,13 @@
 import fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { z } from "zod";
 
 import { canonicalizeJson } from "@exercisebook/domain";
 
 import {
   DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
   DAY_ONE_PREVIEW_REGISTRY,
+  DailyPlanPreviewRequestV1Schema,
   SELECTION_EXPLANATION,
   planDailyPreviewV1,
   selectDailyPlanPreviewV1,
@@ -14,8 +16,8 @@ import {
   validateDailyPlanPreviewResultV1,
   validateDailyPlanPreviewV1,
   type DailyPlanPreviewRegistryV1,
-  type DailyPlanPreviewRequestV1,
 } from "./daily-plan-preview.js";
+import type { DailyPlanPreviewRequestV1 } from "./public-preview-contract.js";
 
 const REQUEST: DailyPlanPreviewRequestV1 = {
   schema: DAILY_PLAN_PREVIEW_REQUEST_V1_SCHEMA,
@@ -33,6 +35,12 @@ const BUDGET_CASES = [
 ] as const;
 
 describe("DailyPlanPreviewV1", () => {
+  it("keeps the browser-safe request type exactly aligned with schema inference", () => {
+    expectTypeOf<DailyPlanPreviewRequestV1>().toEqualTypeOf<
+      Readonly<z.infer<typeof DailyPlanPreviewRequestV1Schema>>
+    >();
+  });
+
   it.each(BUDGET_CASES)(
     "maps a %i-minute cap to %i reviewed items and %i planned minutes",
     async (practiceMinutes, itemCount, plannedPracticeMinutes) => {

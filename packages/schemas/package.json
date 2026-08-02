@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./attribution-v1": "./src/attribution-v1.ts",
+    "./presentation-contract-v1": "./src/presentation-contract-v1.ts",
+    "./public-data": "./src/common.ts",
     "./trusted-student-projection": "./src/trusted-student-projection.ts",
     "./json-schema/content-document-v1": "./json-schema/content-document-v1.schema.json",
     "./json-schema/content-document-v2": "./json-schema/content-document-v2.schema.json",

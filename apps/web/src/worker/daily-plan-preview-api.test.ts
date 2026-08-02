@@ -15,7 +15,11 @@ import {
   type DailyPlanPreviewResponseV1,
 } from "../shared/daily-plan-preview-contract.js";
 import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
-import { createApp } from "./app.js";
+import {
+  MAX_DAILY_PLAN_PREVIEW_BODY_READS,
+  createApp,
+  serializeBoundedDailyPlanPreviewResponse,
+} from "./app.js";
 import type {
   DailyPlanPreviewService,
   DailyPlanPreviewServiceResult,
@@ -84,6 +88,12 @@ const sampleWorksheetService: SampleWorksheetService = {
   },
 };
 
+const unavailableDailyPlanPreviewServiceV2 = {
+  async createPreview() {
+    return { status: "unavailable", code: "goal-unavailable" } as const;
+  },
+};
+
 function createTestApp(
   result: DailyPlanPreviewServiceResult = {
     status: "ready",
@@ -95,6 +105,7 @@ function createTestApp(
   const app = createApp({
     sampleWorksheetService,
     dailyPlanPreviewService: { createPreview },
+    dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
   });
   return { app, createPreview };
 }
@@ -108,6 +119,29 @@ function previewRequest(
     headers,
     body,
   });
+}
+
+function fragmentedPreviewRequest(emptyChunkCount: number): Request {
+  const body = new TextEncoder().encode(validRequestJson);
+  let emittedEmptyChunks = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (emittedEmptyChunks < emptyChunkCount) {
+        emittedEmptyChunks += 1;
+        controller.enqueue(new Uint8Array());
+        return;
+      }
+      controller.enqueue(body);
+      controller.close();
+    },
+  });
+
+  return new Request("https://exercisebook.app/api/plans/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
 }
 
 function expectPrivateJsonHeaders(response: Response): void {
@@ -128,6 +162,7 @@ describe("POST /api/plans/preview", () => {
       const app = createApp({
         sampleWorksheetService,
         dailyPlanPreviewService: createDailyPlanPreviewService(),
+        dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
       });
       const body = JSON.stringify({ ...validRequest, practiceMinutes });
 
@@ -181,6 +216,7 @@ describe("POST /api/plans/preview", () => {
     const app = createApp({
       sampleWorksheetService,
       dailyPlanPreviewService: createDailyPlanPreviewService(),
+      dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
     });
     const reorderedRequestJson = JSON.stringify({
       locale: validRequest.locale,
@@ -296,6 +332,59 @@ describe("POST /api/plans/preview", () => {
     expect(createPreview).toHaveBeenCalledWith(validRequest);
   });
 
+  it("accepts exactly the bounded number of body reads", async () => {
+    const { app, createPreview } = createTestApp();
+
+    const response = await app.request(
+      fragmentedPreviewRequest(MAX_DAILY_PLAN_PREVIEW_BODY_READS - 1),
+    );
+
+    expect(response.status).toBe(200);
+    expectPrivateJsonHeaders(response);
+    expect(createPreview).toHaveBeenCalledOnce();
+  });
+
+  it("rejects excessive empty body chunks before calling a service", async () => {
+    const { app, createPreview } = createTestApp();
+
+    const response = await app.request(
+      fragmentedPreviewRequest(MAX_DAILY_PLAN_PREVIEW_BODY_READS),
+    );
+
+    expect(response.status).toBe(400);
+    expectPrivateJsonHeaders(response);
+    expect(await response.json()).toEqual({
+      code: "invalid_request",
+      message: "Check the preview request and try again.",
+    });
+    expect(createPreview).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed UTF-8 before calling a service", async () => {
+    const { app, createPreview } = createTestApp();
+
+    const response = await app.request(previewRequest(new Uint8Array([0xff])));
+
+    expect(response.status).toBe(400);
+    expectPrivateJsonHeaders(response);
+    expect(createPreview).not.toHaveBeenCalled();
+  });
+
+  it("measures the exact JSON bytes that will be returned", () => {
+    const exact = serializeBoundedDailyPlanPreviewResponse(
+      "x".repeat(MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES - 2),
+    );
+
+    expect(new TextEncoder().encode(exact)).toHaveLength(
+      MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES,
+    );
+    expect(() =>
+      serializeBoundedDailyPlanPreviewResponse(
+        "x".repeat(MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES - 1),
+      ),
+    ).toThrow(/byte limit/u);
+  });
+
   it("returns a sanitized 503 when a required revision is unavailable", async () => {
     const { app } = createTestApp({
       status: "unavailable",
@@ -320,6 +409,7 @@ describe("POST /api/plans/preview", () => {
     const app = createApp({
       sampleWorksheetService,
       dailyPlanPreviewService: createDailyPlanPreviewService({ registry }),
+      dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
     });
 
     const response = await app.request(previewRequest());
@@ -377,6 +467,7 @@ describe("POST /api/plans/preview", () => {
     const app = createApp({
       sampleWorksheetService,
       dailyPlanPreviewService: { createPreview },
+      dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
     });
 
     const response = await app.request(previewRequest());
@@ -389,5 +480,44 @@ describe("POST /api/plans/preview", () => {
       message: "The preview could not be prepared.",
     });
     expect(body).not.toContain("secret generator details");
+  });
+
+  it("normalizes a non-Error rejection and reports no request or answer data", async () => {
+    const reportUnexpectedError = vi.fn();
+    const unsafeFailure =
+      "secret body canonicalAnswer=7/12 seed=aaaaaaaa instanceHash=bbbbbbbb";
+    const createPreview = vi
+      .fn<DailyPlanPreviewService["createPreview"]>()
+      .mockRejectedValue(unsafeFailure);
+    const app = createApp(
+      {
+        sampleWorksheetService,
+        dailyPlanPreviewService: { createPreview },
+        dailyPlanPreviewServiceV2: unavailableDailyPlanPreviewServiceV2,
+      },
+      { reportUnexpectedError },
+    );
+
+    const response = await app.request(previewRequest());
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expectPrivateJsonHeaders(response);
+    expect(JSON.parse(body)).toEqual({
+      code: "internal_error",
+      message: "The preview could not be prepared.",
+    });
+    expect(body).not.toContain(unsafeFailure);
+    expect(reportUnexpectedError).toHaveBeenCalledExactlyOnceWith({
+      event: "exercisebook.worker.unexpected_error",
+      route: "daily-plan-preview",
+      status: 500,
+    });
+    const reportText = JSON.stringify(reportUnexpectedError.mock.calls);
+    expect(reportText).not.toContain("canonicalAnswer");
+    expect(reportText).not.toContain("7/12");
+    expect(reportText).not.toContain("seed");
+    expect(reportText).not.toContain("hash");
+    expect(reportText).not.toContain(validRequestJson);
   });
 });

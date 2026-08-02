@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-19
+- Implementation checkpoint: 2026-08-02
 - Owners: Exercise Book maintainers
 
 ## Context
@@ -96,11 +97,11 @@ instructions. Mathematical display and accessibility strings are derived from
 typed semantics under versioned rules; renderers may change layout but may not
 select, regenerate, or reinterpret the lesson.
 
-The standalone lesson endpoint and V2 materializer use the same selector and
-presentation schema. A worksheet renderer reads the presentation embedded in
-the verified instance and never looks up current content. Tests compare the
-standalone lesson, worksheet Web, and print semantic snapshots for equality of
-presentation and source identity.
+The standalone lesson endpoint and V2 materializer must use the same selector
+and presentation schema. A worksheet renderer reads the presentation embedded
+in the verified instance and never looks up current content. Completion tests
+compare the standalone lesson, worksheet Web, and print semantic snapshots for
+equality of presentation and source identity.
 
 ```mermaid
 flowchart TD
@@ -221,6 +222,62 @@ canonical-answer context are never serialized to browser state, DOM metadata,
 logs, analytics, public URLs, or student artifacts. Increasing a transport or
 document limit is a reviewed contract change, not an incidental response to
 presentation growth.
+
+### 6. Verify the emitted client graph independently of source intent
+
+Browser privacy uses three complementary gates. Production browser code may
+reach only exact reviewed public leaves and their exact transitive dependencies.
+The Vite build then examines final Rollup `OutputChunk.modules` provenance and
+rejects client chunks containing server, Worker, generator, or other
+unreviewed workspace modules. Finally, a bounded post-build canary scans every
+regular emitted file for protected answer, seed, scoring, and solution-trace
+tokens. Its walk rejects symbolic links and non-regular entries and fails
+closed above 1,000 total entries, 20 MiB of regular-file content, or depth 16.
+
+The canary is defense in depth, not an absence proof: minification can rename
+tokens, and an equivalent answer can be represented as a decimal, percentage,
+or prose. Likewise, tree-shaking can remove unsafe bytes from one build without
+making the reachable source graph safe. Source reachability, emitted module
+provenance, structured semantic authorization, and the raw artifact canary are
+separate evidence and must not be substituted for one another.
+
+### Implementation checkpoint
+
+As of 2026-08-02, the strict V2 worksheet Web DTO, trusted projector,
+application service, and exact V1/V2 Hono request/response dispatch are
+implemented on `feat/v2-worksheet-api`, stacked on
+`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4). Injected
+planner, materializer, and projector outputs are detached and exact-replayed
+against trusted implementations. Presentation unavailability is limited to
+`content-identity-mismatch`, `invalid-selection`, `selected-node-count`,
+`selected-node-type`, `exercise-contract-mismatch`,
+`worked-example-arithmetic-mismatch`, `excluded-answer-tuple-mismatch`, and
+`presentation-invalid`; materialization unavailability is limited to
+`unsupported-content-state`, `locale-mismatch`, and `generation-exhausted`.
+An injected unavailable outcome must match the trusted replay's exact internal
+reason kind and code. Presentation `unsafe-input`/`invalid-content`,
+materialization `unsafe-input`/`invalid-assignment`/`invalid-instance`, and any
+future unclassified code remain exceptions until explicitly reviewed.
+Unexpected route failures emit a fixed, sanitized structured 500 report without
+raw exception or request data.
+
+This is a bounded backend checkpoint, not implementation of the complete ADR.
+The active React UI still uses V1. The standalone lesson, React V2 integration,
+`PrintDocumentV2`, printable V2 HTML, and browser/visual/accessibility/A4 gates
+remain incomplete. Nothing in this checkpoint is merged or deployed.
+
+Reviewed content hashes and V1 instance/Print/HTML identities remain unchanged.
+The V1 attribution schema also retains one runtime object identity across the
+root, safe-leaf, presentation, and worksheet exports. TypeScript 7.0.2 and
+1,135 Vitest tests across 42 files pass; the focused privacy gates pass 61/61
+source/config boundary tests, 37/37 final module-provenance tests, and 21/21
+artifact-scanner tests. The 365-day maximum serialized V2 response is
+5,964/32,768 bytes (26,804 bytes headroom). The production client records 112
+modules and the raw artifact scanner covers 328,591 bytes. The patched
+Cloudflare development stack pins `@cloudflare/vite-plugin@1.49.0`,
+`@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
+`miniflare@4.20260730.0` / `sharp@0.35.2`; the 2026-08-02 `pnpm audit` run
+reported no known vulnerabilities. Later advisory data may change that result.
 
 ## Invariants
 

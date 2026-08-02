@@ -4,7 +4,9 @@ export {
   AnswerKeyWebWorksheetItemSchema,
   AnswerKeyWebWorksheetSchema,
   StudentWebWorksheetItemSchema,
+  StudentWebWorksheetItemV2Schema,
   StudentWebWorksheetSchema,
+  StudentWebWorksheetV2Schema,
   WebAttributionSchema,
   WebFractionAdditionPromptSchema,
   WebFractionSchema,
@@ -13,6 +15,7 @@ export {
   WebWorksheetVariantSchema,
   validateAnswerKeyWebWorksheet,
   validateStudentWebWorksheet,
+  validateStudentWebWorksheetV2,
   validateWebWorksheet,
 } from "./model.js";
 export type {
@@ -20,6 +23,8 @@ export type {
   AnswerKeyWebWorksheetItem,
   StudentWebWorksheet,
   StudentWebWorksheetItem,
+  StudentWebWorksheetItemV2,
+  StudentWebWorksheetV2,
   WebAttribution,
   WebFraction,
   WebFractionAdditionPrompt,

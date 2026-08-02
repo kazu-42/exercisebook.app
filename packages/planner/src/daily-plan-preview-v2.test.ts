@@ -1,5 +1,6 @@
 import fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { z } from "zod";
 
 import { canonicalizeJson } from "@exercisebook/domain";
 
@@ -27,9 +28,10 @@ import {
   validateDailyPlanPreviewRequestV2,
   validateDailyPlanPreviewResultV2,
   validateDailyPlanPreviewV2,
+  DailyPlanPreviewRequestV2Schema,
   type DailyPlanPreviewRegistryV2,
-  type DailyPlanPreviewRequestV2,
 } from "./daily-plan-preview-v2.js";
+import type { DailyPlanPreviewRequestV2 } from "./public-preview-contract.js";
 
 const REQUEST: DailyPlanPreviewRequestV2 = {
   schema: DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
@@ -54,6 +56,12 @@ const BUDGET_CASES = [
 const FINALIZED_FIXTURE_REGISTRY = DAY_ONE_PREVIEW_REGISTRY_V2;
 
 describe("DailyPlanPreviewV2", () => {
+  it("keeps the browser-safe request type exactly aligned with schema inference", () => {
+    expectTypeOf<DailyPlanPreviewRequestV2>().toEqualTypeOf<
+      Readonly<z.infer<typeof DailyPlanPreviewRequestV2Schema>>
+    >();
+  });
+
   it("enables the exported default policy only with the exact final content lock", async () => {
     expect(DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK).toEqual({
       finalized: true,

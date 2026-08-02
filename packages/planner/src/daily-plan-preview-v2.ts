@@ -10,9 +10,26 @@ import {
   assertSafeDataObjectGraph,
 } from "@exercisebook/schemas";
 import { z } from "zod";
+import {
+  DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+  DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2,
+  DAY_ONE_PREVIEW_POLICY_ID_V3,
+  DAY_ONE_PREVIEW_POLICY_VERSION_V3,
+  DAY_ONE_PREVIEW_SELECTION_EXPLANATION_V2,
+  DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK,
+  type DailyPlanPreviewRequestV2,
+} from "./public-preview-contract.js";
 
-export const DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA =
-  "exercisebook.daily-plan-preview-request/v2";
+export {
+  DAILY_PLAN_PREVIEW_REQUEST_V2_SCHEMA,
+  DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2,
+  DAY_ONE_PREVIEW_POLICY_ID_V3,
+  DAY_ONE_PREVIEW_POLICY_VERSION_V3,
+  DAY_ONE_PREVIEW_SELECTION_EXPLANATION_V2,
+  DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK,
+  type DailyPlanPreviewRequestV2,
+} from "./public-preview-contract.js";
+
 export const DAILY_PLAN_PREVIEW_V2_SCHEMA = "exercisebook.daily-plan-preview/v2";
 export const DAILY_PLAN_PREVIEW_REGISTRY_V2_SCHEMA =
   "exercisebook.daily-plan-preview-registry/v2";
@@ -22,32 +39,15 @@ export const PLAN_PREVIEW_REQUEST_IDENTITY_DOMAIN_V2 =
   "exercisebook/daily-plan-preview-request-identity/v2";
 export const PUBLIC_PREVIEW_SEED_VERSION_V2 = "public-preview-v2";
 
-export const DAY_ONE_PREVIEW_POLICY_ID_V3 = "day-one-fraction-preview";
-export const DAY_ONE_PREVIEW_POLICY_VERSION_V3 = 3;
-export const DAY_ONE_PREVIEW_SELECTION_EXPLANATION_V2 =
-  "This focused set practices the fraction goal you selected. It is a preview based on your goal and time limit, not a saved or mastery-based plan.";
-
 const GOAL_ID = "math.fractions.add-unlike";
 const SKILL_GRAPH_ID = "phase-1-math";
 const SKILL_GRAPH_REVISION = 1;
-const CONTENT_ID = "math.fractions.add-unlike-denominators";
-const CONTENT_REVISION = 2;
-const CONTENT_COMPILER_VERSION = "exercisebook-content-compiler/2";
+const CONTENT_ID = DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.id;
+const CONTENT_REVISION = DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.revision;
+const CONTENT_COMPILER_VERSION = DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2.compilerVersion;
 const GENERATOR_ID = "fractions.add";
 const GENERATOR_VERSION = "1";
 const REVIEWED_ITEM_COUNT = 8;
-
-/**
- * The two reviewed hash literals are deliberately isolated at one release
- * lock. The exported default registry derives its enabled state from this
- * one-way gate; callers never discover an ambient latest value. Changing either
- * hash after vector lock requires a new content/policy revision.
- */
-export const DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK = Object.freeze({
-  finalized: true,
-  sourceHash: "456c8908debd52c7fcc5eba6e2e9a38434b5fcd8343e7a14a427faae34502523",
-  contentHash: "944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd",
-} as const);
 
 export const DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS_V2 = Object.freeze([
   Object.freeze({ numerator: "1", denominator: "2" }),
@@ -60,14 +60,6 @@ export const DAY_ONE_FRACTION_PRESENTATION_SELECTION_V1 = Object.freeze({
   workedExampleNodeId: "worked-example-01",
   exerciseNodeId: "practice-01",
   excludedCanonicalAnswers: DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS_V2,
-} as const);
-
-export const DAY_ONE_PREVIEW_CONTENT_IDENTITY_V2 = Object.freeze({
-  id: CONTENT_ID,
-  revision: CONTENT_REVISION,
-  sourceHash: DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK.sourceHash,
-  contentHash: DAY_ONE_PREVIEW_V2_CONTENT_FINAL_LOCK.contentHash,
-  compilerVersion: CONTENT_COMPILER_VERSION,
 } as const);
 
 const PracticeMinutesSchema = z.union([z.literal(8), z.literal(12), z.literal(20)]);
@@ -86,10 +78,6 @@ export const DailyPlanPreviewRequestV2Schema = z.strictObject({
   timeZone: TimeZoneSchema,
   locale: z.literal("en"),
 });
-
-export type DailyPlanPreviewRequestV2 = Readonly<
-  z.infer<typeof DailyPlanPreviewRequestV2Schema>
->;
 
 export const PreviewContentIdentityV2Schema = z.strictObject({
   id: z.literal(CONTENT_ID),

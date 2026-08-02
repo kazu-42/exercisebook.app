@@ -347,3 +347,53 @@ generic standalone instance validation remains version-shaped rather than
 policy-specific. Generator-package entry locking and narrower trusted Worker
 graph allowlists remain explicit defense-in-depth follow-up rather than a
 claimed browser-boundary prerequisite.
+
+## 2026-08-02 - Verify V2 service authority and emitted browser artifacts
+
+**Context**: The strict V2 worksheet API was source-clean under the existing
+import policy, yet a real Vite client build could still traverse broad workspace
+barrels before tree-shaking removed some server-only answer authority. Source
+reachability alone therefore could not establish what modules contributed to
+the final client, and searching one JavaScript filename could miss protected
+tokens in other emitted artifacts. Separately, schema-valid injected planner,
+materializer, or projector results could disagree with the trusted computation
+unless the application service reauthorized their complete semantics.
+
+**Decision**: Keep production browser imports on exact reviewed public leaves
+and validate their exact transitive graph. During the build, inspect final
+Rollup `OutputChunk.modules` provenance and reject server, Worker, generator,
+or unreviewed workspace contributors. After the build, scan every regular
+artifact for protected answer, seed, scoring, and solution-trace canary tokens
+under symlink-safe traversal bounded to 1,000 total entries, 20 MiB of
+regular-file content, and depth 16. Treat that canary as defense in depth, not
+proof of semantic absence. Tree-shaking is an optimization and never an
+authorization boundary. The V2 service detaches and exact-replays injected
+planner, materializer, and projector outputs against independent trusted
+implementations. Only trusted planner unavailability and an explicit reviewed
+presentation/materialization availability-code allowlist map to generic
+unavailability. An injected unavailable outcome must match the trusted replay's
+exact internal reason; defect-oriented and future codes remain exceptions.
+Unexpected route failures produce only a fixed structured 500 classification
+and a sanitized response.
+
+**Evidence**: On `feat/v2-worksheet-api`, stacked on
+`feat/content-derived-presentation` at `fe389bcb` (parent draft PR #4),
+TypeScript 7.0.2 and 1,135 Vitest tests across 42 files pass, together with
+61/61 source/config boundary tests, 37/37 final module-provenance tests, and
+21/21 artifact-scanner tests. Reviewed content hashes and V1
+WorksheetInstance/PrintDocument/HTML identities remain exact, and the V1
+attribution schema retains one runtime object identity across its root,
+safe-leaf, presentation, and worksheet exports. The 365-day maximum V2 response
+is 5,964/32,768 bytes with 26,804 bytes headroom; the client build records 112
+modules and the raw scanner covers 328,591 bytes. The Cloudflare development
+stack is patched and pinned to `@cloudflare/vite-plugin@1.49.0`,
+`@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
+`miniflare@4.20260730.0` / `sharp@0.35.2`; the 2026-08-02 `pnpm audit` run
+reported no known vulnerabilities. Later advisory data may change that result.
+
+**Impact**: This is a bounded backend checkpoint only. The active React UI
+still uses V1, and standalone lesson delivery, React V2 integration,
+`PrintDocumentV2`, printable V2 HTML, and browser/visual/accessibility/A4 gates
+remain open. No merge or deployment is implied. The next non-UI slice is the
+`PrintDocumentV2` semantic core, followed by integrated evidence and the final
+Phase 1.7 review.
