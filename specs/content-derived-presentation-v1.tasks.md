@@ -1,9 +1,9 @@
 # Content-derived presentation v1 execution ledger
 
 Status: in progress
-Branch: `feat/prepared-answer-guard`
-Base: `feat/v2-print-document` at
-`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6)
+Branch: `feat/v2-printable-html`
+Base: `feat/prepared-answer-guard` at
+`5814f86e3d3d0e822d048450fa71fbf85fd672e3` (parent draft PR #7)
 Specification: [content-derived-presentation-v1.md](content-derived-presentation-v1.md)
 Updated: 2026-08-02
 
@@ -28,9 +28,9 @@ available and byte-identical.
 | P17-004 | Materialize WorksheetPresentationV1 in WorksheetInstanceV2 | L | P17-002, P17-003 planner foundation | complete |
 | P17-005 | Authorize detached StudentWorksheetDeliveryV2 | L | P17-004 | complete |
 | P17-006 | Render Web worksheet v2 and standalone lesson | L | P17-005 | in progress — backend checkpoint only |
-| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | in progress — semantic core and prepared guard complete; HTML/A4 pending |
-| P17-008 | Prove compatibility, artifacts, browser, and A4 gates | L | P17-006, P17-007 | pending |
-| P17-009 | Independent review, final checks, and stacked draft PR | M | bounded checkpoints before P17-008; closeout after P17-008 | in progress — Web backend, print-semantic, and prepared-guard checkpoints only |
+| P17-007 | Render PrintDocumentV2 and printable HTML | L | P17-005 | in progress — HTML/artifact/A4 technical prototype complete; standalone parity pending |
+| P17-008 | Prove compatibility, artifacts, browser, and A4 gates | L | P17-006, P17-007 | in progress — V2 print artifact and Chromium/A4 subgate complete; integrated release gates pending |
+| P17-009 | Independent review, final checks, and stacked draft PR | M | bounded checkpoints before P17-008; closeout after P17-008 | in progress — Web backend, print-semantic, prepared-guard, and printable-HTML/artifact checkpoints |
 
 ## Dependency graph
 
@@ -332,7 +332,7 @@ Every value below must remain exact throughout Phase 1.7.
   - two V1 compatibility regressions prove that the attribution schema remains
     the same runtime object across root, safe-leaf, presentation, and worksheet
     exports rather than merely remaining structurally equivalent;
-  - the Vite/Oxc boundary suite passes 67/67 plus the live repository scan. It
+  - the Vite/Oxc boundary suite passes 68/68 plus the live repository scan. It
     enforces exact browser-safe public leaf imports and exact transitive source
     dependencies, along with the reviewed manifests, scripts, complete
     lockfile/workspace, Vite/Wrangler/PostCSS, HTML/CSS assets, and executable
@@ -343,7 +343,7 @@ Every value below must remain exact throughout Phase 1.7.
     answer, seed, scoring, and solution-trace tokens. The artifact walk rejects
     symbolic links and non-regular entries and fails closed above 1,000 total
     entries, 20 MiB of regular-file content, or depth 16. Focused integration
-    coverage passes 37/37 provenance tests and 24/24 scanner tests;
+    coverage passes 38/38 provenance tests and 27/27 scanner tests;
   - the raw token canary is defense in depth, not semantic absence proof.
     Tree-shaking is an optimization, not an authorization boundary; source
     reachability and final emitted-module provenance are separate gates;
@@ -431,8 +431,9 @@ Every value below must remain exact throughout Phase 1.7.
 
 ## P17-007 — PrintDocumentV2 and printable HTML
 
-- Status: in progress — renderer-neutral semantic core and prepared answer
-  guard complete; printable HTML, artifacts, and rendered A4 evidence pending
+- Status: in progress — renderer-neutral core, prepared answer guard, printable
+  HTML, exact artifacts, and local Chromium/A4 technical evidence complete;
+  standalone lesson/Web/print semantic parity remains pending
 - Type: feature / privacy / layout tests
 - Size: L
 - Dependencies: P17-005
@@ -448,11 +449,16 @@ Every value below must remain exact throughout Phase 1.7.
   - `packages/print-document/src/canonical-v2.test.ts`
   - `packages/print-document/src/project-v2.test.ts`
   - `packages/print-document/src/compatibility-v1.test.ts`
+  - `packages/print-document/src/render-html-v2.ts`
+  - `packages/print-document/src/render-html-v2.test.ts`
+  - `packages/print-document/src/sample-artifacts-v2.test.ts`
   - `packages/schemas/src/worksheet-instance-v1.ts`
   - `packages/schemas/src/equivalent-fraction-leak.test.ts`
   - `scripts/import-boundary-policy.mjs`
   - `scripts/check-import-boundaries.test.mjs`
-  - printable V2 HTML implementation and render tests in the next slice
+  - `scripts/render-sample-v2.ts`
+  - `scripts/verify-sample-artifacts-v2.mjs`
+  - `packages/test-fixtures/golden/print-v2/`
 - Deliverables:
   - separate `PrintDocumentV2` validator/canonical/projector entrypoints;
   - presentation heading, paragraphs, and structured worked-example blocks
@@ -466,7 +472,7 @@ Every value below must remain exact throughout Phase 1.7.
   - semantic snapshot parity with Web/lesson passes;
   - injected presentation answers fail final print authorization;
   - all four current v1 PrintDocument/HTML hashes remain exact.
-- Current semantic-core evidence:
+- Current implementation evidence:
   - schema `exercisebook.print/v2`, source schema
     `exercisebook.worksheet-instance/v2`, and projector `print-projector.v2`
     have separate V2 validation, canonicalization, student, and answer-key
@@ -518,35 +524,82 @@ Every value below must remain exact throughout Phase 1.7.
   - the answer-key PrintDocument hash is
     `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
     at 16,012 bytes, leaving 3,983,988 bytes;
-  - the aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
-    Vitest tests across 48 files. Focused evidence is 143/143 print-package
-    tests across 10 files, 358/358 schema tests across 5 files (including
-    162/162 schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
-    source/config boundary tests plus the live scan, 37/37 final
-    module-provenance tests, and 24/24 artifact-scanner tests. Production build
-    and existing sample verification pass without identity changes; the
-    production client records 112 modules and the scanner covers 328,591 bytes;
+  - renderer `printable-html.v2` accepts only validated detached
+    `PrintDocumentV2` values and emits self-contained, escaped HTML without
+    remote or active resources. Its public semantic snapshot schema is
+    `exercisebook.print-semantic-snapshot/v2`;
+  - the student HTML is 23,436 UTF-8 bytes at
+    `13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`;
+    the answer-key HTML is 29,297 bytes at
+    `b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`;
+  - the student semantic snapshot is 9,055 canonical bytes at
+    `313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`;
+    the answer-key snapshot is 12,450 bytes at
+    `540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`;
+  - the exact immutable sample bundle contains nine content-addressed
+    artifacts: ContentDocumentV2, DailyPlanPreviewV2, WorksheetInstanceV2,
+    student/key PrintDocumentV2, student/key semantic snapshots, and
+    student/key HTML. The manifest/verifier rejects a missing, extra,
+    truncated, changed, symbolic-link, FIFO, other non-regular,
+    noncanonical-manifest, oversized, or conflicting artifact. Nonblocking
+    descriptor opens and bounded reads prevent hangs and unbounded allocation,
+    while a same-byte replay remains unchanged;
+  - before pipeline loading, the generator captures the fixed Markdown source
+    through a nonfollowing, nonblocking regular-file descriptor with a
+    262,144-byte cap, fatal UTF-8 decoding, and stable size, modification-time,
+    and change-time checks. Symbolic links, FIFOs, oversized or invalidly
+    encoded sources, and concurrent changes fail before artifact publication;
+  - focused print-package tests pass 274/274 across 12 files, including 113
+    permanent artifact integration/negative tests. TypeScript package checking,
+    68/68 source/config boundary tests plus the live scan, reviewed install
+    inputs, and exact V1 compatibility identities pass;
+  - exact output guards fail closed above 16,000,000 emitted UTF-8 bytes or
+    65,536 emitted opening/void elements. The validator-maximal
+    element/cardinality answer-key fixture renders to 2,493,161 bytes and
+    59,046 elements, leaving 13,506,839 bytes and 6,490 elements. The byte
+    count is specific to that fixture rather than simultaneous maximum text in
+    every field. These are defensive renderer limits, not a Worker CPU, memory,
+    latency, or endpoint SLO;
+  - real Chromium inspection of both fixed HTML artifacts reports zero fetched
+    resources, console errors or warnings, page errors, duplicate IDs, and
+    missing ID references. Student/key output has 7/13 labelled math roles,
+    no active elements, and no horizontal overflow;
+  - axe reports zero violations, but `color-contrast` remains an incomplete
+    manual-review item because the tool cannot resolve the `h1` background
+    through the obscured background calculation. All rendered pages were
+    visually inspected; that does not turn the automated incomplete into a
+    pass;
+  - Chromium PDF generation with CSS page size produces 6 student and 8
+    answer-key A4 pages, each 594.96 by 841.92 points. Visual inspection of all
+    14 rendered pages found no clipping, overlap, or unreadable glyphs. Extracted
+    text preserves title, lesson, worked example, problems 1 through 6 and
+    their working spaces, answer key entries 1 through 6 (key only),
+    attribution, and source-instance order;
   - the real V1 pipeline freezes the WorksheetInstance, student/key
     PrintDocument, and student/key HTML identities listed in the baseline table.
 - Remaining before P17-007 completion:
-  - `renderPrintableHtmlV2` and a complete V2 print-semantic snapshot;
-  - V2 HTML hashes plus checked-in artifacts/manifests;
-  - standalone lesson/Web/print semantic snapshot parity;
-  - decide the effective materialization envelope separately from the prepared
-    guard: a generated-style payload passes N=178 at 548,377 canonical bytes
-    and fails N=179 at 551,466 bytes because complete safe-graph inspection
-    exceeds the 1,000,000 string-code-unit cap. This is a follow-up contract
-    decision, not a guard failure;
-  - establish request-wide runtime/failure budgets before a public synchronous
-    render endpoint. The implemented fixed phase caps do not constitute a
-    whole-request CPU or memory guarantee;
-  - browser-rendered A4 page count, clipping, page-break, extracted-text,
-    accessibility, and working-space evidence. The semantic `paper: "a4"`
-    discriminator is not that evidence.
+  - standalone lesson/Web/print semantic snapshot parity. The printable-HTML
+    checkpoint's integrated checks and exact-current independent reviews pass.
+
+The broad generated-style aggregate `{ instance, canonicalJson, instanceHash }` probe
+passes N=178 at 548,377 canonical instance bytes and fails N=179 at 551,466
+bytes when duplicated semantic data exceeds the combined safe-graph
+1,000,000-string-code-unit cap. The public V2 policy emits only 4, 6, or 8
+items, so this is structural maximum-envelope behavior outside the current
+public plan, not a guard failure or a blocking public bug. Future problem-count
+expansion must cap the instance graph and canonical UTF-8 representation
+independently rather than raising the aggregate cap implicitly.
+
+The local PDF files are disposable verification outputs, not checked-in
+release artifacts. A hosted/backend PDF pipeline and its request-wide runtime,
+memory, queueing, failure, retry, and observability budgets remain deferred; the
+renderer and prepared-guard caps do not establish those service guarantees.
 
 ## P17-008 — Integrated compatibility and release evidence
 
-- Status: pending
+- Status: in progress — exact V2 print artifact and local Chromium/A4 subgate
+  complete; standalone lesson/Web integration, automated cross-browser CI, and
+  final release gates pending
 - Type: integration / QA
 - Size: L
 - Dependencies: P17-006, P17-007
@@ -573,14 +626,16 @@ Every value below must remain exact throughout Phase 1.7.
   - exact page counts, clipping/read-order result, response maxima, and all v2
     hashes are recorded in this ledger.
 - Current partial evidence:
-  - the aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
-    Vitest tests across 48 files. Focused evidence is 143/143 print-package
-    tests across 10 files, 358/358 schema tests across 5 files (including
-    162/162 schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
-    source/config boundary tests plus the live scan, 37/37 final
-    module-provenance tests, and 24/24 artifact-scanner tests. Production build
-    and existing sample verification pass without identity changes; the
-    production client records 112 modules and the scanner covers 328,591 bytes;
+  - the frozen complete diff passes `pnpm check` with TypeScript 7.0.2,
+    1,547/1,547 Vitest tests across 50 files, the production build, and
+    unchanged V1/V2 sample replays. The added HTML and artifact slice has
+    274/274 focused print-package tests across 12 files, 68/68 source/config
+    boundary tests plus the live scan, TypeScript package checking,
+    reviewed-install-input verification, frozen offline install, dependency
+    audit, dedupe, `git diff --check`, and exact V1 compatibility evidence.
+    Exact-current whole-diff review and `codex review --uncommitted` found no
+    actionable correctness, privacy, determinism, boundary, or
+    release-readiness defect, so the bounded draft PR checkpoint may proceed;
   - prepared trusted/full V2 p50 is 7.13/30.08 ms at N=100 and 13.48/56.63 ms
     at N=200. These are local Apple M5 Pro / Node 26.5.0 reference measurements
     after 3 warmups and across 15 measured runs, not a CI latency or SLO gate;
@@ -593,22 +648,58 @@ Every value below must remain exact throughout Phase 1.7.
   - revision-1/revision-2 content hashes and every frozen V1
     WorksheetInstance/PrintDocument/HTML identity remain unchanged under an
     explicit real-pipeline compatibility test;
-  - the V2 instance and student/key semantic PrintDocument identities and
-    canonical byte sizes are recorded under P17-007;
+  - the V2 instance, student/key PrintDocument, semantic snapshot, and HTML
+    identities and byte sizes are recorded under P17-007. The exact manifest
+    binds the nine-artifact content/plan/instance/print/snapshot/HTML chain, and
+    the verifier requires the generated and checked-in golden bundles to be
+    byte-identical exact sets;
+  - student-answer scanning now canonicalizes reviewed Unicode minus,
+    unary-plus, division, and solidus sets, recognizes `over`, `divided by`, and
+    `division by`, removes default-ignorable separators, and rejects bidi
+    controls at every raw and URI-decoded state without modifying delivered
+    text or widening the 24-state closure. Raw and URI-encoded regressions cover
+    production
+    legacy/prepared guards, prompt accessibility text, student HTML, and the
+    existing exact cross-slot operand exception;
+  - real Chromium loaded both HTML variants with zero fetched resources,
+    console errors or warnings, page errors, duplicate IDs, and missing ID
+    references. The 7/13 math-role counts are fully labelled, and both pages
+    have no active elements or horizontal overflow;
+  - axe reports zero violations, with `color-contrast` still incomplete for
+    manual review because the `h1` background calculation is obscured. Every
+    rendered page was visually inspected, but the automated incomplete is not
+    claimed as a pass;
+  - CSS-page-size PDF output is exactly 6/8 student/key A4 pages at 594.96 by
+    841.92 points. All pages were visually inspected without clipping, overlap,
+    or unreadable glyphs, and extracted headings retain presentation, ordered
+    problems/working spaces, ordered key entries, attribution, and source
+    identity;
+  - a separate validator-accepted Japanese/long-text probe emits 137,077-byte
+    student and 590,485-byte answer-key HTML with zero horizontal overflow
+    across 117/184 authored text and math surfaces. CSS-page-size output is
+    26/93 A4 pages; selected rendered pages cover Japanese glyphs, mathematics,
+    long explanation continuations, page breaks, answer areas, both variants,
+    and attribution without clipping or unreadable text. Full PDF text
+    extraction retains the Japanese content, and axe reports zero violations
+    with the same unresolved `color-contrast` incomplete item;
   - the 2026-08-02 `pnpm audit` run reported no known vulnerabilities after
     patching the Cloudflare development stack to
     `@cloudflare/vite-plugin@1.49.0`,
     `@cloudflare/vitest-pool-workers@0.19.1`, `wrangler@4.116.0`, and resolved
     `miniflare@4.20260730.0` / `sharp@0.35.2`;
-  - these checks support the Web backend and print semantic checkpoints only.
-    Printable V2 HTML and checked-in artifacts, standalone lesson/React browser
-    flows, visual/accessibility inspection, and rendered A4 evidence are
-    missing, so P17-008 remains pending.
+  - these checks complete the fixed V2 print artifact and one local Chromium/A4
+    technical subgate only. Standalone lesson/Web/print snapshot parity, the
+    standalone lesson route, React V2 integration, product visual acceptance,
+    automated cross-browser/responsive CI, hosted/backend PDF behavior, final
+    Phase 1.7 integration/release review, and release remain pending, so
+    P17-008 is not complete.
 
 ## P17-009 — Independent review and stacked draft PR
 
-- Status: in progress — bounded Web backend, print-semantic, and prepared-guard
-  checkpoints only; Phase 1.7 closeout remains dependent on P17-008
+- Status: in progress — bounded Web backend, print-semantic, prepared-guard,
+  and printable-HTML/artifact checkpoints exist; printable exact-current
+  checks and reviews pass, and child draft PR #8 has an initial green CI
+  checkpoint; full Phase 1.7 closeout remains pending
 - Type: review / delivery
 - Size: M
 - Dependencies: bounded checkpoints after the P17-006 backend subset and
@@ -619,8 +710,8 @@ Every value below must remain exact throughout Phase 1.7.
   - independent adversarial privacy/snapshot review;
   - independent Web/lesson/print accessibility and release-readiness review;
   - repaired findings and rerun focused/full gates;
-  - focused commits pushed to `feat/prepared-answer-guard`;
-  - bounded stacked draft PR targeting `feat/v2-print-document`;
+  - focused commits pushed to `feat/v2-printable-html`;
+  - bounded stacked draft PR targeting `feat/prepared-answer-guard`;
   - final Phase 1.7 review and release checkpoint after P17-008.
 - Completion evidence:
   - clean worktree and exact local/remote/head SHA agreement;
@@ -629,15 +720,21 @@ Every value below must remain exact throughout Phase 1.7.
   - no merge, deployment, DNS, or license mutation;
   - remaining findings recorded as explicit next-loop work.
 - Current evidence:
-  - the aggregate `pnpm check` for the bounded Web backend, print semantic core,
-    and prepared guard passes with the exact counts recorded under P17-008;
-  - the branch is stacked on `feat/v2-print-document` at
-    `129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6), with no
+  - prior aggregate checks for the bounded Web backend, print semantic core,
+    and prepared guard passed. The current printable-HTML/artifact frozen diff
+    also passes the exact aggregate result recorded under P17-008 plus
+    exact-current whole-diff and Codex reviews;
+  - the branch is stacked on `feat/prepared-answer-guard` at
+    `5814f86e3d3d0e822d048450fa71fbf85fd672e3` (parent draft PR #7), with no
     merge or deployment;
-  - no child draft PR has been created at this documentation checkpoint;
-  - child draft-PR state, exact local/remote head agreement, and final CI are
-    volatile GitHub evidence that must be read back at delivery time rather than
-    inferred from this ledger; a bounded draft checkpoint still does not
+  - child draft PR #8 is open at
+    `https://github.com/kazu-42/exercisebook.app/pull/8` with base
+    `feat/prepared-answer-guard` and head `feat/v2-printable-html`. Its initial
+    two-commit head `ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head
+    GitHub CI and was reported clean and mergeable;
+  - current draft-PR state, exact local/remote head agreement, and final CI are
+    volatile GitHub evidence that must still be read back at delivery time
+    rather than inferred from this ledger. A bounded draft checkpoint does not
     complete P17-009 or Phase 1.7.
 
 ## Execution lanes

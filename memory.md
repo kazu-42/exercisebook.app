@@ -434,6 +434,18 @@ numerator/denominator object-like forms. Decimal, percentage, and arbitrary
 natural-language equivalents remain explicit residual risks; bounds fail closed
 instead of accepting a partial scan.
 
+The same bounded closure now applies one scanner-only NFKC/sign/separator/
+default-ignorable transform to every raw and URI-decoded state. It maps the
+reviewed Unicode minus, unary-plus, division, and solidus sets to ASCII, removes
+default-ignorable separators, recognizes `over`, `divided by`, and `division
+by`, and rejects all bidi controls because logical deletion cannot reproduce
+visual order. The explicit sets are reviewable and intentionally exclude
+unrelated letters and punctuation, ratio/colon notation, unreviewed or ambiguous
+decorated operators, and arbitrary cross-script word skeletons. It does not
+rewrite delivered text
+or add a new normalization branch. Current V2 print is English-only; future RTL
+support needs a structured-bidi contract.
+
 **Evidence**: On `feat/v2-print-document`, stacked on
 `feat/v2-worksheet-api` at
 `ef05d7f340b14b5ade9fd55e8758e9fc5ca9d530` (parent draft PR #5), TypeScript
@@ -532,3 +544,107 @@ failure. The advertised problem maximum versus envelope bound requires a
 follow-up decision. Printable V2 HTML/artifacts, standalone lesson/Web parity,
 React integration, browser/accessibility/A4 evidence, request-wide public
 render budgets, and final Phase 1.7 review all remain open.
+
+## 2026-08-02 - Freeze deterministic V2 printable HTML and sample artifacts
+
+**Context**: The renderer-neutral `PrintDocumentV2` checkpoint did not yet
+prove that an escaped browser document, its semantic reading order, and its
+content-addressed developer artifacts all described the same authorized
+worksheet. It also did not establish rendered A4 behavior. The current Web
+pages and print styling remain a technical prototype rather than an accepted
+product direction.
+
+**Decision**: Add the parallel `printable-html.v2` renderer and
+`exercisebook.print-semantic-snapshot/v2` snapshot without changing the frozen
+V1 path. Validate and detach the complete PrintDocument before rendering;
+escape all content; emit deterministic ordinal IDs, one labelled `role="math"`
+per expression, and self-contained CSP-constrained HTML with no active or
+external resource surface. The renderer may only present the validated AST; it
+does not authorize student delivery, replan, regenerate, or resolve content.
+Its module-private structural ceilings are 65,536 emitted elements and
+16,000,000 UTF-8 bytes. They fail closed but are not a Worker CPU, memory,
+latency, or public synchronous-render SLO.
+
+The reviewed V2 sample command reconstructs the production path from constrained
+Markdown through the pinned 12-minute plan, materialization, both print
+projections, semantic snapshots, and HTML. It publishes an exact ten-file
+bundle with no-clobber same-filesystem temporary writes, uses nonblocking opens
+and descriptor-bounded reads so symlinks, FIFOs, oversized files, and other
+non-regular paths fail promptly, and verifies the exact manifest, artifact set,
+hashes, cross-artifact identities, variant parity, protected fields, and the
+reviewed canonical-answer representations. Those lexical checks are defense in
+depth; projector authorization and exact reviewed bytes remain authoritative.
+`pnpm worksheet:samples` is the aggregate V1+V2 gate;
+`pnpm worksheet:sample` remains the intentional V1-only command.
+
+**Evidence**: The fixed source hash is
+`456c8908debd52c7fcc5eba6e2e9a38434b5fcd8343e7a14a427faae34502523`
+and the plan ID is
+`preview-d8e7bffb76e814cf8fed232ed5817008d9291247f94d4e63bda6fbeb647daf33`.
+The nine content-addressed artifacts are:
+
+- ContentDocumentV2: 2,680 bytes,
+  `944225a2dda87ae6ee61e53f21a929301f5264793d665ea2200b65fb0f5a71dd`;
+- DailyPlanPreviewV2: 1,527 bytes,
+  `a55f578df16f592c13b5d7d8dd03f196a03176af5827bfb2dc0e312d06eff8c3`;
+- WorksheetInstanceV2: 20,941 bytes,
+  `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`;
+- student and answer-key PrintDocumentV2: 12,077 and 16,012 bytes,
+  `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
+  and `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`;
+- student and answer-key semantic snapshots: 9,055 and 12,450 bytes,
+  `313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`
+  and `540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`;
+- student and answer-key HTML: 23,436 and 29,297 bytes,
+  `13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`
+  and `b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`.
+
+The validator-maximal element/cardinality answer-key fixture renders 814 blocks
+as 59,046 elements and 2,493,161 UTF-8 bytes, leaving 6,490 elements below the
+structural ceiling. Its byte count is specific to that fixture, not a claim
+that every authored text field is simultaneously maximal.
+Local Chromium 150 checks found no fetched resources, console errors/warnings,
+duplicate IDs, missing `aria-labelledby` targets, active elements, or
+horizontal overflow in either variant. The student/key documents respectively
+contain 51/64 IDs, 20/32 references, and 7/13 labelled math roles; the key has
+six ordered solution entries. An ad hoc automated accessibility scan of the
+reviewed fixture reported zero violations; it is not assistive-technology
+acceptance.
+
+PDFs generated with CSS page size enabled are A4 at 594.96 x 841.92 points:
+six student pages and eight answer-key pages. Extracted text preserves all six
+ordered problems, working spaces, solutions, and attribution; visual inspection
+of every rendered page found no clipping, overlap, or unreadable glyph in this
+English fraction fixture. These local Skia PDFs are untagged and ignored test
+evidence, not persisted artifacts or a deployed Browser Run backend.
+
+A separate validator-accepted Japanese/long-text probe produces 137,077-byte
+student and 590,485-byte answer-key HTML, with zero horizontal overflow across
+117/184 authored text and math surfaces. CSS-page-size PDFs contain 26/93 A4
+pages. Representative page images cover Japanese glyphs, mathematics, long
+explanation continuations, page breaks, answer areas, both variants, and
+attribution without clipping or unreadable text; full text extraction retains
+the Japanese content. This is machine-local Chromium/font evidence, not a new
+frozen identity or broad multilingual acceptance.
+
+**Impact**: The earlier N=178/N=179 observation is a conjunctive structural
+maximum caused by one aggregate inspection charging the same semantic text in
+both `instance` and its redundant `canonicalJson`, not a defect reachable from
+the reviewed planner, which emits only 4, 6, or 8 items. Do not raise the global
+graph cap, lower the schema slot maximum, or claim every simultaneous maximum
+shape is accepted. A future capacity change should budget the detached instance
+graph and canonical UTF-8 representation independently.
+
+Printable V2 HTML, snapshots, exact golden artifacts, and bounded local
+browser/A4 evidence are now present. Product-taste acceptance, React V2 and
+standalone lesson/Web parity, broader multilingual/font matrices,
+tagged/accessible PDF evaluation, hosted Queue -> Browser Run -> R2 rendering,
+authenticated persistence, request-wide public render budgets, final
+Phase 1.7 integration/release review, merge, deployment, DNS, and licensing
+remain pending. The printable-artifact frozen diff itself passed exact-current
+whole-diff and Codex reviews with no actionable finding. The bounded checkpoint
+is published as stacked draft PR #8 with base `feat/prepared-answer-guard` and
+head `feat/v2-printable-html`; its initial two-commit head
+`ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head GitHub CI and was
+reported clean and mergeable. No merge, deployment, DNS, persistence, or
+license mutation is claimed.

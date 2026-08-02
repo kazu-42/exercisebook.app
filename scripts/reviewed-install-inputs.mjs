@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 export const REVIEWED_INSTALL_INPUT_SHA256 = Object.freeze({
-  "package.json": "1a0684be1f1ad6c5be9689eaa113c4bc48998ce7b981364c5f908f93e0630134",
-  "pnpm-lock.yaml": "f1ab853bf33080bc153bf3a2412092dff8d0a973c3a351bbf0251f06ff1daa9b",
+  "package.json": "de8c02cc009a05d424a23b9fcc082bc1f1fdeebff5c3d80b384263893e9c81c4",
+  "pnpm-lock.yaml": "2c7fddb71346b826f1540ecb1bf8f3a57d50c78acb1662bffdaabe5ead8ee4db",
   "pnpm-workspace.yaml":
     "d79358652e7a27a03be67d38263092cb15cf0b6ebdb03f7222be29324ddebcdd",
   "apps/web/package.json":
@@ -17,7 +17,7 @@ export const REVIEWED_INSTALL_INPUT_SHA256 = Object.freeze({
   "packages/planner/package.json":
     "0ec4f7520a56d59356ab9ad48f96e9b38ca647722276cdacd49b4d1953f88873",
   "packages/print-document/package.json":
-    "d5213a2272cdbe93876ef441db69d7b4fa366da8de1ac36e02d3dbecc2ff598b",
+    "9584fec88fcc3f1a168dcfd7126a8e3256fd68b952ce34bc33b830aaa73679cc",
   "packages/schemas/package.json":
     "864eed2b228c2f055a1c2d2ed64f6c778ad5b24b8defcb46b195d72efdbfc17b",
   "packages/test-fixtures/package.json":

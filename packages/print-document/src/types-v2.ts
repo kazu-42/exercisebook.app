@@ -18,6 +18,8 @@ export const PRINT_DOCUMENT_V2_SOURCE_INSTANCE_SCHEMA =
 export const PRINT_PROJECTOR_V2_VERSION = "print-projector.v2" as const;
 export const PRINT_DOCUMENT_V2_PAPER = "a4" as const;
 export const PRINT_DOCUMENT_V2_LOCALE = "en" as const;
+export const PRINT_SEMANTIC_SNAPSHOT_V2_SCHEMA =
+  "exercisebook.print-semantic-snapshot/v2" as const;
 
 export type PrintVariantV2 = "student" | "answer-key";
 export type PrintPaperV2 = typeof PRINT_DOCUMENT_V2_PAPER;
@@ -187,6 +189,75 @@ export interface AnswerKeyPrintDocumentV2 extends PrintDocumentBaseV2 {
 }
 
 export type PrintDocumentV2 = StudentPrintDocumentV2 | AnswerKeyPrintDocumentV2;
+
+export interface PrintSemanticProblemPromptV2 {
+  readonly type: "fraction-addition";
+  readonly left: Readonly<{
+    numerator: string;
+    denominator: string;
+  }>;
+  readonly right: Readonly<{
+    numerator: string;
+    denominator: string;
+  }>;
+  readonly accessibleText: string;
+}
+
+export interface PrintSemanticProblemV2 {
+  readonly id: string;
+  readonly ordinal: number;
+  readonly instruction: string;
+  readonly prompt: PrintSemanticProblemPromptV2;
+  readonly response: Readonly<{
+    label: string;
+    lines: 3;
+  }>;
+  readonly fallback: PrintFallbackContentV2;
+  readonly workingSpace: Readonly<{
+    label: string;
+    lines: 3;
+  }>;
+  readonly provenance: PrintProblemProvenanceV2;
+}
+
+export interface PrintSemanticKeyEntryV2 {
+  readonly problemId: string;
+  readonly ordinal: number;
+  readonly canonicalResponse: Readonly<{
+    numerator: string;
+    denominator: string;
+    accessibleText: string;
+  }>;
+  readonly explanation: readonly string[];
+}
+
+interface PrintSemanticSnapshotBaseV2 {
+  readonly schema: typeof PRINT_SEMANTIC_SNAPSHOT_V2_SCHEMA;
+  readonly sourceInstanceSchema: typeof PRINT_DOCUMENT_V2_SOURCE_INSTANCE_SCHEMA;
+  readonly sourceInstanceHash: string;
+  readonly printDocumentSchema: typeof PRINT_DOCUMENT_V2_SCHEMA;
+  readonly projectorVersion: typeof PRINT_PROJECTOR_V2_VERSION;
+  readonly paper: PrintPaperV2;
+  readonly locale: typeof PRINT_DOCUMENT_V2_LOCALE;
+  readonly worksheetTitle: string;
+  readonly worksheetSummary: string;
+  readonly presentation: WorksheetPresentationV1;
+  readonly problems: readonly PrintSemanticProblemV2[];
+  readonly attributions: readonly AttributionV1[];
+}
+
+export interface StudentPrintSemanticSnapshotV2 extends PrintSemanticSnapshotBaseV2 {
+  readonly variant: "student";
+  readonly keyEntries: readonly [];
+}
+
+export interface AnswerKeyPrintSemanticSnapshotV2 extends PrintSemanticSnapshotBaseV2 {
+  readonly variant: "answer-key";
+  readonly keyEntries: readonly PrintSemanticKeyEntryV2[];
+}
+
+export type PrintSemanticSnapshotV2 =
+  StudentPrintSemanticSnapshotV2 | AnswerKeyPrintSemanticSnapshotV2;
 
 export interface MaterializedPrintDocumentV2<
   Document extends PrintDocumentV2 = PrintDocumentV2,

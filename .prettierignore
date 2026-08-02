@@ -1,6 +1,7 @@
 **/*.md
 pnpm-lock.yaml
 content/compiled/*.json
+packages/test-fixtures/golden/print-v2/
 
 **/coverage
 **/dist

@@ -296,7 +296,7 @@ minimumReleaseAge: 1440
 const reviewedRootScripts = {
   build: "pnpm -r --if-present build",
   check:
-    "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:sample",
+    "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:samples",
   "check:boundaries":
     "node --test scripts/check-import-boundaries.test.mjs && node scripts/check-import-boundaries.mjs",
   "content:check": "pnpm --filter @exercisebook/content-compiler content:check",
@@ -312,7 +312,11 @@ const reviewedRootScripts = {
     "node scripts/check-typescript-version.mjs && tsc -p tsconfig.json --noEmit",
   "worksheet:sample":
     "pnpm content:check && pnpm --filter @exercisebook/web worksheet:sample && pnpm --filter @exercisebook/print-document render:sample -- ../../output/print-sample && pnpm worksheet:verify",
+  "worksheet:sample:v2":
+    "pnpm content:check && pnpm --filter @exercisebook/print-document render:sample:v2 -- ../../output/print-sample-v2 && pnpm worksheet:verify:v2",
+  "worksheet:samples": "pnpm worksheet:sample && pnpm worksheet:sample:v2",
   "worksheet:verify": "node scripts/verify-sample-artifacts.mjs",
+  "worksheet:verify:v2": "node scripts/verify-sample-artifacts-v2.mjs",
 };
 const reviewedRootManifest = {
   name: "exercisebook",

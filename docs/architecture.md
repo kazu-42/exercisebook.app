@@ -8,12 +8,12 @@ This is a target architecture, not a deployment record. The Phase 1 repository
 implements a local walking skeleton through printable A4 HTML, Phase 1.5 adds
 an anonymous deterministic daily-plan preview, and the current Phase 1.7 stack
 adds a strict V2 worksheet-preview backend, renderer-neutral `PrintDocumentV2`
-semantic core, and trusted prepared-answer guard beside the preserved V1 lane.
-It does not claim
-production DNS/application deployment, durable Cloudflare storage, learner
-adaptation, printable V2 HTML or artifacts, rendered A4 behavior, a hosted PDF
-service, Browser Run rendering, a LuaLaTeX backend, a standalone lesson, or a
-V2 React experience.
+semantic core, trusted prepared-answer guard, deterministic printable V2 HTML,
+semantic snapshots, and a content-addressed local sample-artifact lane beside
+the preserved V1 lane. It does not claim production DNS/application deployment,
+durable Cloudflare storage, learner adaptation, a hosted PDF service, Browser
+Run rendering, a LuaLaTeX backend, a standalone lesson, or a V2 React
+experience.
 
 Primary application: `https://exercisebook.app`
 
@@ -39,11 +39,13 @@ claim mastery or adaptation. Its sequence seed is internal to materialization;
 the public response exposes only the preview identity, pinned public
 provenance, selection reason, counts, minutes, and student worksheet. The
 active React `/new` experience still requests and renders V1. The V2 Web DTO,
-trusted projector, service, HTTP route, and print semantic core are backend and
-renderer-neutral contract work only; standalone lesson delivery, React
-integration, printable V2 HTML and artifacts, and browser, visual,
-accessibility, and rendered A4 acceptance remain open. The preserved executable
-V1 contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+trusted projector, service, HTTP route, print semantic core, printable HTML,
+semantic snapshots, and local sample-artifact bundle remain contract and
+verification work; standalone lesson delivery and React V2 integration remain
+open. The current local browser and A4 checks are renderer evidence, not an
+approved product/visual direction or a hosted rendering service. The preserved
+executable V1 contract is
+[Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
 The V2 lane uses `day-one-fraction-preview@3`, pinned to the immutable V2
 content identity and the selected lesson, worked-example, and exercise nodes.
@@ -58,8 +60,41 @@ instance, preserve its source instance hash, and produce distinct canonical
 document hashes. Student and common answer-key blocks are built only from
 `StudentWorksheetDeliveryV2`; answer-bearing key entries are appended only from
 the same detached full-instance snapshot. The fixed `paper: "a4"` value
-participates in the semantic document identity but is not evidence of rendered
-A4 layout.
+participates in the semantic document identity. By itself that discriminator is
+not layout evidence; rendered acceptance is recorded separately below.
+
+`printable-html.v2` validates and detaches the complete `PrintDocumentV2`
+before rendering deterministic, self-contained student or answer-key HTML. Its
+public semantic observation contract is
+`exercisebook.print-semantic-snapshot/v2`. The default 16,000,000-byte exact
+UTF-8 output cap and 65,536-emitted-element cap are renderer-module protective
+bounds, not Cloudflare Worker memory, latency, concurrency, or request SLOs.
+The reviewed validator-maximal element/cardinality fixture renders 814 blocks
+as 59,046 elements and 2,493,161 UTF-8 bytes, leaving 6,490 elements of
+headroom. That byte count belongs to this fixture; it does not claim that every
+authored text field can simultaneously be at its maximum length.
+
+The local V2 sample lane materializes one pinned 12-minute plan and writes nine
+content-addressed artifacts plus an exact manifest: the compiled content
+document, daily plan, worksheet instance, student and answer-key
+`PrintDocumentV2` objects, their semantic snapshots, and their printable HTML.
+Before loading the generation pipeline, that lane captures its fixed Markdown
+source through a nonfollowing, nonblocking regular-file descriptor. The read is
+bounded at 262,144 bytes, requires fatal UTF-8 decoding, and requires size,
+modification time, and change time to remain stable through the read. A
+symbolic link, FIFO, oversized source, invalid UTF-8, or concurrently changed
+source fails before artifact publication begins.
+Publication is immutable and no-clobber; verification checks the exact file
+set, names, sizes, hashes, manifest relationships, projection parity, protected
+answer fields, and self-contained HTML. This is a checked-in developer
+fixture—not an R2 object, a public API payload, or production artifact storage.
+The publisher and verifier assume a trusted, developer-controlled output
+directory and ancestor path. Their no-follow, nonblocking, descriptor-bounded,
+exact-byte checks protect against common mistakes and special files; they are
+not dirfd-anchored against hostile ancestor replacement, do not provide a
+directory-fsync crash-durable transaction, and do not support concurrent writers
+targeting one output directory. Independent writers must use separate output
+directories.
 
 In the preserved V1 lane, the enabled `day-one-fraction-preview@2` policy
 owns every reduced canonical rational structurally exposed by the reviewed
@@ -82,11 +117,31 @@ as `printFallback` without rejecting mathematically valid operand reuse.
 
 Recognized fraction-like strings are also reduced to bounded rational
 signatures before comparison. The current recognizer covers slash and Unicode
-slash forms, spaced `over`, bounded TeX `\frac`, and bounded
-numerator/denominator object-like text after the existing normalization
-closure. It intentionally does not claim complete detection of decimals,
-percentages, or arbitrary natural-language equivalents; answer, candidate, and
-integer limits fail closed instead of accepting a partial scan.
+slash forms, curated division/solidus forms, spaced `over`, `divided by`, and
+`division by`, bounded TeX `\frac`, and bounded numerator/denominator
+object-like text after the existing normalization closure. At every raw or
+URI-decoded state, one scanner-only transform applies NFKC and these reviewed
+folds:
+
+- Unicode `Dash_Punctuation` plus U+02D7, U+2043, U+2212, U+2796, and U+10D8F
+  to ASCII `-`;
+- U+02D6, U+16ED, U+2795, and U+10D8E to ASCII `+`;
+- U+00F7, U+2298, U+2571, U+2797, U+27CB, U+29F8, U+2A38, and U+1F67C to
+  ASCII `/`;
+- Unicode `Default_Ignorable_Code_Point` characters to the empty string.
+
+The explicit sets follow reviewed Unicode sign, division, solidus, and
+confusable evidence without treating unrelated letters, punctuation, ratio
+operators, or unreviewed or ambiguous decorated math operators as ordinary
+unary signs or fractions.
+Any `Bidi_Control` fails closed because deleting it cannot reconstruct visual
+order. The delivered text is not rewritten, and the transform remains inside
+the existing 24-state worklist. Future RTL support must introduce a reviewed
+structured-bidi policy rather than weakening this boundary. The recognizer
+intentionally does not claim complete detection of decimals, percentages,
+ratio/colon notation, cross-script homoglyph spellings of word separators, or
+arbitrary natural-language equivalents; answer, candidate, and integer limits
+fail closed instead of accepting a partial scan.
 
 Trusted server projectors now prepare one opaque answer guard per authorization
 phase. Preparation validates and detaches the canonical answers once, then
@@ -116,12 +171,16 @@ conversions across trusted delivery and final Print authorization: 4,836 at
 N=200 versus the former guard-only 487,636 baseline, about 100.8x fewer. Other
 validation and canonicalization BigInt work is outside that structural count.
 
-A separate effective materialization-envelope limit was exposed by the broad
-fixture. A generated-style payload passes at N=178 with 548,377 canonical
-bytes, while N=179 with 551,466 canonical bytes fails the existing 1,000,000
-string-code-unit safe-graph cap. This is not an answer-guard failure: deciding
-whether to narrow the advertised problem-count contract or revise the complete
-materialization-envelope bound is a follow-up contract decision.
+A separate structural issue was exposed by a broad aggregate-wrapper fixture.
+The wrapper `{ instance, canonicalJson, instanceHash }` passes at N=178 and fails at
+N=179 because the same semantic material appears both as the instance graph and
+as its canonical JSON string while the complete wrapper is inspected against
+the existing safe-graph string-code-unit cap. This is not an answer-guard or
+renderer failure, and the current planner can emit only 4, 6, or 8 problems, so
+the fixture boundary is not reachable through the public preview and is not a
+public blocker. The follow-up should independently bound the instance graph and
+the canonical UTF-8 string. Do not widen the global safe-graph cap or narrow
+schema problem slots without a separate measured contract decision.
 
 The V2 service treats injected dependencies as hostile test seams, not as
 alternate authorities. Supplied planner, materializer, and projector outputs
@@ -166,19 +225,16 @@ the final trusted-answer authorization helper remain unexported. Structural
 projection from a verified, application-authorized worksheet snapshot proves
 source binding and student authorization.
 
-This 2026-08-02 prepared-guard checkpoint is on
-`feat/prepared-answer-guard`, stacked on `feat/v2-print-document` at
-`129f35edcc7118a84f383dc16d1b8a575892e3dc` (parent draft PR #6). It is neither
-merged nor deployed, and no child PR is claimed here. Reviewed content hashes
-and all five frozen V1 worksheet/PrintDocument/HTML identities remain exact.
-The aggregate `pnpm check` is green with TypeScript 7.0.2 and 1,315/1,315
-Vitest tests across 48 files. Focused evidence includes 143/143 print-package
-tests across 10 files, 358/358 schema tests across 5 files (including 162/162
-schema-contract tests), 75/75 equivalent/prepared-guard tests, 67/67
-source/config boundary tests plus the live scan, 37/37 final module-provenance
-tests, and 24/24 artifact-scanner tests. Production build and existing sample
-verification pass without identity changes. The fixed V2 worksheet instance
-hash is
+This 2026-08-02 local printable-HTML checkpoint is on
+`feat/v2-printable-html`, stacked on `feat/prepared-answer-guard` (draft PR #7),
+which is itself stacked on the V2 PrintDocument checkpoint (draft PR #6). It is
+published as draft PR #8 with base `feat/prepared-answer-guard` and head
+`feat/v2-printable-html`. The initial two-commit head
+`ddf449364832d96fff57e0b05c2ac0196f6c8157` passed exact-head GitHub CI and was
+reported clean and mergeable; the checkpoint remains neither merged nor
+deployed. Reviewed content hashes and all five frozen V1
+worksheet/PrintDocument/HTML identities remain exact. The fixed V2 worksheet
+instance hash is
 `934bd3949b6284bbb4061a29b3075560f9389b096ec4f913ad56788e06ac0d02`.
 The student PrintDocument hash is
 `51892552e00caac748d0ceb2532ed7eb1d7a1e094eef887cb0cc941fd8f80111`
@@ -187,12 +243,42 @@ cap. The answer-key hash is
 `d5a5b226bb485ed8e3cb8a43ef05695015e2a00bb97fe6a85530c654b7db0ebd`
 at 16,012 bytes, leaving 3,983,988 bytes.
 
+The exact `printable-html.v2` outputs are 23,436 UTF-8 bytes for the student
+variant at
+`13b819ad153d7c0d2313d412720390ed9544bebf7033f5588e2baf86fc0a5f39`
+and 29,297 bytes for the answer key at
+`b49c3812a26b6754d783207d11b4480e20aef112f89087a808b4a60521cb026d`.
+The corresponding `exercisebook.print-semantic-snapshot/v2` identities are
+`313f7dc135ccbb2bc59967c9f78da8b42f1986136f4a2fb32eedb766ebf54d67`
+for the student variant and
+`540ae4e7105b030597df2dd0fdfd04b5fb50d562d93d6f71942d45393412d167`
+for the answer key.
+
+Real-browser structural checks found no external resource requests, duplicate
+IDs, unresolved ARIA references, or unlabeled `role="math"` expressions; each
+math visual is hidden from the accessibility tree beside its labeled semantic
+representation. Browser-generated CSS-page-size PDFs are A4 at 594.96 by
+841.92 points: six student pages and eight answer-key pages. Every page was
+visually inspected with no clipping or overlap, and extracted worksheet and
+answer-key headings remain in document order. This is local renderer and
+structural-accessibility evidence, not a complete WCAG/tagged-PDF audit,
+Browser Run evidence, a production PDF SLO, or hosted artifact delivery.
+
+A separate validator-accepted Japanese/long-text probe renders 137,077-byte
+student and 590,485-byte answer-key HTML with no horizontal overflow across
+117/184 authored text and math surfaces. Its CSS-page-size PDFs are 26/93 A4
+pages. Representative rendered pages cover Japanese glyphs, mathematics, long
+explanation continuations, page breaks, answer areas, both variants, and
+attribution without clipping or unreadable text; full text extraction retains
+the Japanese content. This is a disposable layout probe, not another frozen
+artifact identity or evidence for every language/font environment.
+
 Across the reviewed 365-day V2 Web corpus, the largest exact serialized
 response remains 5,964 of 32,768 bytes, leaving 26,804 bytes of headroom. The
 production client build records 112 modules, and the all-regular-file canary
-scans 328,591 artifact bytes. These print hashes describe semantic JSON only;
-no V2 HTML, PDF, checked-in print artifact, page count, clipping, extraction, or
-rendered A4 claim follows from them.
+scans 328,591 artifact bytes. The PrintDocument hashes describe semantic JSON;
+the separately versioned HTML, semantic-snapshot, and local A4 evidence above
+must not be inferred from those semantic hashes alone.
 
 The patched local Cloudflare development stack is pinned to
 `@cloudflare/vite-plugin@1.49.0`,
@@ -733,6 +819,13 @@ Only `hard_prerequisite` edges form a DAG. `recommended_before`, `related`,
 Publication validates that hard prerequisites are acyclic and that all
 referenced revisions exist.
 
+RDF/SPARQL may later be evaluated as a curriculum-authoring query or derived
+read-model surface for crosswalks, provenance, and exploratory graph queries.
+It is not the canonical curriculum authority or a hot learner/planner-path
+dependency: publication still produces bounded, versioned, validated graph
+artifacts that can be replayed without a SPARQL service. Adoption requires a
+separate ADR and measured authoring/query value.
+
 ### Evidence
 
 Mastery requires evidence across multiple template families, sessions, and
@@ -844,6 +937,13 @@ Every `sha256` key identifies its exact stored bytes. `render-results` is a
 create-only, immutable first-writer pointer from a pre-render spec hash to the
 winning PDF and manifest hashes. Queue retries read it before rendering, and
 concurrent attempts accept the existing winner rather than overwrite it.
+
+The checked-in V2 sample bundle proves only the local content-addressing and
+cross-artifact contract. A later hosted lane will persist verified inputs,
+enqueue only bounded job identity plus digest references, let a Queue consumer
+load and re-verify them, render through Browser Run, and publish the verified
+result and manifest to R2. None of those Cloudflare resources is implemented or
+deployed by the local fixture lane.
 
 Worksheet content references and per-slot provenance carry the exact
 `contentHash` and `compilerVersion` alongside content ID, revision, and

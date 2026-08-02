@@ -13,6 +13,49 @@ import {
 
 const ANSWER_39_OVER_35 = [{ numerator: "39", denominator: "35" }] as const;
 const ANSWER_ONE = [{ numerator: "1", denominator: "1" }] as const;
+const ADDITIONAL_RAW_SIGN_AND_SEPARATOR_EQUIVALENTS = [
+  ["modifier-letter-plus equivalent", "\u02D678/\u02D670"],
+  ["Runic-cross-plus equivalent", "\u16ED78/\u16ED70"],
+  ["heavy-plus equivalent", "\u279578/\u279570"],
+  ["Garay-plus equivalent", "\u{10D8E}78/\u{10D8E}70"],
+  ["division-sign equivalent", "78\u00F770"],
+  ["heavy-division equivalent", "78\u279770"],
+  ["circled-division-slash equivalent", "78\u229870"],
+  ["box-drawing-solidus equivalent", "78\u257170"],
+  ["mathematical-rising-diagonal equivalent", "78\u27CB70"],
+  ["big-solidus equivalent", "78\u29F870"],
+  ["circled-division-sign equivalent", "78\u2A3870"],
+  ["very-heavy-solidus equivalent", "78\u{1F67C}70"],
+  ["divided-by equivalent", "78 divided by 70"],
+  ["division-by equivalent", "78 division by 70"],
+  ["composed heavy-plus and division equivalent", "\u279578\u00F7\u279570"],
+] as const;
+const ADDITIONAL_URI_SIGN_AND_SEPARATOR_EQUIVALENTS = [
+  ["URI-encoded modifier-letter-plus equivalent", "%CB%9678%2F%CB%9670"],
+  ["URI-encoded Runic-cross-plus equivalent", "%E1%9B%AD78%2F%E1%9B%AD70"],
+  ["URI-encoded heavy-plus equivalent", "%E2%9E%9578%2F%E2%9E%9570"],
+  ["URI-encoded Garay-plus equivalent", "%F0%90%B6%8E78%2F%F0%90%B6%8E70"],
+  ["URI-encoded division-sign equivalent", "78%C3%B770"],
+  ["URI-encoded heavy-division equivalent", "78%E2%9E%9770"],
+  ["URI-encoded circled-division-slash equivalent", "78%E2%8A%9870"],
+  ["URI-encoded box-drawing-solidus equivalent", "78%E2%95%B170"],
+  ["URI-encoded mathematical-rising-diagonal equivalent", "78%E2%9F%8B70"],
+  ["URI-encoded big-solidus equivalent", "78%E2%A7%B870"],
+  ["URI-encoded circled-division-sign equivalent", "78%E2%A8%B870"],
+  ["URI-encoded very-heavy-solidus equivalent", "78%F0%9F%99%BC70"],
+  ["URI-encoded divided-by equivalent", "78%20divided%20by%2070"],
+  ["URI-encoded division-by equivalent", "78%20division%20by%2070"],
+  [
+    "URI-encoded composed heavy-plus and division equivalent",
+    "%E2%9E%9578%C3%B7%E2%9E%9570",
+  ],
+] as const;
+
+function namedTextCases(
+  cases: ReadonlyArray<readonly [name: string, text: string]>,
+): ReadonlyArray<readonly [name: string, text: string]> {
+  return cases;
+}
 
 function scan(
   text: string,
@@ -22,35 +65,56 @@ function scan(
 }
 
 describe("equivalent fraction answer leak guard", () => {
-  it.each([
-    ["exact fraction", "39/35"],
-    ["unreduced equivalent", "78/70"],
-    ["leading-zero equivalent", "078/070"],
-    ["double-negative equivalent", "-78/-70"],
-    ["fraction slash equivalent", "78⁄70"],
-    ["division slash equivalent", "78∕70"],
-    ["word separator equivalent", "78 over 70"],
-    ["case-insensitive word separator", "78 OVER 70"],
-    ["NFKC-compatible equivalent", "７８／７０"],
-    ["TeX equivalent", String.raw`\frac{78}{70}`],
-    ["noncanonical TeX equivalent", String.raw`\frac{078}{070}`],
-    ["object-like equivalent", `{ "numerator": "78", "denominator": "70" }`],
-    ["noncanonical object-like equivalent", `{numerator: 078, denominator: 070}`],
-    ["reverse-order object-like equivalent", `{denominator: 70, numerator: 78}`],
-  ])("rejects a %s", (_case, text) => {
+  it.each(
+    namedTextCases([
+      ["exact fraction", "39/35"],
+      ["unreduced equivalent", "78/70"],
+      ["leading-zero equivalent", "078/070"],
+      ["double-negative equivalent", "-78/-70"],
+      ["fraction slash equivalent", "78⁄70"],
+      ["division slash equivalent", "78∕70"],
+      ["word separator equivalent", "78 over 70"],
+      ["case-insensitive word separator", "78 OVER 70"],
+      ["NFKC-compatible equivalent", "７８／７０"],
+      ["Unicode-minus equivalent", "−78/−70"],
+      ["heavy-minus equivalent", "➖78/➖70"],
+      ["modifier-letter-minus equivalent", "˗78/˗70"],
+      ["hyphen-bullet equivalent", "\u204378/\u204370"],
+      ["Garay-minus equivalent", "\u{10D8F}78/\u{10D8F}70"],
+      ...ADDITIONAL_RAW_SIGN_AND_SEPARATOR_EQUIVALENTS,
+      ["default-ignorable-separated equivalent", "78\u200B/\u200B70"],
+      ["TeX equivalent", String.raw`\frac{78}{70}`],
+      ["noncanonical TeX equivalent", String.raw`\frac{078}{070}`],
+      ["object-like equivalent", `{ "numerator": "78", "denominator": "70" }`],
+      ["noncanonical object-like equivalent", `{numerator: 078, denominator: 070}`],
+      ["reverse-order object-like equivalent", `{denominator: 70, numerator: 78}`],
+    ]),
+  )("rejects a %s", (_case, text) => {
     expect(() => scan(`Worked value: ${text}.`)).toThrow(
       "recognized canonical-answer representation",
     );
   });
 
-  it.each([
-    ["URI-encoded slash", "78%2F70"],
-    ["nested URI-encoded slash", "78%252F70"],
-    ["form-style encoded over", "78+over+70"],
-    ["URI-encoded Unicode slash", "78%E2%81%8470"],
-    ["URI-encoded TeX", "%5Cfrac%7B78%7D%7B70%7D"],
-    ["URI-encoded object-like text", "%7Bnumerator%3A78%2Cdenominator%3A70%7D"],
-  ])("rejects a %s equivalent after bounded normalization", (_case, text) => {
+  it.each(
+    namedTextCases([
+      ["URI-encoded slash", "78%2F70"],
+      ["nested URI-encoded slash", "78%252F70"],
+      ["form-style encoded over", "78+over+70"],
+      ["URI-encoded Unicode slash", "78%E2%81%8470"],
+      ["URI-encoded TeX", "%5Cfrac%7B78%7D%7B70%7D"],
+      ["URI-encoded object-like text", "%7Bnumerator%3A78%2Cdenominator%3A70%7D"],
+      ["URI-encoded Unicode-minus equivalent", "%E2%88%9278%2F%E2%88%9270"],
+      ["URI-encoded heavy-minus equivalent", "%E2%9E%9678%2F%E2%9E%9670"],
+      ["URI-encoded modifier-letter-minus equivalent", "%CB%9778%2F%CB%9770"],
+      ["URI-encoded hyphen-bullet equivalent", "%E2%81%8378%2F%E2%81%8370"],
+      ["URI-encoded Garay-minus equivalent", "%F0%90%B6%8F78%2F%F0%90%B6%8F70"],
+      ...ADDITIONAL_URI_SIGN_AND_SEPARATOR_EQUIVALENTS,
+      [
+        "URI-encoded default-ignorable-separated equivalent",
+        "78%E2%80%8B%2F%E2%80%8B70",
+      ],
+    ]),
+  )("rejects a %s equivalent after bounded normalization", (_case, text) => {
     expect(() => scan(`Worked%20value%3A+${text}.`)).toThrow(
       "recognized canonical-answer representation",
     );
@@ -66,6 +130,10 @@ describe("equivalent fraction answer leak guard", () => {
     ["non-equivalent object-like text", `{numerator: 78, denominator: 71}`],
     ["ordinary prose containing over", "The turnover target is 70 after 78 days."],
     ["unseparated over token", "78over70"],
+    ["heavy-plus signs around another value", "\u279578/\u279571"],
+    ["division sign with another divisor", "78\u00F771"],
+    ["Runic punctuation outside a rational", "Rune \u16ED separates notes."],
+    ["box-drawing diagonal outside a rational", "Section A \u2571 Section B"],
   ])("allows a non-equivalent %s", (_case, text) => {
     expect(() => scan(text)).not.toThrow();
   });
@@ -73,6 +141,32 @@ describe("equivalent fraction answer leak guard", () => {
   it("allows a non-equivalent calendar date without special slash-chain semantics", () => {
     expect(() => scan("2026/08/02")).not.toThrow();
   });
+
+  it.each([
+    ["raw", "\u202E07/87\u202C"],
+    ["URI-encoded", "%E2%80%AE07%2F87%E2%80%AC"],
+  ])(
+    "fails closed on %s bidi controls that can visually reorder a fraction token",
+    (_case, text) => {
+      expect(() => scan(text)).toThrow("unsupported bidi control");
+    },
+  );
+
+  it("allows scanner-ignorable characters in prose that does not reveal an answer", () => {
+    expect(() => scan("Keep\u200B working.")).not.toThrow();
+  });
+
+  it.each([
+    ["Arabic full stop", "\u06D478/\u06D470"],
+    ["commercial minus sign", "\u205278/\u205270"],
+    ["minus-or-plus sign", "\u221378/\u221370"],
+    ["combining minus sign below", "\u032078/\u032070"],
+  ])(
+    "does not reinterpret an intentionally excluded %s as unary minus",
+    (_case, text) => {
+      expect(() => scan(text)).not.toThrow();
+    },
+  );
 
   it.each([
     ["path around an equivalent", "archive/78/70/result"],
@@ -123,6 +217,16 @@ describe("equivalent fraction answer leak guard", () => {
     ],
     ["zero denominator", "78/0", "unsupported malformed rational representation"],
     ["repeated slash", "78//70", "unsupported malformed rational representation"],
+    [
+      "repeated Unicode solidus",
+      "78\u29F8\u29F870",
+      "unsupported malformed rational representation",
+    ],
+    [
+      "repeated circled division sign",
+      "78\u2A38\u2A3870",
+      "unsupported malformed rational representation",
+    ],
   ])("fails closed for a %s token", (_case, text, message) => {
     expect(() => scan(text)).toThrow(message);
   });
@@ -167,6 +271,31 @@ describe("equivalent fraction answer leak guard", () => {
 });
 
 describe("prepared equivalent fraction answer leak guard", () => {
+  it.each(
+    namedTextCases([
+      ["Unicode minus", "−78/−70"],
+      ["heavy minus", "➖78/➖70"],
+      ["modifier letter minus", "˗78/˗70"],
+      ["hyphen bullet", "\u204378/\u204370"],
+      ["Garay minus", "\u{10D8F}78/\u{10D8F}70"],
+      ["default-ignorable separators", "78\u200B/\u200B70"],
+      ["URI-encoded Unicode minus", "%E2%88%9278%2F%E2%88%9270"],
+      ["URI-encoded heavy minus", "%E2%9E%9678%2F%E2%9E%9670"],
+      ["URI-encoded modifier letter minus", "%CB%9778%2F%CB%9770"],
+      ["URI-encoded hyphen bullet", "%E2%81%8378%2F%E2%81%8370"],
+      ["URI-encoded Garay minus", "%F0%90%B6%8F78%2F%F0%90%B6%8F70"],
+      ["URI-encoded default ignorables", "78%E2%80%8B%2F%E2%80%8B70"],
+      ...ADDITIONAL_RAW_SIGN_AND_SEPARATOR_EQUIVALENTS,
+      ...ADDITIONAL_URI_SIGN_AND_SEPARATOR_EQUIVALENTS,
+    ]),
+  )("rejects a %s answer representation", (_case, text) => {
+    expect(() =>
+      prepareStudentVisibleAnswerGuard(ANSWER_39_OVER_35).assertDoesNotRevealAnyAnswer({
+        text,
+      }),
+    ).toThrow("recognized canonical-answer representation");
+  });
+
   it("detaches prepared answer signatures from later source mutations", () => {
     const mutableAnswer = { numerator: "39", denominator: "35" };
     const guard: PreparedStudentVisibleAnswerGuard = prepareStudentVisibleAnswerGuard([

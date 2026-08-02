@@ -75,6 +75,11 @@ describe("client module provenance", () => {
       "unreviewed workspace",
     ],
     [
+      `${REPOSITORY_ROOT}/packages/test-fixtures/golden/print-v2/private.answer-key.json`,
+      "packages/test-fixtures/golden/print-v2/private.answer-key.json",
+      "unreviewed workspace",
+    ],
+    [
       `${REPOSITORY_ROOT}/packages/web-renderer/src/fixtures.ts`,
       "packages/web-renderer/src/fixtures.ts",
       "unreviewed workspace",

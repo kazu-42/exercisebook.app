@@ -4,5 +4,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../../scripts/render-sample.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../scripts/render-sample.ts",
+    "../../scripts/render-sample-v2.ts"
+  ]
 }

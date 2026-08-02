@@ -12,6 +12,58 @@ import { checkReviewedInstallInputs } from "./check-reviewed-install-inputs.mjs"
 import { assertReviewedInstallInputs } from "./reviewed-install-inputs.mjs";
 
 const actualRepositoryRoot = path.resolve(import.meta.dirname, "..");
+
+function countOccurrences(source, needle) {
+  assert.notEqual(needle, "", "Occurrence matching requires a non-empty needle");
+  let count = 0;
+  let offset = 0;
+  while (offset <= source.length - needle.length) {
+    const next = source.indexOf(needle, offset);
+    if (next === -1) {
+      break;
+    }
+    count += 1;
+    offset = next + needle.length;
+  }
+  return count;
+}
+
+function endOfIndentedYamlBlock(source, firstChildIndex, parentIndentation) {
+  let lineStart = firstChildIndex;
+  while (lineStart < source.length) {
+    const newline = source.indexOf("\n", lineStart);
+    const lineEnd = newline === -1 ? source.length : newline;
+    const line = source.slice(lineStart, lineEnd);
+    if (line.trim() !== "") {
+      const indentation = /^ */u.exec(line)?.[0].length ?? 0;
+      if (indentation <= parentIndentation) {
+        return lineStart;
+      }
+    }
+    if (newline === -1) {
+      return source.length;
+    }
+    lineStart = newline + 1;
+  }
+  return source.length;
+}
+
+function assertExactNamedWorkflowStep(workflow, stepName, runCommand) {
+  const marker = `      - name: ${stepName}\n`;
+  assert.equal(
+    countOccurrences(workflow, marker),
+    1,
+    `CI must define the ${stepName} step exactly once`,
+  );
+  const start = workflow.indexOf(marker);
+  const end = endOfIndentedYamlBlock(workflow, start + marker.length, 6);
+  assert.equal(
+    workflow.slice(start, end).trimEnd(),
+    `${marker}        run: ${runCommand}`.trimEnd(),
+    `CI step ${stepName} must remain an exact fail-loud repository-root command`,
+  );
+}
+
 const reviewedRootPackage = await readFile(
   path.join(actualRepositoryRoot, "package.json"),
   "utf8",
@@ -94,7 +146,7 @@ const implicitPostcssConfigFiles = [".", "apps", "apps/web"].flatMap((relativeRo
 const reviewedRootScripts = {
   build: "pnpm -r --if-present build",
   check:
-    "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:sample",
+    "pnpm format:check && pnpm typecheck && pnpm schema:check && pnpm content:check && pnpm check:boundaries && pnpm test && pnpm build && pnpm worksheet:samples",
   "check:boundaries":
     "node --test scripts/check-import-boundaries.test.mjs && node scripts/check-import-boundaries.mjs",
   "content:check": "pnpm --filter @exercisebook/content-compiler content:check",
@@ -110,7 +162,11 @@ const reviewedRootScripts = {
     "node scripts/check-typescript-version.mjs && tsc -p tsconfig.json --noEmit",
   "worksheet:sample":
     "pnpm content:check && pnpm --filter @exercisebook/web worksheet:sample && pnpm --filter @exercisebook/print-document render:sample -- ../../output/print-sample && pnpm worksheet:verify",
+  "worksheet:sample:v2":
+    "pnpm content:check && pnpm --filter @exercisebook/print-document render:sample:v2 -- ../../output/print-sample-v2 && pnpm worksheet:verify:v2",
+  "worksheet:samples": "pnpm worksheet:sample && pnpm worksheet:sample:v2",
   "worksheet:verify": "node scripts/verify-sample-artifacts.mjs",
+  "worksheet:verify:v2": "node scripts/verify-sample-artifacts-v2.mjs",
 };
 const reviewedRootManifest = {
   name: "exercisebook",
@@ -927,6 +983,7 @@ test("runs the built-in-only dependency preflight before install and invokes bou
     "node --test scripts/check-import-boundaries.test.mjs",
     "node scripts/check-import-boundaries.mjs",
   ];
+  const aggregateSampleCommand = "run: pnpm worksheet:samples";
   const checkoutIndex = workflow.indexOf("uses: actions/checkout@");
   const firstNodeSetupIndex = workflow.indexOf("uses: actions/setup-node@");
   const preflightIndex = workflow.indexOf(preflightCommand);
@@ -940,6 +997,21 @@ test("runs the built-in-only dependency preflight before install and invokes bou
   assert.notEqual(pnpmSetupIndex, -1, "CI must set up the pinned pnpm runtime");
   assert.notEqual(pnpmCacheIndex, -1, "CI must configure pnpm caching");
   assert.notEqual(installIndex, -1, "CI must use the frozen workspace install");
+  assert.equal(
+    countOccurrences(workflow, aggregateSampleCommand),
+    1,
+    "CI must run the aggregate V1 and V2 sample-artifact gate exactly once",
+  );
+  assertExactNamedWorkflowStep(
+    workflow,
+    "Generate and verify sample artifacts",
+    "pnpm worksheet:samples",
+  );
+  assert.doesNotMatch(
+    workflow,
+    /^\s*(?:continue-on-error|working-directory)\s*:/mu,
+    "CI may not weaken or relocate reviewed fail-loud repository-root commands",
+  );
   assert.ok(
     checkoutIndex < firstNodeSetupIndex && firstNodeSetupIndex < preflightIndex,
     "CI must check out sources and set up Node before the built-in-only preflight",
@@ -959,6 +1031,53 @@ test("runs the built-in-only dependency preflight before install and invokes bou
     assert.ok(
       workflow.includes(directBoundaryCommand),
       "CI must invoke the boundary tests and live scan without a package-script bootstrap",
+    );
+  }
+});
+
+test("rejects wrappers and step metadata that weaken the aggregate sample gate", () => {
+  const exactStep = `jobs:\n  verify:\n    steps:\n      - name: Generate and verify sample artifacts\n        run: pnpm worksheet:samples\n`;
+  assert.doesNotThrow(() =>
+    assertExactNamedWorkflowStep(
+      exactStep,
+      "Generate and verify sample artifacts",
+      "pnpm worksheet:samples",
+    ),
+  );
+  for (const harmlessWorkflowTail of [
+    "# End of workflow\n",
+    "  follow_up:\n    runs-on: ubuntu-latest\n",
+  ]) {
+    assert.doesNotThrow(() =>
+      assertExactNamedWorkflowStep(
+        `${exactStep}${harmlessWorkflowTail}`,
+        "Generate and verify sample artifacts",
+        "pnpm worksheet:samples",
+      ),
+    );
+  }
+
+  for (const weakenedStep of [
+    exactStep.replace("pnpm worksheet:samples", "pnpm worksheet:samples || true"),
+    exactStep.replace(
+      "        run: pnpm worksheet:samples",
+      "        continue-on-error: true\n        run: pnpm worksheet:samples",
+    ),
+    exactStep.replace(
+      "        run: pnpm worksheet:samples",
+      "        working-directory: packages/print-document\n        run: pnpm worksheet:samples",
+    ),
+    exactStep.replace(
+      "        run: pnpm worksheet:samples",
+      "        run: |\n          pnpm worksheet:samples",
+    ),
+  ]) {
+    assert.throws(() =>
+      assertExactNamedWorkflowStep(
+        weakenedStep,
+        "Generate and verify sample artifacts",
+        "pnpm worksheet:samples",
+      ),
     );
   }
 });
