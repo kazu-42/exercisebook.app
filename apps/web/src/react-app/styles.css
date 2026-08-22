@@ -1,0 +1,946 @@
+:root {
+  --ink: #142d42;
+  --ink-muted: #475468;
+  --paper: #fbf7ec;
+  --paper-deep: #f1ead8;
+  --paper-grid: rgba(44, 76, 104, 0.075);
+  --rule: #b8c3ce;
+  --rule-dark: #6f7e8b;
+  --accent: #c94732;
+  --accent-dark: #942b1e;
+  --highlight: #e9b949;
+  --success: #26745b;
+  --success-dark: #15513f;
+  --focus: #ef7756;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: "Avenir Next", Avenir, "Gill Sans", "Trebuchet MS", sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  background: var(--paper);
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 15% 5%, rgba(233, 185, 73, 0.12), transparent 27rem),
+    var(--paper);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 0.08em;
+}
+
+a:hover {
+  text-decoration-thickness: 0.16em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.75rem 1rem;
+  transform: translateY(-180%);
+  background: var(--ink);
+  color: white;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.page-frame {
+  width: min(100% - 2rem, 88rem);
+  margin: 0 auto;
+}
+
+.site-header {
+  display: flex;
+  min-height: 6.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  text-decoration: none;
+}
+
+.brand__mark {
+  display: grid;
+  width: 2.75rem;
+  height: 3.2rem;
+  place-items: center;
+  border: 2px solid var(--ink);
+  border-left: 0.45rem solid var(--accent);
+  border-radius: 0.1rem 0.45rem 0.45rem 0.1rem;
+  background: var(--paper);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.brand strong,
+.brand small {
+  display: block;
+}
+
+.brand strong {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.18rem;
+  letter-spacing: -0.015em;
+}
+
+.brand small {
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.8rem, 2.5vw, 2rem);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.site-nav a {
+  text-decoration: none;
+}
+
+.site-nav__start {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+}
+
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-top: 6rem;
+  padding: 1.5rem 0 2.5rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(19rem, 0.7fr);
+  align-items: center;
+  gap: clamp(3rem, 8vw, 8rem);
+  min-height: min(46rem, calc(100vh - 6.5rem));
+  padding: clamp(4rem, 9vw, 8rem) 0;
+}
+
+.hero__copy h1 {
+  max-width: 10ch;
+  margin: 0.4rem 0 1.4rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(3.5rem, 9vw, 7.8rem);
+  font-weight: 500;
+  letter-spacing: -0.065em;
+  line-height: 0.82;
+}
+
+.hero__lede {
+  max-width: 38rem;
+  margin: 0;
+  color: var(--ink-muted);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.15rem, 2.5vw, 1.5rem);
+  line-height: 1.45;
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 2rem;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 1.2rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.15rem;
+  cursor: pointer;
+  font-weight: 750;
+  text-decoration: none;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--highlight);
+  text-decoration: none;
+}
+
+.button--primary {
+  background: var(--ink);
+  color: white;
+}
+
+.text-link {
+  font-weight: 750;
+}
+
+.access-promises {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1.4rem;
+  margin: 2.2rem 0 0;
+  padding: 0;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  list-style: none;
+}
+
+.access-promises li::before {
+  margin-right: 0.45rem;
+  color: var(--success);
+  content: "✓";
+  font-weight: 900;
+}
+
+.daily-sheet {
+  position: relative;
+  padding: clamp(2rem, 5vw, 3.2rem);
+  transform: rotate(1.4deg);
+  border: 1px solid var(--rule);
+  border-left: 0.75rem solid var(--accent);
+  border-radius: 0.15rem 1rem 1rem 0.15rem;
+  background: linear-gradient(var(--paper-grid) 1px, transparent 1px), var(--paper);
+  background-size: 100% 1.85rem;
+  box-shadow:
+    0.75rem 0.9rem 0 var(--paper-deep),
+    1.8rem 2.3rem 4rem rgba(20, 45, 66, 0.18);
+}
+
+.daily-sheet__binding {
+  position: absolute;
+  top: 1.5rem;
+  bottom: 1.5rem;
+  left: -0.56rem;
+  width: 0.26rem;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 0.8rem,
+    var(--paper) 0.8rem 1.5rem
+  );
+}
+
+.daily-sheet__edition {
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.daily-sheet h2 {
+  margin: 0.5rem 0 2rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  font-weight: 550;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.daily-sheet dl {
+  margin: 0;
+}
+
+.daily-sheet dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.daily-sheet dt {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.daily-sheet dd {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.mini-fractions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  min-height: 7rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.4rem, 4vw, 2.3rem);
+  font-weight: 700;
+}
+
+.daily-sheet > a {
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.learning-loop {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.75fr) minmax(0, 1.25fr);
+  gap: clamp(3rem, 8vw, 8rem);
+  padding: clamp(4rem, 8vw, 7rem) 0;
+  border-top: 1px solid var(--rule);
+}
+
+.learning-loop__intro {
+  position: sticky;
+  top: 2rem;
+  align-self: start;
+}
+
+.learning-loop h2 {
+  max-width: 15ch;
+  margin: 0.5rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2.3rem, 5vw, 4.3rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+}
+
+.learning-loop ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learning-loop li {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 1rem;
+  padding: 2rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.learning-loop li > span {
+  color: var(--accent);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.8rem;
+}
+
+.learning-loop h3 {
+  margin: 0 0 0.4rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.65rem;
+}
+
+.learning-loop li p {
+  max-width: 35rem;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 0.55rem;
+  padding: 2rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+}
+
+.lesson {
+  max-width: 76rem;
+  margin: 0 auto;
+}
+
+.lesson__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(16rem, 0.75fr);
+  align-items: end;
+  gap: clamp(2rem, 7vw, 7rem);
+  padding: clamp(4rem, 8vw, 7rem) 0;
+}
+
+.lesson__header h1 {
+  max-width: 12ch;
+  margin: 0.35rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 0.87;
+}
+
+.lesson__header > p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.three-moves {
+  margin-bottom: 4rem;
+}
+
+.three-moves h2 {
+  margin: 0 0 1rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.three-moves ol {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  list-style: none;
+}
+
+.three-moves li {
+  min-height: 8rem;
+  padding: 1.25rem;
+  border-right: 1px solid var(--rule);
+}
+
+.three-moves li:last-child {
+  border-right: 0;
+}
+
+.three-moves strong,
+.three-moves span {
+  display: block;
+}
+
+.three-moves strong {
+  margin-bottom: 0.6rem;
+  color: var(--accent-dark);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.5rem;
+}
+
+.three-moves span {
+  color: var(--ink-muted);
+  font-size: 0.87rem;
+}
+
+.lesson-note {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 2rem;
+  margin: 4rem 0;
+  padding: 1.5rem 0;
+  border-top: 3px double var(--ink);
+  border-bottom: 3px double var(--ink);
+}
+
+.lesson-note p:last-child {
+  max-width: 45rem;
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.35;
+}
+
+.lesson__next {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 3rem 0;
+}
+
+.lesson__next h2 {
+  margin: 0.35rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.plan-start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.75fr);
+  gap: clamp(3rem, 9vw, 9rem);
+  min-height: 42rem;
+  align-items: center;
+  padding: 5rem 0;
+}
+
+.plan-start h1,
+.not-found h1 {
+  max-width: 11ch;
+  margin: 0.5rem 0 1.5rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(3rem, 7vw, 6rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.9;
+}
+
+.plan-start > div > p:last-child {
+  max-width: 40rem;
+  color: var(--ink-muted);
+}
+
+.plan-start__intro {
+  align-self: center;
+}
+
+.plan-card {
+  display: grid;
+  gap: 1.35rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border: 1px solid var(--rule);
+  border-top: 0.5rem solid var(--accent);
+  background: var(--paper-deep);
+  box-shadow: 0.8rem 1rem 0 rgba(20, 45, 66, 0.08);
+}
+
+.plan-card > label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.plan-card label > span,
+.plan-card legend {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plan-card select {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.55rem;
+  border: 1px solid var(--rule-dark);
+  background: white;
+  color: var(--ink);
+}
+
+.plan-card select:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  color: var(--ink-muted);
+}
+
+.plan-card fieldset {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--rule);
+}
+
+.plan-card fieldset label {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.plan-card__note {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.plan-preview-state,
+.plan-preview-result {
+  grid-column: 1 / -1;
+}
+
+.plan-preview-state {
+  display: flex;
+  min-height: 7rem;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-deep);
+  text-align: center;
+}
+
+.plan-preview-state .loading-mark {
+  width: 1.7rem;
+  height: 2.1rem;
+}
+
+.plan-preview-state--error {
+  display: grid;
+  gap: 0.35rem;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.plan-preview-result {
+  display: grid;
+  gap: 2rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--rule-dark);
+}
+
+.plan-preview-result__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.plan-preview-result__heading h2 {
+  margin: 0.25rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.plan-preview-result__status {
+  max-width: 18rem;
+  margin: 0;
+  color: var(--success-dark);
+  font-weight: 750;
+}
+
+.plan-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-block: 1px solid var(--rule);
+}
+
+.plan-preview-summary div {
+  padding: 1rem;
+  border-right: 1px solid var(--rule);
+}
+
+.plan-preview-summary div:last-child {
+  border-right: 0;
+}
+
+.plan-preview-summary dt {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.plan-preview-summary dd {
+  margin: 0.4rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.25rem, 3vw, 1.8rem);
+  font-weight: 700;
+}
+
+.plan-preview-rationale {
+  max-width: 50rem;
+  padding: 1.4rem 1.6rem;
+  border-left: 0.35rem solid var(--success);
+  background: rgba(38, 116, 91, 0.08);
+}
+
+.plan-preview-rationale p:last-child {
+  margin: 0.35rem 0 0;
+  line-height: 1.65;
+}
+
+.plan-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.plan-preview-actions a {
+  color: var(--accent-dark);
+  font-weight: 750;
+}
+
+.plan-preview-worksheet {
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+}
+
+.worksheet-page {
+  padding: 2rem 0 0;
+}
+
+.worksheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1rem 1.5rem;
+  margin-bottom: 4rem;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.worksheet-state {
+  display: grid;
+  min-height: 60vh;
+  place-items: center;
+  align-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.worksheet-state [role="alert"] {
+  color: var(--accent-dark);
+  font-weight: 750;
+}
+
+.loading-mark {
+  width: 2.5rem;
+  height: 3rem;
+  border: 2px solid var(--ink);
+  border-left: 0.4rem solid var(--accent);
+  animation: page-turn 850ms ease-in-out infinite alternate;
+}
+
+@keyframes page-turn {
+  to {
+    transform: rotate(5deg) translateY(-0.2rem);
+  }
+}
+
+.print-page {
+  padding: 1.5rem;
+}
+
+.print-toolbar {
+  display: flex;
+  max-width: 72rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 0 auto 3rem;
+}
+
+.not-found {
+  display: grid;
+  min-height: 38rem;
+  place-content: center;
+  justify-items: start;
+}
+
+.static-header,
+.static-fallback {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+}
+
+.static-header {
+  padding: 2rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.static-fallback {
+  padding: 5rem 0;
+}
+
+.static-fallback h1 {
+  max-width: 10ch;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(3rem, 10vw, 7rem);
+  line-height: 0.9;
+}
+
+@media (max-width: 54rem) {
+  .hero,
+  .learning-loop,
+  .lesson__header,
+  .plan-start {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    min-height: auto;
+  }
+
+  .daily-sheet {
+    max-width: 34rem;
+    transform: none;
+  }
+
+  .learning-loop__intro {
+    position: static;
+  }
+
+  .lesson__header {
+    align-items: start;
+  }
+}
+
+@media (max-width: 42rem) {
+  .site-header {
+    align-items: flex-start;
+    padding: 1.25rem 0;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .site-nav a:not(.site-nav__start) {
+    display: none;
+  }
+
+  .three-moves ol {
+    grid-template-columns: 1fr;
+  }
+
+  .three-moves li {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .three-moves li:last-child {
+    border-bottom: 0;
+  }
+
+  .lesson-note {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .lesson__next,
+  .site-footer {
+    display: block;
+  }
+
+  .lesson__next .button {
+    margin-top: 1.5rem;
+  }
+
+  .site-footer p + p {
+    margin-top: 0.5rem;
+  }
+
+  .plan-preview-result__heading,
+  .plan-preview-actions {
+    display: grid;
+    align-items: start;
+  }
+
+  .plan-preview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-preview-summary div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .plan-preview-summary div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+@media print {
+  :root,
+  body {
+    background: white;
+  }
+
+  .print-page {
+    padding: 0;
+  }
+
+  .print-toolbar,
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .worksheet-actions,
+  .plan-start__intro,
+  .plan-card,
+  .plan-preview-state,
+  .plan-preview-result > :not(.plan-preview-worksheet) {
+    display: none;
+  }
+
+  .plan-start {
+    display: block;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .plan-preview-result,
+  .plan-preview-worksheet {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

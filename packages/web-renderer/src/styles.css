@@ -1,0 +1,531 @@
+.fraction {
+  display: inline-flex;
+  min-width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+.fraction__stack {
+  display: inline-grid;
+  min-width: 1.65rem;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  font-size: 0.82em;
+  line-height: 1;
+  text-align: center;
+}
+
+.fraction__numerator {
+  padding: 0 0.18rem 0.12rem;
+  border-bottom: 0.08em solid currentColor;
+}
+
+.fraction__denominator {
+  padding: 0.12rem 0.18rem 0;
+}
+
+.fraction__plain {
+  display: none;
+}
+
+.fraction-expression {
+  display: inline-block;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.fraction-expression__visual {
+  display: inline-flex;
+  min-height: 3.5rem;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.fraction-expression__operator {
+  color: var(--ink-muted, #475468);
+  font-family: "Avenir Next", Avenir, "Gill Sans", sans-serif;
+  font-size: 0.8em;
+  font-weight: 500;
+}
+
+.fraction-expression__blank {
+  width: 3.5rem;
+  height: 2.7rem;
+  border-bottom: 2px solid currentColor;
+}
+
+.fraction-lab {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.5rem, 5vw, 3rem);
+  border: 1px solid var(--rule, #b8c3ce);
+  border-radius: 1.25rem 1.25rem 3.5rem 1.25rem;
+  background:
+    linear-gradient(var(--paper-grid, rgba(44, 76, 104, 0.08)) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      var(--paper-grid, rgba(44, 76, 104, 0.08)) 1px,
+      transparent 1px
+    ),
+    var(--paper, #fbf7ec);
+  background-size: 1.5rem 1.5rem;
+  box-shadow: 0 1.4rem 3.2rem rgba(30, 45, 57, 0.12);
+}
+
+.fraction-lab::after {
+  position: absolute;
+  right: -2.75rem;
+  bottom: -3rem;
+  width: 8rem;
+  height: 8rem;
+  border: 1.25rem solid color-mix(in srgb, var(--accent, #dd5037) 18%, transparent);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.fraction-lab__heading {
+  max-width: 43rem;
+}
+
+.fraction-lab__heading h2 {
+  margin: 0.15rem 0 0.65rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.65rem);
+  line-height: 1.05;
+}
+
+.bar-figure,
+.equivalent-bars {
+  display: grid;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.bar-figure {
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--ink, #142d42) 17%, transparent);
+  background: color-mix(in srgb, var(--paper, #fbf7ec) 86%, white);
+}
+
+.bar-figure figcaption {
+  color: var(--ink-muted, #475468);
+  font-size: 0.88rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 8rem) minmax(8rem, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.bar-row__label {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fraction-bar {
+  display: grid;
+  min-height: 2.5rem;
+  border: 2px solid var(--ink, #142d42);
+  background: var(--paper, #fbf7ec);
+}
+
+.fraction-bar__segment {
+  border-right: 1px solid color-mix(in srgb, var(--ink, #142d42) 60%, transparent);
+}
+
+.fraction-bar__segment:last-child {
+  border-right: 0;
+}
+
+.fraction-bar__segment--filled {
+  background: var(--highlight, #e9b949);
+}
+
+.denominator-choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.denominator-choice legend {
+  margin-bottom: 0.75rem;
+  font-weight: 750;
+}
+
+.denominator-choice__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.denominator-choice__option {
+  position: relative;
+  display: grid;
+  min-width: 3.25rem;
+  min-height: 3.25rem;
+  place-items: center;
+  border: 2px solid var(--ink, #142d42);
+  border-radius: 50%;
+  background: var(--paper, #fbf7ec);
+  cursor: pointer;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  transition:
+    transform 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.denominator-choice__option:hover {
+  transform: translateY(-2px);
+}
+
+.denominator-choice__option:has(input:checked) {
+  background: var(--ink, #142d42);
+  color: var(--paper, #fbf7ec);
+}
+
+.denominator-choice__option:has(input:focus-visible) {
+  outline: 3px solid var(--focus, #f07f5d);
+  outline-offset: 4px;
+}
+
+.denominator-choice__option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.fraction-lab__feedback {
+  min-height: 3.25rem;
+  margin: 1.25rem 0 0;
+  padding: 0.9rem 1rem;
+  border-left: 0.3rem solid var(--rule, #b8c3ce);
+  background: rgba(255, 255, 255, 0.72);
+  font-weight: 650;
+}
+
+.fraction-lab__feedback--correct {
+  border-color: var(--success, #26745b);
+  color: var(--success-dark, #15513f);
+}
+
+.fraction-lab__feedback--retry {
+  border-color: var(--accent, #c94732);
+}
+
+.print-fallback {
+  margin: 1.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--rule, #8796a4);
+  color: var(--ink-muted, #475468);
+  font-size: 0.88rem;
+}
+
+.worksheet {
+  max-width: 72rem;
+  margin: 0 auto;
+  color: var(--ink, #142d42);
+}
+
+.worksheet__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2rem;
+  padding-bottom: 1.4rem;
+  border-bottom: 3px double var(--ink, #142d42);
+}
+
+.worksheet__header h1 {
+  max-width: 17ch;
+  margin: 0.2rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(2.2rem, 7vw, 4.75rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+.worksheet__header h2 {
+  display: inline-block;
+  margin: 1rem 0 0;
+  padding: 0.35rem 0.65rem;
+  background: var(--accent, #c94732);
+  color: white;
+  font-family: "Avenir Next", Avenir, "Gill Sans", sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.worksheet__meta {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 1.25rem;
+  margin: 0;
+}
+
+.worksheet__meta div {
+  min-width: 4.6rem;
+}
+
+.worksheet__meta dt {
+  color: var(--ink-muted, #475468);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.worksheet__meta dd {
+  margin: 0.2rem 0 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.05rem;
+}
+
+.worksheet__introduction {
+  max-width: 52rem;
+  margin: 1.5rem 0 2.5rem;
+  font-size: clamp(1.05rem, 2.3vw, 1.3rem);
+}
+
+.worked-example {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.7fr) minmax(18rem, 1.3fr);
+  gap: clamp(1.5rem, 5vw, 4rem);
+  padding: clamp(1.4rem, 4vw, 2.5rem);
+  border: 1px solid var(--rule, #b8c3ce);
+  border-radius: 1rem 1rem 3rem 1rem;
+  background: var(--paper-deep, #f1ead8);
+}
+
+.worked-example h2,
+.section-heading h2 {
+  margin: 0.15rem 0 1rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.65rem);
+  line-height: 1;
+}
+
+.worked-example ol,
+.solution-steps {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.worked-example li,
+.solution-steps li {
+  margin-bottom: 0.75rem;
+  padding-left: 0.35rem;
+}
+
+.worksheet__practice {
+  padding-top: 3rem;
+}
+
+.problem-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.worksheet-problem {
+  min-width: 0;
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--rule, #b8c3ce);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(var(--paper-grid, rgba(44, 76, 104, 0.06)) 1px, transparent 1px),
+    var(--paper, #fbf7ec);
+  background-size: 100% 1.75rem;
+}
+
+.worksheet-problem legend {
+  padding: 0 0.55rem;
+  color: var(--accent-dark, #9d2f20);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-response {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  color: var(--ink-muted, #475468);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.student-response input {
+  width: 100%;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule-dark, #6f7e8b);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink, #142d42);
+  font: inherit;
+  font-size: 1.25rem;
+}
+
+.student-response input:focus-visible {
+  outline: 3px solid var(--focus, #f07f5d);
+  outline-offset: 2px;
+}
+
+.worksheet-problem__print-note {
+  margin: 0.8rem 0 0;
+  color: var(--ink-muted, #475468);
+  font-size: 0.76rem;
+}
+
+.worked-answer {
+  margin-top: 1rem;
+}
+
+.worked-answer__result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  color: var(--success-dark, #15513f);
+  font-weight: 750;
+}
+
+.worked-answer__plain {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.answer-missing {
+  color: var(--accent-dark, #9d2f20);
+}
+
+.worksheet__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule, #b8c3ce);
+  color: var(--ink-muted, #475468);
+  font-size: 0.75rem;
+}
+
+.worksheet__attributions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.worksheet__attributions li + li {
+  margin-top: 0.25rem;
+}
+
+.instance-reference {
+  max-width: 24rem;
+  text-align: right;
+}
+
+.instance-reference code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 48rem) {
+  .worksheet__header,
+  .worked-example {
+    grid-template-columns: 1fr;
+  }
+
+  .worksheet__meta {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .problem-list {
+    grid-template-columns: 1fr;
+  }
+
+  .worksheet__footer {
+    display: block;
+  }
+
+  .instance-reference {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@media (max-width: 30rem) {
+  .bar-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .worksheet__meta {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  .worksheet {
+    max-width: none;
+    color: #111;
+  }
+
+  .worksheet__footer {
+    margin-top: 0.5rem;
+    padding-top: 0.4rem;
+    break-inside: avoid;
+    font-size: 7pt;
+  }
+
+  .worksheet__header h1 {
+    font-size: 32pt;
+  }
+
+  .problem-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .worksheet-problem,
+  .worked-example {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .student-response input {
+    min-height: 4rem;
+    border: 0;
+    border-bottom: 1px solid #111;
+  }
+
+  .instance-reference code {
+    font-size: 6pt;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .denominator-choice__option {
+    transition: none;
+  }
+}

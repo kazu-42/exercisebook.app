@@ -13,17 +13,69 @@ before the content catalog expands.
 
 ## Project status
 
-This repository is currently an architecture and research bootstrap. It does
-not yet contain a production application or a working worksheet generator.
+The Phase 1 walking skeleton, anonymous daily-plan preview, student-delivery
+hardening, and minimum `learning.new` V1 release boundary are implemented. The
+release compiles one owner-approved English fraction lesson, authorizes its
+exact CC BY 4.0 revision through a server-only manifest, materializes
+deterministic exact-rational problems, and projects the same immutable worksheet
+instance to:
 
-The first executable milestone is:
+- a launch-only Hono/React student experience;
+- an unsaved `/new` preview with an explicit 8-, 12-, or 20-minute practice
+  cap, a learner-readable reason, and same-instance browser printing.
 
-1. author one small content vertical in Markdown and YAML;
-2. compile it into a versioned Content AST;
-3. instantiate deterministic exercises into a Worksheet Instance AST;
-4. render the exact same instance to semantic HTML and an A4 PDF;
-5. generate separate student and answer-key variants;
-6. verify answers, reproducibility, accessibility, and Web/PDF parity in CI.
+The reviewed production build exposes only `/new`, the preview POST, health,
+and exact hashed assets; earlier lesson, fixed-sample, answer-key, and V2
+prototype code is not part of the public route or client bundle. The production
+domains are not connected and the application is not approved for learner data.
+Both Workers have passed non-production `workers.dev` smoke and rollback
+rehearsal; see the
+[2026-08-22 evidence](docs/operations/learning-new-launch-evidence-2026-08-22.md).
+The preview uses no account, learning history, cookie, browser storage, or
+durable write and makes no adaptive or mastery claim. Hosted PDF rendering,
+persistent assignments, evidence-based planning, accounts, and curriculum
+breadth remain later roadmap phases.
+
+The executable slices verify deterministic planner identities, stable problem
+prefixes across practice budgets, seeds and instance hashes, exact answers and
+solution traces, policy-owned exclusion of every rational exposed by the
+reviewed worked example, strict student-only delivery, hostile input/response
+rejection, keyboard access, Web/print semantic parity, A4 pagination, and
+production builds.
+
+## Local development
+
+Requirements:
+
+- Node.js 24.15 or newer;
+- pnpm 11.8.0, as pinned by `packageManager`.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check
+pnpm dev
+```
+
+The local Cloudflare/Vite runtime serves the production-shaped launch surface
+at the URL printed by Vite. `/` redirects to `/new`; prototype routes fail
+closed instead of using an SPA fallback.
+
+The `/new` page calls the strict student-only `POST /api/plans/preview`
+endpoint. Its request includes an explicit local date, IANA time zone, locale,
+reviewed goal, and practice limit; it never accepts a learner-selected seed or
+free-form learner data.
+
+Generate deterministic local worksheet, Web, and print artifacts with:
+
+```bash
+pnpm worksheet:sample
+```
+
+That command exercises preserved development fixtures. It does not add their
+routes or answer-key projections to the reviewed public launch bundle.
+
+Generated artifacts are ignored by Git. The canonical worksheet JSON is
+written byte-for-byte: its SHA-256 is the worksheet instance hash.
 
 ## Product model
 
@@ -47,8 +99,10 @@ Markdown/YAML -> Content AST -> Worksheet Instance AST
                  semantic Web UI            printable PDF
 ```
 
-The exact instance shown to a learner is persisted before presentation. A
-published exercise must remain reproducible from its content revision,
+Every durable assignment is persisted before presentation. The explicitly
+unsaved `/new` cold-start preview is not an assignment or learning evidence; it
+is replayable from its complete versioned inputs but is never durably written.
+A published exercise must remain reproducible from its content revision,
 generator version, RNG version, seed, renderer version, template, and fonts.
 
 ## Non-negotiable properties
@@ -70,7 +124,10 @@ generator version, RNG version, seed, renderer version, template, and fonts.
 
 ## Proposed platform
 
+- **Language/toolchain:** TypeScript 7, pnpm, Vite
 - **Application:** Cloudflare Workers with Static Assets
+- **HTTP adapter:** Hono
+- **Web UI:** React with semantic HTML and progressive enhancement
 - **Relational state:** D1
 - **Immutable content and PDF artifacts:** R2
 - **Asynchronous rendering:** Queues
@@ -93,7 +150,10 @@ engines are replaceable adapters behind one artifact contract.
 - [Printing, LuaLaTeX, and Cloudflare](docs/research/printing-cloudflare.md)
 - [Naming and domains](docs/naming-and-domains.md)
 - [Delivery roadmap](docs/roadmap.md)
+- [Daily Plan Preview v1](specs/daily-plan-preview-v1.md)
+- [Student Delivery Hardening v1](specs/student-delivery-hardening-v1.md)
 - [Architecture decision record](docs/decisions/0001-core-architecture.md)
+- [TypeScript 7 toolchain decision](docs/decisions/0002-typescript-7-toolchain.md)
 - [Engineering guardrails](AGENTS.md)
 
 ## Domains
@@ -110,10 +170,12 @@ in [docs/naming-and-domains.md](docs/naming-and-domains.md).
 
 ## Licensing
 
-No project-wide license has been granted yet.
+Software and other repository files are licensed under the
+[Apache License 2.0](LICENSE), unless a file says otherwise. Project
+documentation and only the exact learning-content revision listed in
+[LICENSE-CONTENT.md](LICENSE-CONTENT.md) are currently published under
+[CC BY 4.0][cc-by-4.0]. Drafts, prototypes, and third-party learning material
+are not included in that content grant unless their own metadata explicitly
+says so.
 
-The current proposal is Apache-2.0 for software authored by this project and
-CC BY 4.0 for original learning material and project documentation, with
-third-party material separated according to its own license. These choices
-require an explicit owner decision before `LICENSE` files are added. Until
-then, ordinary copyright applies and external contributions are not yet open.
+[cc-by-4.0]: https://creativecommons.org/licenses/by/4.0/legalcode

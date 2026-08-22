@@ -1,0 +1,27 @@
+{
+  "name": "@exercisebook/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./trusted-student-projection": "./src/trusted-student-projection.ts",
+    "./json-schema/content-document-v1": "./json-schema/content-document-v1.schema.json",
+    "./json-schema/worksheet-instance-v1": "./json-schema/worksheet-instance-v1.schema.json"
+  },
+  "scripts": {
+    "schema:check": "tsx scripts/generate-json-schema.ts --check",
+    "schema:generate": "tsx scripts/generate-json-schema.ts",
+    "test": "vitest run --root ../.. packages/schemas/src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@exercisebook/domain": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "prettier": "3.9.5",
+    "tsx": "4.21.1"
+  }
+}

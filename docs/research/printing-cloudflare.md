@@ -5,6 +5,10 @@ Checked: 2026-07-19
 Cloudflare product status, limits, and pricing change. Recheck the linked
 primary sources before a production capacity or cost decision.
 
+This document evaluates future hosted architecture. The repository's Phase-1
+implementation ends at local printable A4 HTML; none of the PDF backends or
+Cloudflare resources below are claimed as deployed.
+
 ## Recommendation
 
 Exercise Book is not a “Markdown to PDF” command. It is a versioned content
@@ -664,27 +668,29 @@ baseSeed =
 
 problemSeed =
   HMAC-SHA256(
-    key = baseSeed,
+    key = hexDecode(baseSeed), // exactly 32 binary bytes
     data = UTF8(canonicalJson([
       "exercisebook/slot-seed/v1",
       generatorId,
       generatorVersion,
-      stableProblemSlotId
+      stableSlotDerivationId
     ]))
   )
 ```
 
 The tuple schema fixes each field type, date/identifier representation, Unicode
 handling, UTF-8 encoding, and RFC 8785 canonical JSON. Context labels provide
-domain separation; no delimiter-based string concatenation is allowed. Publish
-fixed encoding/HMAC test vectors, including delimiter characters, non-ASCII
-text, empty values, and boundary integers, before freezing version 1.
+domain separation; no delimiter-based string concatenation is allowed. Phase 1
+has checked-in fixed slot-seed vectors for the exact encoding/HMAC contract,
+including delimiter-like and non-ASCII tuple values. Any future base-seed
+contract must add its own fixed vectors before its version is frozen.
 
 Stable slot IDs prevent insertion of one problem from changing every later
 problem. Record the RNG algorithm and version, such as `xoshiro128ss-v1`.
 Persist `seedSecretVersion`, never the secret key itself. A stored `baseSeed`
 is the HMAC output used for replay and remains inside the private instance
-boundary.
+boundary. The Phase-1 materializer receives `seedSecretVersion` explicitly
+from its caller and never infers or defaults it.
 Never depend on `Math.random()`, current time, host locale, floating object
 iteration order, or unspecified runtime behavior.
 
@@ -692,6 +698,10 @@ Generator constraints:
 
 - construct valid values directly when possible;
 - bound rejection sampling;
+- deduplicate with a generator-defined semantic signature; the Phase-1
+  fraction generator sorts canonical operands so commuted prompts collide;
+- retry duplicates deterministically with a stable derivation ID and record the
+  accepted `generationAttempt`;
 - use a deterministic fallback or typed terminal failure;
 - derive prompt, answer, hints, solution, and distractors from one exact model;
 - store a fixed test vector for every generator version;

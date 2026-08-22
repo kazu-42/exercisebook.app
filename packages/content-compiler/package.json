@@ -1,0 +1,33 @@
+{
+  "name": "@exercisebook/content-compiler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "content:check": "tsx scripts/compile-phase-1-content.ts --check",
+    "content:generate": "tsx scripts/compile-phase-1-content.ts",
+    "test": "vitest run --root ../.. packages/content-compiler/src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@exercisebook/domain": "workspace:*",
+    "@exercisebook/schemas": "workspace:*",
+    "remark-directive": "4.0.0",
+    "remark-frontmatter": "5.0.0",
+    "remark-math": "6.0.0",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@exercisebook/generators": "workspace:*",
+    "@types/mdast": "4.0.4",
+    "@types/node": "26.1.1",
+    "mdast-util-directive": "3.1.0",
+    "tsx": "4.21.1"
+  }
+}

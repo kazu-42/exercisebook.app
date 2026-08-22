@@ -4,11 +4,53 @@ Status: proposed foundation
 
 Date: 2026-07-19
 
+This is a target architecture, not a production deployment record. The
+repository implements a local walking skeleton through printable A4 HTML, an
+anonymous deterministic daily-plan preview, and the minimum reviewed
+`learning.new` V1 release boundary. It does not claim production DNS/custom
+domain deployment, durable Cloudflare storage, learner adaptation, a hosted
+PDF service, Browser Run rendering, or a LuaLaTeX backend.
+
 Primary application: `https://exercisebook.app`
 
 Action entrypoint: `https://learning.new`
 
 Decision record: [ADR-0001](decisions/0001-core-architecture.md)
+
+### Current implemented boundary
+
+The launch slice is intentionally smaller than the target containers below.
+`@exercisebook/planner` is a pure, version-pinned policy package. The Hono
+Worker application service composes that policy with one owner-approved
+CC BY 4.0 content revision, the deterministic fraction generator, a trusted
+server-only release manifest, an integrity check, and a strict student-only Web
+projection. `POST /api/plans/preview` returns an unsaved set for one reviewed
+goal and an 8-, 12-, or 20-minute practice cap.
+
+The current preview has no repository or Cloudflare storage adapter, accepts no
+learner identity or evidence, writes no cookie or browser storage, and does not
+claim mastery or adaptation. Its sequence seed is internal to materialization;
+the public response exposes only the preview identity, pinned public
+provenance, selection reason, counts, minutes, and student worksheet. The
+executable contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+
+The enabled `day-one-fraction-preview@4` policy also owns every reduced
+canonical rational structurally exposed by the reviewed worked example—its
+left operand, right operand, and result—as the ordered plan-activity tuple
+`[1/2, 1/3, 5/6]`. The example's left/right/result values are derived from that
+same tuple. Materialization deterministically advances its retry sequence when
+a candidate answer matches any reserved value. As a second, independent
+boundary, the Web projector fails closed if any structured rational or
+recognized answer-bearing string in the final worked example reveals any
+generated practice answer.
+
+The final validated student DTO uses a field-sensitive scan. Global worksheet
+fields, prompt instructions, and every non-prompt field of every item are
+checked against every canonical practice answer. A structured prompt operand
+may legitimately equal another slot's answer, but never its own; prompt
+`accessibleText` and accessibility summaries are exact derivations from the
+validated operands. This distinction rejects cross-slot leaks in fields such
+as `printFallback` without rejecting mathematically valid operand reuse.
 
 ## 1. Purpose
 
@@ -44,8 +86,11 @@ The system is designed for:
 - progressive expansion from one narrow learning slice to all grades and
   domains.
 
-The initial vertical slice should prove the full loop—author, publish, plan,
-practice, explain, print, submit, and revisit—before the catalog becomes broad.
+The initial vertical slice proves the local contract chain—author a draft,
+compile, deterministically materialize, explain, practice, and project the same
+instance to Web and printable HTML. Trusted publication, hosted planning,
+submission, durable evidence, and revisit behavior arrive behind later gates
+before the catalog becomes broad.
 
 ## 2. Domain and URL roles
 
@@ -76,10 +121,16 @@ Canonical links, OAuth callbacks, cookies, APIs, and indexed content belong to
 
 These are correctness properties, not implementation preferences.
 
-1. **The presented assignment is durable.** The exact
-   `WorksheetInstance` is committed before a learner can see or answer it.
+1. **A presented assignment is durable.** The exact `WorksheetInstance` for a
+   durable assignment is committed before a learner can see or answer it. The
+   explicitly unsaved `/new` cold-start preview is not an assignment or
+   evidence; it must instead be replayable from complete versioned inputs and
+   carry `saved: false` through its public contract.
 2. **Generation is reproducible.** Content revision, generator version, RNG
-   version, policy version, base seed, and stable slot sub-seeds are recorded.
+   version, policy version, explicit caller-supplied seed-secret version, base
+   seed, stable slot sub-seeds, and duplicate-retry provenance are recorded.
+   Slot seeds use a binary-key HMAC-SHA256 over the RFC 8785 canonical tuple
+   defined in the generator contract; delimiter concatenation is forbidden.
 3. **Web and print share one instance.** A PDF backend may change layout, but
    it may not regenerate or reinterpret the learning content.
 4. **Student variants do not contain answers.** Canonical answers and solution
@@ -89,7 +140,9 @@ These are correctness properties, not implementation preferences.
    assignment, item revision, attempt conditions, and policy that interpreted
    it.
 6. **Publication fails closed.** Unknown skills, directives, generators,
-   licenses, or schema versions block publication.
+   licenses, or schema versions block publication. Content compiles and
+   materializes as draft; the exact trusted server-only release manifest, never
+   author-controlled frontmatter, authorizes the approved public projection.
 7. **Queue processing is idempotent.** Cloudflare Queues are treated as
    at-least-once delivery; duplicate and out-of-order messages are normal.
 8. **Artifacts are immutable.** A content-addressed object is never overwritten
@@ -338,6 +391,36 @@ solution traces not yet unlocked, and any diagnostic field from which they can
 be inferred. The selected concrete `student`, `answer-key`, or `teacher`
 variant lives in the hashed `PrintDocument`, not in the shared instance.
 
+Integrity hashing proves which instance was projected; it does not prove that
+every student-visible field is safe. The shared student-delivery boundary and
+the final Web projection therefore perform field-sensitive answer scans after
+validation, even for a canonical instance whose recomputed hash is correct.
+Global and non-prompt fields reject every answer; a prompt may expose a
+different slot's answer only when it is structurally one of its operands, and
+its accessibility strings are exact deterministic operand derivations. The
+student PrintDocument path consumes that answer-free delivery rather than the
+full instance, then applies another field-role assertion to the validated
+document so an authorized operand cannot migrate into a caption or prose field.
+
+The final Web and print assertions use a trusted server-only projection context
+that pairs the answer-free delivery with detached canonical answers. That
+answer context is never a response DTO and must not be serialized, logged,
+cached, returned by an HTTP handler, persisted in browser state, or imported by
+React/client code. Before its first asynchronous hash, the projector rejects
+unsafe object graphs, captures the complete envelope, and validates a detached
+instance. Every later integrity and authorization decision therefore describes
+one snapshot even if the caller mutates its original object after the call
+starts; consumers must not re-read the caller-owned materialization after an
+await.
+
+Browser response parsing is another trust boundary. Worksheet loaders measure
+the response stream against an explicit route-owned byte cap, decode UTF-8
+fatally, cap non-final reads at 1,024, and reject duplicate-key JSON before DTO
+validation. Cancellation and deadlines abort pending body reads and retain
+their original reason identity; early failures best-effort cancel without
+shadowing the primary error. `Response.json()` is not used as the production
+boundary.
+
 ## 8. Main daily worksheet sequence
 
 ```mermaid
@@ -514,7 +597,7 @@ events, not destructive rewrites.
 
 ### Daily planner
 
-The initial planner is rule based and explainable:
+The target rule-based planner orders evidence-backed work as follows:
 
 1. due retrieval;
 2. repair of blocking prerequisites;
@@ -524,6 +607,13 @@ The initial planner is rule based and explainable:
 Every plan has a hard item/time budget. Difficulty does not cause an unbounded
 worksheet. The planner records reason codes for each selected slot and supports
 a policy-level kill switch.
+
+The implemented anonymous preview is a cold-start subset: with no learner
+evidence it selects only `current-frontier` practice for the explicitly chosen
+goal. It cannot emit due-review, prerequisite-repair, transfer, readiness, or
+mastery claims. The 20-minute request currently plans 16 minutes because the
+reviewed content cap is eight two-minute items; unused budget is preferable to
+unreviewed padding.
 
 ### Problem generation
 
@@ -543,6 +633,8 @@ a policy-level kill switch.
 Use Workers Static Assets plus a Worker API on `exercisebook.app`, rather than a
 Pages-only application:
 
+- language and build authority: pinned TypeScript 7;
+- workspace and build: pnpm plus Vite;
 - public HTML, JS, CSS, and fonts: Static Assets;
 - dynamic `/api/*`: Worker;
 - thin HTTP adapter: Hono;
@@ -556,6 +648,11 @@ no state bindings or secrets beyond what deployment requires.
 
 Hono is an adapter, not a domain dependency. Replacing it must not alter
 planner, content, evidence, or renderer contracts.
+
+TypeScript 7 is the project compiler baseline. Application source uses erasable
+syntax only, and framework adapters must not make the domain depend on the
+legacy in-process TypeScript compiler API. See
+[ADR-0002](decisions/0002-typescript-7-toolchain.md).
 
 ### D1
 
@@ -598,6 +695,11 @@ Every `sha256` key identifies its exact stored bytes. `render-results` is a
 create-only, immutable first-writer pointer from a pre-render spec hash to the
 winning PDF and manifest hashes. Queue retries read it before rendering, and
 concurrent attempts accept the existing winner rather than overwrite it.
+
+Worksheet content references and per-slot provenance carry the exact
+`contentHash` and `compilerVersion` alongside content ID, revision, and
+`sourceHash`. This binds a historical worksheet to one canonical Content
+Document object even when compiler behavior changes later.
 
 - public content: custom domain and immutable cache;
 - learner-specific PDF: private bucket, authenticated Worker,
@@ -923,6 +1025,7 @@ backward compatible through at least one application rollback window. The
 
 | Area | Initial choice | Reason | Rejected or deferred |
 |---|---|---|---|
+| Language/toolchain | TypeScript 7 + pnpm + Vite | Native compiler baseline, strict portable source, Workers-native build | TypeScript 5/6 baseline or compiler-API-coupled tooling |
 | Authoring | Markdown + YAML + directives | Approachable, diffable, constrained | General MDX: executable and unsafe |
 | Canonical data | Versioned JSON AST | Language-independent and testable | Markdown/LaTeX as runtime truth |
 | HTTP adapter | Hono on Workers | Small, Web-standard, typed bindings | Framework logic in the domain |

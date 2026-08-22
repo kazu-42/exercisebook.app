@@ -97,6 +97,16 @@ AAAA, or CNAME answer. Both HTTPS requests therefore failed at DNS resolution.
 That is an acceptable pre-launch state and, importantly, does not expose a
 non-compliant parked page on `learning.new`.
 
+The 2026-08-22 pre-launch readback found the same non-resolving state: both
+domains retained the Cloudflare nameservers and had no A, AAAA, or CNAME answer.
+RDAP reported active registration through July 2027 and
+`client transfer prohibited`, but public DS lookup had no domain record and
+RDAP reported `delegationSigned: false`. Registrar lock is therefore evidenced;
+DNSSEC delegation, auto-renewal, MFA, and recovery contacts remain final
+account-level GO checks. The independently deployed `workers.dev` previews and
+rollback rehearsal are recorded in the
+[launch evidence](operations/learning-new-launch-evidence-2026-08-22.md).
+
 Recheck commands:
 
 ```bash

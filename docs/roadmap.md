@@ -3,6 +3,12 @@
 Status: working plan
 Updated: 2026-07-19
 
+This roadmap is not a deployment-status page. Phase 1 is implemented as a
+local walking skeleton, Phase 1.5 is implemented on a stacked draft branch,
+and Phase 1.6 student-delivery hardening is implemented in stacked draft PR #3;
+production DNS, hosted Cloudflare persistence, and PDF backends remain gated
+future work.
+
 ## Product direction
 
 Exercise Book aims to make high-quality learning material freely available
@@ -38,6 +44,7 @@ Outcome: a reviewable project with explicit boundaries.
 
 Deliver:
 
+- pinned TypeScript 7 workspace with pnpm and Vite;
 - Exercise Book identity and `exercisebook.app` as the primary application
   domain;
 - repository license decisions for software, original curriculum, and project
@@ -49,6 +56,7 @@ Deliver:
 
 Exit gate:
 
+- the workspace compiler reports TypeScript major version 7;
 - repository and domain names agree;
 - no old project identity remains in public-facing files;
 - code/content licenses are explicitly approved by the owner;
@@ -88,14 +96,21 @@ Suggested curriculum slice:
 Deliver:
 
 - Markdown/YAML/directive compiler;
-- versioned Content AST and Worksheet Instance AST JSON Schemas;
+- normative exported runtime validators (bounded original-input guard followed
+  by versioned Zod contracts) plus checked-in structural JSON Schema
+  interoperability projections for Content AST and Worksheet Instance;
 - exact integer/rational problem model and answer types;
-- deterministic RNG, stable slots, generator versioning, and fixed vectors;
+- exact binary-key HMAC-SHA256/RFC 8785 slot derivation, stable presentation
+  slots, explicit seed-secret version input, generator versioning, and fixed
+  vectors;
+- bounded deterministic commutative-prompt deduplication with retry provenance;
+- draft-only compilation/materialization; published content waits for the
+  trusted release manifest in Phase 2;
 - semantic Web renderer;
 - Print IR with student and answer-key variants;
 - one interactive component with keyboard and print fallback;
-- local Browser/HTML PDF and LuaLaTeX reference fixtures;
-- correctness, property, parity, accessibility, and visual tests.
+- printable A4 HTML for manual/local browser printing, with no PDF backend;
+- correctness, property, parity, accessibility, and HTML rendering tests.
 
 Exit gate:
 
@@ -103,8 +118,9 @@ Exit gate:
 - large seed tests produce no invalid or ambiguous items;
 - canonical answer equals the final solution step;
 - student output contains no hidden answer;
-- Web and PDF preserve prompt/order/answer semantics and attribution;
-- Japanese, English, math, long text, and page-break fixtures pass;
+- Web and PrintDocument/printable HTML preserve prompt/order/answer semantics
+  and attribution;
+- Phase-1 English fraction math, working-space, and page-break fixtures pass;
 - every asset has provenance and license metadata.
 
 Rollback:
@@ -112,6 +128,148 @@ Rollback:
 - disable a content/generator version through a registry;
 - historical fixtures remain replayable;
 - no automatic migration of assigned instances.
+
+## Phase 1.5 — Anonymous day-one plan preview
+
+Outcome: `/new` produces a useful, bounded set instead of discarding the
+learner's goal and time choice.
+
+This is a cold-start product-validation slice. It is not saved, uses no learner
+history, and makes no adaptive or mastery claim.
+
+Deliver:
+
+- strict `DailyPlanPreviewV1` request, internal decision, and public response
+  contracts;
+- an explicit version-pinned registry and revision kill switches;
+- a pure deterministic policy for the reviewed fraction-addition goal;
+- 8-, 12-, and 20-minute practice budgets producing at most 4, 6, and 8
+  reviewed problems respectively;
+- stable-prefix problem sequences across budgets;
+- explicit plan, policy, graph, and reason provenance passed into the
+  generator rather than invented there;
+- `day-one-fraction-preview@2` plan activities explicitly reserve every
+  reduced rational exposed by the reviewed worked example as the ordered tuple
+  `[1/2, 1/3, 5/6]`; the example's left/right/result derive from the same tuple,
+  with deterministic generator retries recorded in worksheet provenance;
+- student-only `POST /api/plans/preview` composition through content,
+  generator, integrity gate, and Web projection;
+- an accessible `/new` loading/success/error flow with visible selection
+  rationale;
+- printing of the already loaded student instance without regeneration;
+- strict response validation, answer/seed leak protection, and production
+  bundle browser smoke tests.
+
+Exit gate:
+
+- planned slot time never exceeds the learner's requested practice budget or
+  reviewed content cap;
+- identical explicit inputs and versions produce byte-equivalent decisions and
+  instances without ambient clock, locale, time-zone, or randomness inputs;
+- shorter-budget prompts are prefixes of longer-budget prompts;
+- disabled/unknown revisions produce a typed unavailable result and no set;
+- public responses and rendered student output contain no answers, scoring
+  data, solution traces, base seeds, or slot seeds;
+- generated practice answers never collide with an operand or result exposed
+  by the reviewed worked example, and the final student projector independently
+  scans the complete example and fails closed on a semantic answer leak;
+- the page says the preview is unsaved and not mastery-based;
+- keyboard, accessibility, failure/race, mobile, print, and full repository
+  gates pass.
+
+Rollback:
+
+- disable `day-one-fraction-preview@2` or revert the stacked feature commit;
+- keep the fixed `/worksheet/sample` Phase 1 route available;
+- never silently substitute a different problem sequence after a failure.
+
+See [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
+
+## Phase 1.6 — Student delivery hardening
+
+Outcome: the shared Web/print student boundary and browser transport fail
+closed before any hosted catalog or PDF service is considered safe.
+
+This is an output-preserving correctness slice. No accepted safe worksheet or
+PrintDocument shape/bytes change; the presentable subset is narrowed by a
+fail-closed authorization check. It adds no persistence or deployment.
+
+Deliver:
+
+- field-sensitive student projection that rejects every canonical answer in
+  global and non-prompt fields while preserving only genuine cross-slot
+  structured prompt operands;
+- an own-answer rule that remains fail-closed for duplicate-equal rationals;
+- student PrintDocument projection from the answer-free
+  `StudentWorksheetDeliveryV1` rather than the full answer-bearing instance;
+- one shared, streaming, duplicate-aware browser JSON response decoder;
+- explicit 32 KiB preview and 64 KiB sample response limits;
+- fatal UTF-8, strict JSON, media-type, cancellation, and 15-second deadline
+  behavior for both browser loaders;
+- component cleanup that aborts superseded fixed-sample requests.
+
+Exit gate:
+
+- a canonical, rehashed cross-slot fallback disclosure fails before student
+  Web or print delivery;
+- a different answer is allowed in prompt text only when it is structurally
+  one of that prompt's operands, while the current answer always fails;
+- malformed, duplicate-key, invalid-UTF-8, misleading-length, oversized, and
+  indefinitely streaming responses fail within explicit resource bounds;
+- caller cancellation and timeout preserve their exact reason identities;
+- fixed vectors and canonical output for every valid sample remain unchanged;
+- full static, artifact, production-bundle browser, and independent review
+  gates pass.
+
+Rollback:
+
+- revert the stacked feature commit; there is no data or contract migration;
+- keep hosted/public student PDF disabled until this gate passes.
+
+See
+[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
+
+## Phase 1.7 — Content-derived, instance-bound presentation
+
+Outcome: the standalone lesson, worksheet Web view, and printable worksheet
+show the same reviewed explanation and worked example committed into the
+concrete instance, rather than application-owned constants.
+
+Deliver:
+
+- an immutable new content revision with a typed semantic fraction-addition
+  worked-example model and exact-rational compiler validation;
+- policy v3 pinning the content revision/hash, selected lesson/example/exercise
+  node IDs, and ordered reserved `[left, right, result]` tuple;
+- fail-closed equality between content-derived example semantics and the
+  policy-owned generator exclusions;
+- a versioned worksheet presentation inside `WorksheetInstanceV2` so the
+  instance hash commits the exact explanation shown;
+- Web worksheet, standalone lesson, and `PrintDocumentV2` projection from that
+  presentation using the Phase 1.6 role-sensitive authorization boundary;
+- immutable preservation of all v1 content, worksheet, sample, and print
+  artifacts and hashes.
+
+Exit gate:
+
+- changing any selected presentation byte changes the v2 instance identity;
+- wrong/missing content identity, node selection, semantic model, or reserved
+  tuple fails rather than falling back;
+- Web, lesson, and print expose the same semantic presentation snapshot and
+  source identity;
+- student Web/print contain no answers, scoring internals, solution traces, or
+  seeds, while answer-key output remains correct;
+- v1 fixed artifacts remain byte-identical and the new A4 layout passes visual,
+  extraction, clipping, and page-break checks.
+
+Rollback:
+
+- disable policy/content v3 for new previews and return to the immutable v1
+  path; never reinterpret or overwrite a historical v1 artifact.
+
+This phase is a prerequisite for the Phase 2 catalog. It explicitly excludes
+answer submission, evidence/mastery, persistence, abuse controls, hosted PDF,
+DNS, and deployment.
 
 ## Phase 2 — Public read-only catalog
 
@@ -381,15 +539,18 @@ streaks, and time-on-site are guardrails only; they are not proof of learning.
 
 ## The next concrete milestone
 
-The first milestone is complete when one reviewed fraction lesson can:
+The active milestone is Phase 1.6: close canonical student-print authorization
+and bounded strict browser-response gaps before hosted delivery. Its executable
+contract and acceptance matrix are in
+[Student Delivery Hardening v1](../specs/student-delivery-hardening-v1.md).
 
-1. compile from Markdown to a versioned Content AST;
-2. instantiate deterministic problems from fixed seeds;
-3. render the same concrete instance on the Web and in A4 PDF;
-4. provide worked examples, progressive hints, and an answer key;
-5. replace an interactive fraction-bar task with a valid print fallback;
-6. pass correctness, accessibility, license, security, and visual gates;
-7. publish as an immutable revision and roll back without rewriting history.
-
-That milestone is intentionally small. It exercises the hard architecture before
-Exercise Book grows into a large catalog.
+Phase 1.7 then makes reviewed content, Web, and print share an instance-bound
+presentation rather than application-owned examples. The next product-value
+slice after those correctness gates is exact rational answer submission and
+formative feedback for one problem. It must distinguish first attempt, retry,
+and hint use while keeping answers out of the student payload and making no
+mastery claim. The current public deterministic sequence is replay provenance,
+not cryptographic answer secrecy, and must never be used to authenticate
+attempts or justify mastery. Curriculum breadth and Cloudflare persistence
+remain behind those learning-value checks; public curriculum publication
+remains behind the owner's license decision.
