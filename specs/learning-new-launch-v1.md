@@ -1,6 +1,6 @@
 # Learning New Launch v1
 
-Status: implementation complete; verification and preview deployment in progress
+Status: preview verified; production DNS final GO pending
 
 Decision date: 2026-08-22 JST
 
@@ -191,20 +191,20 @@ different questions.
 
 ## Acceptance criteria
 
-- [ ] The exact public route/method matrix is enforced at the Worker boundary.
-- [ ] `GET`/`HEAD learning.new` returns a non-cacheable temporary redirect to
+- [x] The exact public route/method matrix is enforced at the Worker boundary.
+- [x] `GET`/`HEAD learning.new` returns a non-cacheable temporary redirect to
       exactly `https://exercisebook.app/new` with no forwarded query or cookie.
-- [ ] `GET`/`HEAD /new` returns the reviewed creation UI and creates no state.
-- [ ] One explicit V1 POST produces a concrete deterministic unsaved worksheet.
-- [ ] Only the exact owner-approved release manifest can authorize generation.
-- [ ] Draft, disabled, missing, mismatched, or unknown release data fails closed.
-- [ ] Student DTO, DOM, metadata, URLs, and browser artifacts contain no answer
+- [x] `GET`/`HEAD /new` returns the reviewed creation UI and creates no state.
+- [x] One explicit V1 POST produces a concrete deterministic unsaved worksheet.
+- [x] Only the exact owner-approved release manifest can authorize generation.
+- [x] Draft, disabled, missing, mismatched, or unknown release data fails closed.
+- [x] Student DTO, DOM, metadata, URLs, and browser artifacts contain no answer
       authority or seed material.
-- [ ] Rate limiting, security headers, sanitized errors, and aggregate
+- [x] Rate limiting, security headers, sanitized errors, and aggregate
       observability are verified without logging learner content.
-- [ ] Keyboard, accessibility, mobile, print, timeout, cancellation, and request
+- [x] Keyboard, accessibility, mobile, print, timeout, cancellation, and request
       race tests pass.
-- [ ] Production build provenance and emitted-artifact gates pass.
-- [ ] Preview deployments, synthetic checks, and a rollback rehearsal are green.
-- [ ] `exercisebook.app` and `learning.new` remain DNS-unmodified until the
+- [x] Production build provenance and emitted-artifact gates pass.
+- [x] Preview deployments, synthetic checks, and a rollback rehearsal are green.
+- [x] `exercisebook.app` and `learning.new` remain DNS-unmodified until the
       owner gives a separate final promotion GO.

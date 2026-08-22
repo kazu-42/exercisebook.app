@@ -3,6 +3,9 @@
 This runbook prepares and verifies the approved anonymous, unsaved, one-lesson
 launch. It deliberately stops before production custom-domain or DNS changes.
 
+The first complete preview verification is recorded in
+[the 2026-08-22 release evidence](learning-new-launch-evidence-2026-08-22.md).
+
 ## Release identities
 
 - primary Worker: `exercisebook-app`;

@@ -21,6 +21,7 @@ separate owner GO.
 
 ### LNV1-001 Build the isolated minimum release base
 
+- **Status**: complete
 - **Type**: release / refactor / docs
 - **Size**: M
 - **Dependencies**: none
@@ -38,6 +39,7 @@ separate owner GO.
 
 ### LNV1-002 Authorize one public lesson through a trusted manifest
 
+- **Status**: complete
 - **Type**: feature / security / licensing
 - **Size**: M
 - **Dependencies**: LNV1-001
@@ -56,6 +58,7 @@ separate owner GO.
 
 ### LNV1-003 Enforce the production application surface
 
+- **Status**: complete
 - **Type**: feature / security / frontend / backend
 - **Size**: L
 - **Dependencies**: LNV1-002
@@ -75,6 +78,7 @@ separate owner GO.
 
 ### LNV1-004 Implement the independent action-domain Worker
 
+- **Status**: complete
 - **Type**: feature / infra / security
 - **Size**: M
 - **Dependencies**: LNV1-001
@@ -92,6 +96,7 @@ separate owner GO.
 
 ### LNV1-005 Prepare the primary Cloudflare preview deployment
 
+- **Status**: complete
 - **Type**: infra / CI
 - **Size**: M
 - **Dependencies**: LNV1-003
@@ -107,6 +112,7 @@ separate owner GO.
 
 ### LNV1-006 Prepare the action-domain preview deployment
 
+- **Status**: complete
 - **Type**: infra / test
 - **Size**: S
 - **Dependencies**: LNV1-004, LNV1-005
@@ -122,6 +128,8 @@ separate owner GO.
 
 ### LNV1-007 Seal release evidence and stop at the DNS gate
 
+- **Status**: in progress — engineering evidence is sealed; account-level
+  monitoring, renewal/MFA/recovery, DNSSEC, and final production GO remain
 - **Type**: QA / operations / docs
 - **Size**: M
 - **Dependencies**: LNV1-002, LNV1-003, LNV1-004, LNV1-005, LNV1-006
@@ -139,3 +147,5 @@ separate owner GO.
   - the next operation is clearly identified as the owner-controlled production
     custom-domain/DNS promotion.
 
+Preview deployment and rollback evidence is recorded in
+[the 2026-08-22 release evidence](../docs/operations/learning-new-launch-evidence-2026-08-22.md).

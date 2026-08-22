@@ -22,6 +22,14 @@ Preview Workers may be deployed and rollback-tested autonomously, but attaching
 separate owner GO. See [ADR-0003](docs/decisions/0003-learning-new-launch-release.md)
 and the [launch runbook](docs/operations/learning-new-launch.md).
 
+**Preview evidence**: Both `workers.dev` previews passed remote smoke before
+and after a 100% prior-version rollback. One action request sent immediately
+after the first deploy transiently returned `500`; direct GET/HEAD and every
+subsequent full smoke passed. Treat deploy completion and edge readiness as
+separate states and require a bounded propagation wait plus repeated readback.
+Production DNS remained non-resolving, and DNSSEC delegation was not yet
+present at the 2026-08-22 readback.
+
 ## 2026-07-19 - TypeScript 7 baseline
 
 **Decision**: Use the stable `typescript@7.0.2` native toolchain as the

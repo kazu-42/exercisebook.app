@@ -28,6 +28,9 @@ The reviewed production build exposes only `/new`, the preview POST, health,
 and exact hashed assets; earlier lesson, fixed-sample, answer-key, and V2
 prototype code is not part of the public route or client bundle. The production
 domains are not connected and the application is not approved for learner data.
+Both Workers have passed non-production `workers.dev` smoke and rollback
+rehearsal; see the
+[2026-08-22 evidence](docs/operations/learning-new-launch-evidence-2026-08-22.md).
 The preview uses no account, learning history, cookie, browser storage, or
 durable write and makes no adaptive or mastery claim. Hosted PDF rendering,
 persistent assignments, evidence-based planning, accounts, and curriculum
