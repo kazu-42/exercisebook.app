@@ -20,8 +20,10 @@ Authors edit a deliberately small language:
 Markdown is the authoring surface, not a publication approval. The compiler
 creates a versioned draft `Content AST`; daily planning creates a fully
 concrete, immutable `Worksheet Instance AST`. Web and print projections render
-that same instance. A future trusted release manifest will be the publication
-authority; source frontmatter can never self-attest that review happened.
+that same instance. A trusted server-only release manifest is the publication
+authority for the approved `learning.new` V1 lesson; source frontmatter can
+never self-attest that review happened. A generalized publication pipeline
+remains future work.
 
 The implemented Phase-1 boundary is local compilation, deterministic
 materialization, Web rendering, `PrintDocumentV1`, and printable A4 HTML. No
@@ -498,11 +500,12 @@ Stages:
    metadata.
 7. Produce canonical JSON and a source/content hash.
 8. Run automated fixtures and renderer previews.
-9. Keep Phase-1 output in `draft` status.
-10. In a future release pipeline, require correctness, pedagogy,
-    accessibility, and license approval according to the content risk.
-11. Have that trusted pipeline publish an immutable revision and signed or
-    otherwise trusted release manifest.
+9. Keep compiler output in `draft` status.
+10. Require correctness, pedagogy, accessibility, license, and owner approval
+    according to the release risk.
+11. Have a trusted server-only manifest authorize one exact immutable revision;
+    the launch path revalidates and re-seals the materialized instance rather
+    than modifying author-controlled source metadata.
 
 Compilation has no network access. Link and asset import happen in a separate
 controlled process before compilation. `publication.status: published` in

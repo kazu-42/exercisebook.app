@@ -21,6 +21,12 @@ const forbiddenImports = [
 ];
 const clientRoots = ["apps/web/src"];
 const forbiddenClientImports = ["@exercisebook/schemas/trusted-student-projection"];
+const forbiddenClientImportFragments = [
+  "/worker/",
+  "authorized-publication",
+  "launch-release-manifest",
+  "release-content",
+];
 
 async function collectSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
@@ -90,7 +96,13 @@ for (const relativeRoot of clientRoots) {
     for (const match of source.matchAll(importPattern)) {
       const specifier = match[1];
 
-      if (specifier !== undefined && forbiddenClientImports.includes(specifier)) {
+      if (
+        specifier !== undefined &&
+        (forbiddenClientImports.includes(specifier) ||
+          forbiddenClientImportFragments.some((fragment) =>
+            specifier.includes(fragment),
+          ))
+      ) {
         violations.push(
           `${relativeFile} imports trusted server-only dependency ${JSON.stringify(specifier)}`,
         );

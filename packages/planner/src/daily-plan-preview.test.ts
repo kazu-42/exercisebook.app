@@ -51,7 +51,7 @@ describe("DailyPlanPreviewV1", () => {
         requestedPracticeMinutes: practiceMinutes,
         plannedPracticeMinutes,
         evidence: { kind: "none", version: 1 },
-        policy: { id: "day-one-fraction-preview", version: 2 },
+        policy: { id: "day-one-fraction-preview", version: 4 },
         skillGraph: { id: "phase-1-math", revision: 1 },
         activities: [
           {
@@ -122,10 +122,10 @@ describe("DailyPlanPreviewV1", () => {
     }
 
     expect(result.plan.id).toBe(
-      "preview-0ceccc181b16205f75577fb8fcae010433680890fab0bafa759e8cb5e6cd4d45",
+      "preview-e756773bc3d6c5f336d8cdaf3bf237028fad6aea389d7563bf6a2cfd112d5319",
     );
     expect(result.plan.generation.baseSeed).toBe(
-      "fe05015e60ae92979bbd77f1101c5789fa78fcfc0ad524268ef7eaff59102815",
+      "9716e348dcaf72658204894a788c66d5da0a6a45e037d124b7dce3c3b125709d",
     );
   });
 
@@ -189,7 +189,7 @@ describe("DailyPlanPreviewV1", () => {
       "policy",
       {
         ...DAY_ONE_PREVIEW_REGISTRY,
-        policy: { ...DAY_ONE_PREVIEW_REGISTRY.policy, version: 3 },
+        policy: { ...DAY_ONE_PREVIEW_REGISTRY.policy, version: 5 },
       },
     ],
     [
@@ -203,7 +203,7 @@ describe("DailyPlanPreviewV1", () => {
       "content",
       {
         ...DAY_ONE_PREVIEW_REGISTRY,
-        content: { ...DAY_ONE_PREVIEW_REGISTRY.content, revision: 2 },
+        content: { ...DAY_ONE_PREVIEW_REGISTRY.content, revision: 4 },
       },
     ],
     [

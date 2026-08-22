@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  answerKeyWorksheetFixture,
-  studentWorksheetFixture,
-} from "@exercisebook/web-renderer/fixtures";
+import { studentWorksheetFixture } from "@exercisebook/web-renderer/fixtures";
 
 import {
   DAY_ONE_PREVIEW_REGISTRY,
@@ -15,13 +12,16 @@ import {
   type DailyPlanPreviewResponseV1,
 } from "../shared/daily-plan-preview-contract.js";
 import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
-import { createApp } from "./app.js";
+import {
+  PREVIEW_RATE_LIMIT_KEY,
+  createApp,
+  type ExerciseBookWorkerBindings,
+} from "./app.js";
 import type {
   DailyPlanPreviewService,
   DailyPlanPreviewServiceResult,
 } from "./daily-plan-preview-service.js";
 import { createDailyPlanPreviewService } from "./daily-plan-preview-service.js";
-import type { SampleWorksheetService } from "./sample-worksheet-service.js";
 
 const validRequest = {
   schema: "exercisebook.daily-plan-preview-request/v1",
@@ -58,7 +58,7 @@ function createReadyResponse(): DailyPlanPreviewResponseV1 {
       requestedPracticeMinutes: 8,
       plannedPracticeMinutes: 8,
       itemCount: 4,
-      policy: { id: "day-one-fraction-preview", version: 2 },
+      policy: { id: "day-one-fraction-preview", version: 4 },
       skillGraph: { id: "phase-1-math", revision: 1 },
       evidenceKind: "none",
       selectionReasons: ["current-frontier"],
@@ -78,12 +78,6 @@ function createReadyResponse(): DailyPlanPreviewResponseV1 {
   };
 }
 
-const sampleWorksheetService: SampleWorksheetService = {
-  async getSample({ variant }) {
-    return variant === "student" ? studentWorksheetFixture : answerKeyWorksheetFixture;
-  },
-};
-
 function createTestApp(
   result: DailyPlanPreviewServiceResult = {
     status: "ready",
@@ -93,7 +87,6 @@ function createTestApp(
   const createPreview = vi.fn<DailyPlanPreviewService["createPreview"]>();
   createPreview.mockResolvedValue(result);
   const app = createApp({
-    sampleWorksheetService,
     dailyPlanPreviewService: { createPreview },
   });
   return { app, createPreview };
@@ -110,6 +103,27 @@ function previewRequest(
   });
 }
 
+const TEST_BINDINGS: ExerciseBookWorkerBindings = {
+  ASSETS: {
+    async fetch() {
+      throw new Error("The preview API test must not fetch static assets");
+    },
+  },
+  PREVIEW_RATE_LIMITER: {
+    async limit() {
+      return { success: true };
+    },
+  },
+};
+
+function requestApp(
+  app: ReturnType<typeof createApp>,
+  request: Request,
+  bindings: ExerciseBookWorkerBindings = TEST_BINDINGS,
+): Promise<Response> {
+  return Promise.resolve(app.request(request, undefined, bindings));
+}
+
 function expectPrivateJsonHeaders(response: Response): void {
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
@@ -118,6 +132,51 @@ function expectPrivateJsonHeaders(response: Response): void {
 }
 
 describe("POST /api/plans/preview", () => {
+  it("returns a deterministic 429 before reading or generating when denied", async () => {
+    const { app, createPreview } = createTestApp();
+    const limit = vi.fn(async () => ({ success: false }));
+    const response = await requestApp(app, previewRequest(), {
+      ...TEST_BINDINGS,
+      PREVIEW_RATE_LIMITER: { limit },
+    });
+
+    expect(response.status).toBe(429);
+    expectPrivateJsonHeaders(response);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(await response.json()).toEqual({
+      code: "rate_limited",
+      message: "Too many preview requests. Try again shortly.",
+    });
+    expect(limit).toHaveBeenCalledWith({ key: PREVIEW_RATE_LIMIT_KEY });
+    expect(createPreview).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without a configured rate-limit binding", async () => {
+    const { app, createPreview } = createTestApp();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await requestApp(
+        app,
+        previewRequest(JSON.stringify({ ...validRequest, learnerName: "Ada" })),
+        {} as ExerciseBookWorkerBindings,
+      );
+
+      expect(response.status).toBe(500);
+      expectPrivateJsonHeaders(response);
+      expect(await response.json()).toEqual({
+        code: "internal_error",
+        message: "The preview could not be prepared.",
+      });
+      expect(createPreview).not.toHaveBeenCalled();
+      const logged = consoleError.mock.calls.flat().join(" ");
+      expect(logged).toContain('"route":"preview-api"');
+      expect(logged).not.toContain("Ada");
+      expect(logged).not.toContain("exercisebook.app");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it.each([
     [8, 4, 8],
     [12, 6, 12],
@@ -126,13 +185,12 @@ describe("POST /api/plans/preview", () => {
     "runs the real planner/content/generator/student projection chain for %i minutes",
     async (practiceMinutes, itemCount, plannedPracticeMinutes) => {
       const app = createApp({
-        sampleWorksheetService,
         dailyPlanPreviewService: createDailyPlanPreviewService(),
       });
       const body = JSON.stringify({ ...validRequest, practiceMinutes });
 
-      const first = await app.request(previewRequest(body));
-      const repeated = await app.request(previewRequest(body));
+      const first = await requestApp(app, previewRequest(body));
+      const repeated = await requestApp(app, previewRequest(body));
 
       expect(first.status).toBe(200);
       expectPrivateJsonHeaders(first);
@@ -167,8 +225,8 @@ describe("POST /api/plans/preview", () => {
   it("validates and returns a deterministic student-only response", async () => {
     const { app, createPreview } = createTestApp();
 
-    const first = await app.request(previewRequest());
-    const second = await app.request(previewRequest());
+    const first = await requestApp(app, previewRequest());
+    const second = await requestApp(app, previewRequest());
 
     expect(first.status).toBe(200);
     expectPrivateJsonHeaders(first);
@@ -179,7 +237,6 @@ describe("POST /api/plans/preview", () => {
 
   it("produces the same real response for reordered request properties", async () => {
     const app = createApp({
-      sampleWorksheetService,
       dailyPlanPreviewService: createDailyPlanPreviewService(),
     });
     const reorderedRequestJson = JSON.stringify({
@@ -191,8 +248,8 @@ describe("POST /api/plans/preview", () => {
       schema: validRequest.schema,
     });
 
-    const canonical = await app.request(previewRequest(validRequestJson));
-    const reordered = await app.request(previewRequest(reorderedRequestJson));
+    const canonical = await requestApp(app, previewRequest(validRequestJson));
+    const reordered = await requestApp(app, previewRequest(reorderedRequestJson));
 
     expect(canonical.status).toBe(200);
     expect(reordered.status).toBe(200);
@@ -210,7 +267,7 @@ describe("POST /api/plans/preview", () => {
     const { app, createPreview } = createTestApp();
     const headers = contentType === undefined ? {} : { "Content-Type": contentType };
 
-    const response = await app.request(previewRequest(body, headers));
+    const response = await requestApp(app, previewRequest(body, headers));
 
     expect(response.status).toBe(contentType === undefined ? 415 : 400);
     expectPrivateJsonHeaders(response);
@@ -231,7 +288,8 @@ describe("POST /api/plans/preview", () => {
   it("rejects a non-JSON media type before reading the body", async () => {
     const { app, createPreview } = createTestApp();
 
-    const response = await app.request(
+    const response = await requestApp(
+      app,
       previewRequest("not json", { "Content-Type": "text/plain" }),
     );
 
@@ -268,7 +326,7 @@ describe("POST /api/plans/preview", () => {
   ])("returns 413 for an oversized %s body", async (_kind, body, headers) => {
     const { app, createPreview } = createTestApp();
 
-    const response = await app.request(previewRequest(body, headers));
+    const response = await requestApp(app, previewRequest(body, headers));
 
     expect(response.status).toBe(413);
     expectPrivateJsonHeaders(response);
@@ -284,7 +342,8 @@ describe("POST /api/plans/preview", () => {
     const body = validRequestJson.padEnd(4096, " ");
     expect(new TextEncoder().encode(body)).toHaveLength(4096);
 
-    const response = await app.request(
+    const response = await requestApp(
+      app,
       previewRequest(body, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Length": "4096",
@@ -302,7 +361,7 @@ describe("POST /api/plans/preview", () => {
       code: "goal-unavailable",
     });
 
-    const response = await app.request(previewRequest());
+    const response = await requestApp(app, previewRequest());
 
     expect(response.status).toBe(503);
     expectPrivateJsonHeaders(response);
@@ -318,11 +377,10 @@ describe("POST /api/plans/preview", () => {
       generator: { ...DAY_ONE_PREVIEW_REGISTRY.generator, enabled: false },
     };
     const app = createApp({
-      sampleWorksheetService,
       dailyPlanPreviewService: createDailyPlanPreviewService({ registry }),
     });
 
-    const response = await app.request(previewRequest());
+    const response = await requestApp(app, previewRequest());
 
     expect(response.status).toBe(503);
     expectPrivateJsonHeaders(response);
@@ -360,7 +418,7 @@ describe("POST /api/plans/preview", () => {
   ])("fails closed with a sanitized 500 for %s", async (_name, result) => {
     const { app } = createTestApp(result());
 
-    const response = await app.request(previewRequest());
+    const response = await requestApp(app, previewRequest());
 
     expect(response.status).toBe(500);
     expectPrivateJsonHeaders(response);
@@ -375,11 +433,10 @@ describe("POST /api/plans/preview", () => {
       .fn<DailyPlanPreviewService["createPreview"]>()
       .mockRejectedValue(new Error("secret generator details"));
     const app = createApp({
-      sampleWorksheetService,
       dailyPlanPreviewService: { createPreview },
     });
 
-    const response = await app.request(previewRequest());
+    const response = await requestApp(app, previewRequest());
     const body = await response.text();
 
     expect(response.status).toBe(500);

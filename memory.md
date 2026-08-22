@@ -1,5 +1,27 @@
 # Project decision log
 
+## 2026-08-22 - Authorize the minimum learning.new launch release
+
+**Context**: The `.new` policy deadline requires a useful action flow, while
+the repository also contains lesson, sample, answer-key, and V2 prototypes that
+have not been approved for public release.
+
+**Decision**: Publish only one English unlike-denominator lesson through the
+anonymous, unsaved V1 `/new` preview. Software is Apache-2.0; project
+documentation and exact content revision 3 are CC BY 4.0. A server-only exact
+release manifest pins content/source hashes, policy 4, graph, generator, RNG,
+license, attribution, and the owner's 2026-08-22 approval. The primary Worker
+fails closed outside `/new`, preview POST, health, and exact hashed assets. A
+separate binding-free action Worker drops all query data and redirects
+`GET`/`HEAD /` to exactly `https://exercisebook.app/new`.
+
+**Impact**: Author Markdown remains draft and cannot self-publish. Missing or
+drifted authority, runtime versions, rate limiting, or assets fail closed.
+Preview Workers may be deployed and rollback-tested autonomously, but attaching
+`exercisebook.app` or `learning.new` or changing production DNS requires a
+separate owner GO. See [ADR-0003](docs/decisions/0003-learning-new-launch-release.md)
+and the [launch runbook](docs/operations/learning-new-launch.md).
+
 ## 2026-07-19 - TypeScript 7 baseline
 
 **Decision**: Use the stable `typescript@7.0.2` native toolchain as the

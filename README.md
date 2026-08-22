@@ -13,24 +13,25 @@ before the content catalog expands.
 
 ## Project status
 
-The Phase 1 local walking skeleton, anonymous Phase 1.5 daily-plan preview, and
-Phase 1.6 student-delivery hardening are implemented on stacked draft branches.
-The repository compiles one draft English fraction lesson with author/reviewer
-metadata, materializes deterministic exact-rational problems, and projects the
-same immutable worksheet instance to:
+The Phase 1 walking skeleton, anonymous daily-plan preview, student-delivery
+hardening, and minimum `learning.new` V1 release boundary are implemented. The
+release compiles one owner-approved English fraction lesson, authorizes its
+exact CC BY 4.0 revision through a server-only manifest, materializes
+deterministic exact-rational problems, and projects the same immutable worksheet
+instance to:
 
-- a Hono/React learning experience;
-- separate student and answer-key Web views;
-- renderer-neutral `PrintDocumentV1` data;
-- self-contained, print-ready A4 HTML for both variants;
+- a launch-only Hono/React student experience;
 - an unsaved `/new` preview with an explicit 8-, 12-, or 20-minute practice
   cap, a learner-readable reason, and same-instance browser printing.
 
-The project is not deployed, connected to either purchased domain, or ready for
-learner data. The preview uses no account, learning history, cookie, browser
-storage, or durable write and makes no adaptive or mastery claim. Hosted PDF
-rendering, persistent assignments, evidence-based planning, accounts, and
-curriculum breadth remain later roadmap phases.
+The reviewed production build exposes only `/new`, the preview POST, health,
+and exact hashed assets; earlier lesson, fixed-sample, answer-key, and V2
+prototype code is not part of the public route or client bundle. The production
+domains are not connected and the application is not approved for learner data.
+The preview uses no account, learning history, cookie, browser storage, or
+durable write and makes no adaptive or mastery claim. Hosted PDF rendering,
+persistent assignments, evidence-based planning, accounts, and curriculum
+breadth remain later roadmap phases.
 
 The executable slices verify deterministic planner identities, stable problem
 prefixes across practice budgets, seeds and instance hashes, exact answers and
@@ -43,7 +44,7 @@ production builds.
 
 Requirements:
 
-- Node.js 24 or newer;
+- Node.js 24.15 or newer;
 - pnpm 11.8.0, as pinned by `packageManager`.
 
 ```bash
@@ -52,15 +53,9 @@ pnpm check
 pnpm dev
 ```
 
-The local Cloudflare/Vite runtime serves the application at the URL printed by
-Vite. Useful routes include:
-
-- `/`
-- `/new`
-- `/lessons/fractions/add-unlike-denominators`
-- `/worksheet/sample`
-- `/worksheet/sample/answers`
-- `/worksheet/sample/print?variant=student`
+The local Cloudflare/Vite runtime serves the production-shaped launch surface
+at the URL printed by Vite. `/` redirects to `/new`; prototype routes fail
+closed instead of using an SPA fallback.
 
 The `/new` page calls the strict student-only `POST /api/plans/preview`
 endpoint. Its request includes an explicit local date, IANA time zone, locale,
@@ -72,6 +67,9 @@ Generate deterministic local worksheet, Web, and print artifacts with:
 ```bash
 pnpm worksheet:sample
 ```
+
+That command exercises preserved development fixtures. It does not add their
+routes or answer-key projections to the reviewed public launch bundle.
 
 Generated artifacts are ignored by Git. The canonical worksheet JSON is
 written byte-for-byte: its SHA-256 is the worksheet instance hash.
@@ -169,10 +167,12 @@ in [docs/naming-and-domains.md](docs/naming-and-domains.md).
 
 ## Licensing
 
-No project-wide license has been granted yet.
+Software and other repository files are licensed under the
+[Apache License 2.0](LICENSE), unless a file says otherwise. Project
+documentation and only the exact learning-content revision listed in
+[LICENSE-CONTENT.md](LICENSE-CONTENT.md) are currently published under
+[CC BY 4.0][cc-by-4.0]. Drafts, prototypes, and third-party learning material
+are not included in that content grant unless their own metadata explicitly
+says so.
 
-The current proposal is Apache-2.0 for software authored by this project and
-CC BY 4.0 for original learning material and project documentation, with
-third-party material separated according to its own license. These choices
-require an explicit owner decision before `LICENSE` files are added. Until
-then, ordinary copyright applies and external contributions are not yet open.
+[cc-by-4.0]: https://creativecommons.org/licenses/by/4.0/legalcode

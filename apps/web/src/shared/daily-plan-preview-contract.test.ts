@@ -57,7 +57,7 @@ function createResponse(): DailyPlanPreviewResponseV1 {
       requestedPracticeMinutes: 8,
       plannedPracticeMinutes: 8,
       itemCount: 4,
-      policy: { id: "day-one-fraction-preview", version: 2 },
+      policy: { id: "day-one-fraction-preview", version: 4 },
       skillGraph: { id: "phase-1-math", revision: 1 },
       evidenceKind: "none",
       selectionReasons: ["current-frontier"],

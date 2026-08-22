@@ -24,7 +24,7 @@ export function createDailyPlanPreviewResponseFixture(
       requestedPracticeMinutes,
       plannedPracticeMinutes: mapping.plannedPracticeMinutes,
       itemCount: mapping.itemCount,
-      policy: { id: "day-one-fraction-preview", version: 2 },
+      policy: { id: "day-one-fraction-preview", version: 4 },
       skillGraph: { id: "phase-1-math", revision: 1 },
       evidenceKind: "none",
       selectionReasons: ["current-frontier"],
@@ -62,8 +62,9 @@ export function createDailyPlanPreviewResponseFixture(
       })),
       attributions: [
         {
-          label: "Exercise Book original lesson",
-          license: "LicenseRef-ExerciseBook-Draft · draft",
+          label:
+            "Add fractions with unlike denominators © 2026 Exercise Book contributors. Licensed under CC BY 4.0.",
+          license: "CC-BY-4.0",
         },
       ],
     },

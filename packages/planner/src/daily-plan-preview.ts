@@ -24,7 +24,7 @@ export const SELECTION_EXPLANATION =
 
 const GOAL_ID = "math.fractions.add-unlike";
 export const DAY_ONE_PREVIEW_POLICY_ID = "day-one-fraction-preview";
-export const DAY_ONE_PREVIEW_POLICY_VERSION = 2;
+export const DAY_ONE_PREVIEW_POLICY_VERSION = 4;
 export const DAY_ONE_PREVIEW_RESERVED_CANONICAL_ANSWERS = Object.freeze([
   Object.freeze({ numerator: "1", denominator: "2" }),
   Object.freeze({ numerator: "1", denominator: "3" }),
@@ -35,7 +35,7 @@ const POLICY_VERSION = DAY_ONE_PREVIEW_POLICY_VERSION;
 const SKILL_GRAPH_ID = "phase-1-math";
 const SKILL_GRAPH_REVISION = 1;
 const CONTENT_ID = "math.fractions.add-unlike-denominators";
-const CONTENT_REVISION = 1;
+const CONTENT_REVISION = 3;
 const GENERATOR_ID = "fractions.add";
 const GENERATOR_VERSION = "1";
 

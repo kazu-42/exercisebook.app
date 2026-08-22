@@ -1,0 +1,11 @@
+{
+  "name": "@exercisebook/learning-new-redirect",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "test": "vitest run --root ../.. apps/learning-new-redirect/src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

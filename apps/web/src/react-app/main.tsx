@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import "@exercisebook/web-renderer/styles.css";
 import "./styles.css";
 
-import { App } from "./App.js";
+import { LaunchApp } from "./LaunchApp.js";
 
 const root = document.querySelector<HTMLDivElement>("#root");
 
@@ -14,6 +14,6 @@ if (root === null) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <LaunchApp />
   </StrictMode>,
 );

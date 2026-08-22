@@ -4,11 +4,12 @@ Status: proposed foundation
 
 Date: 2026-07-19
 
-This is a target architecture, not a deployment record. The Phase 1 repository
-implements a local walking skeleton through printable A4 HTML, and Phase 1.5
-adds an anonymous deterministic daily-plan preview. It does not claim
-production DNS/application deployment, durable Cloudflare storage, learner
-adaptation, a hosted PDF service, Browser Run rendering, or a LuaLaTeX backend.
+This is a target architecture, not a production deployment record. The
+repository implements a local walking skeleton through printable A4 HTML, an
+anonymous deterministic daily-plan preview, and the minimum reviewed
+`learning.new` V1 release boundary. It does not claim production DNS/custom
+domain deployment, durable Cloudflare storage, learner adaptation, a hosted
+PDF service, Browser Run rendering, or a LuaLaTeX backend.
 
 Primary application: `https://exercisebook.app`
 
@@ -18,12 +19,13 @@ Decision record: [ADR-0001](decisions/0001-core-architecture.md)
 
 ### Current implemented boundary
 
-The local Phase 1.5 slice is intentionally smaller than the target containers
-below. `@exercisebook/planner` is a pure, version-pinned policy package. The
-Hono Worker application service composes that policy with reviewed content,
-the deterministic fraction generator, an integrity check, and a strict
-student-only Web projection. `POST /api/plans/preview` returns an unsaved set
-for one reviewed goal and an 8-, 12-, or 20-minute practice cap.
+The launch slice is intentionally smaller than the target containers below.
+`@exercisebook/planner` is a pure, version-pinned policy package. The Hono
+Worker application service composes that policy with one owner-approved
+CC BY 4.0 content revision, the deterministic fraction generator, a trusted
+server-only release manifest, an integrity check, and a strict student-only Web
+projection. `POST /api/plans/preview` returns an unsaved set for one reviewed
+goal and an 8-, 12-, or 20-minute practice cap.
 
 The current preview has no repository or Cloudflare storage adapter, accepts no
 learner identity or evidence, writes no cookie or browser storage, and does not
@@ -32,7 +34,7 @@ the public response exposes only the preview identity, pinned public
 provenance, selection reason, counts, minutes, and student worksheet. The
 executable contract is [Daily Plan Preview v1](../specs/daily-plan-preview-v1.md).
 
-The enabled `day-one-fraction-preview@2` policy also owns every reduced
+The enabled `day-one-fraction-preview@4` policy also owns every reduced
 canonical rational structurally exposed by the reviewed worked example—its
 left operand, right operand, and result—as the ordered plan-activity tuple
 `[1/2, 1/3, 5/6]`. The example's left/right/result values are derived from that
@@ -138,9 +140,9 @@ These are correctness properties, not implementation preferences.
    assignment, item revision, attempt conditions, and policy that interpreted
    it.
 6. **Publication fails closed.** Unknown skills, directives, generators,
-   licenses, or schema versions block publication. In Phase 1 only draft
-   content compiles/materializes; a future trusted release manifest, never
-   author-controlled frontmatter, authorizes published content.
+   licenses, or schema versions block publication. Content compiles and
+   materializes as draft; the exact trusted server-only release manifest, never
+   author-controlled frontmatter, authorizes the approved public projection.
 7. **Queue processing is idempotent.** Cloudflare Queues are treated as
    at-least-once delivery; duplicate and out-of-order messages are normal.
 8. **Artifacts are immutable.** A content-addressed object is never overwritten

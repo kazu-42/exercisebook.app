@@ -17,12 +17,12 @@
     "@exercisebook/planner": "workspace:*",
     "@exercisebook/schemas": "workspace:*",
     "@exercisebook/web-renderer": "workspace:*",
-    "hono": "4.12.30",
+    "hono": "4.12.34",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.45.1",
+    "@cloudflare/vite-plugin": "1.53.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
@@ -32,7 +32,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
     "jest-axe": "10.0.0",
-    "jsdom": "29.1.1",
+    "jsdom": "30.0.1",
     "tsx": "4.21.1"
   }
 }

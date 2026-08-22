@@ -1,6 +1,6 @@
 # Learning New Launch v1
 
-Status: approved intent, implementation pending
+Status: implementation complete; verification and preview deployment in progress
 
 Decision date: 2026-08-22 JST
 
@@ -41,7 +41,7 @@ The primary application release permits only:
 - `GET` and `HEAD /api/health`;
 - the exact regular static assets emitted by the reviewed production build.
 
-`GET /` temporarily redirects to `/new`. Every other application or API route
+`GET` and `HEAD /` temporarily redirect to `/new`. Every other application or API route
 fails closed with `404` or `405`; it must not fall through to an unapproved SPA
 page. In particular, the launch excludes standalone lesson, fixed sample,
 answer-key, authoring, catalog, V2 prototype, and arbitrary asset paths.
@@ -50,6 +50,8 @@ The action-domain release permits only:
 
 - `GET` and `HEAD` on `learning.new`, returning a temporary redirect to the
   exact URL `https://exercisebook.app/new`;
+- only the canonical action host or a Cloudflare `workers.dev` preview host is
+  accepted; ambiguous hosts and paths fail closed;
 - an empty redirect query allowlist: every incoming query parameter is dropped;
 - no cookies, OAuth callbacks, APIs, learner state, storage binding, or indexed
   content;
@@ -206,4 +208,3 @@ different questions.
 - [ ] Preview deployments, synthetic checks, and a rollback rehearsal are green.
 - [ ] `exercisebook.app` and `learning.new` remain DNS-unmodified until the
       owner gives a separate final promotion GO.
-

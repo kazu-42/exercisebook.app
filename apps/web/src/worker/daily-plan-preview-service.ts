@@ -23,7 +23,12 @@ import {
   validateDailyPlanPreviewResponseV1,
   type DailyPlanPreviewResponseV1,
 } from "../shared/daily-plan-preview-contract.js";
-import { SAMPLE_CONTENT_DOCUMENT } from "./sample-content.js";
+import { authorizePublishedWorksheetMaterialization } from "./authorized-publication.js";
+import {
+  LEARNING_NEW_LAUNCH_RELEASE_V1,
+  createLaunchReleaseAuthorizer,
+} from "./launch-release-manifest.js";
+import { RELEASE_CONTENT_DOCUMENT } from "./release-content.js";
 import { projectStudentWorksheetForWeb } from "./web-worksheet-projector.js";
 
 export type DailyPlanPreviewServiceResult =
@@ -52,6 +57,7 @@ type ProjectStudentWorksheet = typeof projectStudentWorksheetForWeb;
 export interface DailyPlanPreviewServiceDependencies {
   readonly registry?: DailyPlanPreviewRegistryV1;
   readonly contentDocument?: ContentDocumentV1;
+  readonly releaseManifest?: unknown;
   readonly planPreview?: PlanPreview;
   readonly materializePreview?: MaterializePreview;
   readonly projectStudentWorksheet?: ProjectStudentWorksheet;
@@ -69,8 +75,12 @@ export function createDailyPlanPreviewService(
     dependencies.registry ?? DAY_ONE_PREVIEW_REGISTRY,
   );
   const contentDocument = validateContentDocumentV1(
-    dependencies.contentDocument ?? SAMPLE_CONTENT_DOCUMENT,
+    dependencies.contentDocument ?? RELEASE_CONTENT_DOCUMENT,
   );
+  const releaseManifest = Object.hasOwn(dependencies, "releaseManifest")
+    ? dependencies.releaseManifest
+    : LEARNING_NEW_LAUNCH_RELEASE_V1;
+  const releaseAuthorizer = createLaunchReleaseAuthorizer(releaseManifest);
   const planPreview = dependencies.planPreview ?? planDailyPreviewV1;
   const materializePreview =
     dependencies.materializePreview ?? materializeFractionAdditionWorksheetFromContent;
@@ -88,6 +98,10 @@ export function createDailyPlanPreviewService(
 
       const plan = planned.plan;
       const activity = plan.activities[0];
+      const releaseAuthorization = await releaseAuthorizer.authorize({
+        contentDocument,
+        registry,
+      });
       const materialized = await materializePreview(contentDocument, {
         assignmentId: plan.id,
         localStudyDate: plan.localStudyDate,
@@ -105,8 +119,13 @@ export function createDailyPlanPreviewService(
 
       assertSafeDataObjectGraph(materialized);
       assertMaterializationAgreesWithPlan(plan, materialized);
-      const expectedInstanceHash = materialized.instanceHash;
-      const worksheet = await projectStudentWorksheet(materialized);
+      const published = await authorizePublishedWorksheetMaterialization({
+        materialized,
+        authorization: releaseAuthorization,
+        contentDocument,
+      });
+      const expectedInstanceHash = published.instanceHash;
+      const worksheet = await projectStudentWorksheet(published);
       const response = validateDailyPlanPreviewResponseV1({
         schema: DAILY_PLAN_PREVIEW_RESPONSE_V1_SCHEMA,
         plan: {

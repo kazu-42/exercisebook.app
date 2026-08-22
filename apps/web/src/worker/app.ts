@@ -1,93 +1,136 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 
 import { validateDailyPlanPreviewRequestV1 } from "@exercisebook/planner";
-import type { WebWorksheetVariant } from "@exercisebook/web-renderer";
 
+import { parseStrictJson } from "../shared/strict-json.js";
 import {
   validateDailyPlanPreviewServiceResult,
   type DailyPlanPreviewService,
 } from "./daily-plan-preview-service.js";
-import type { SampleWorksheetService } from "./sample-worksheet-service.js";
-import { parseStrictJson } from "../shared/strict-json.js";
 
-export const DEFAULT_SAMPLE_SEED =
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-
-const seedPattern = /^[0-9a-f]{64}$/;
-const allowedQueryKeys = new Set(["seed", "variant"]);
 export const MAX_DAILY_PLAN_PREVIEW_BODY_BYTES = 4_096;
+export const PREVIEW_RATE_LIMIT_KEY = "anonymous-preview-v1";
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join("; ");
+const EMITTED_ASSET_PATH =
+  /^\/assets\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:css|js|mjs|png|svg|woff|woff2)$/u;
+
+export interface AssetBinding {
+  fetch(input: Request | string | URL): Promise<Response>;
+}
+
+export interface RateLimitBinding {
+  limit(input: { readonly key: string }): Promise<{ readonly success: boolean }>;
+}
+
+export interface ExerciseBookWorkerBindings {
+  readonly ASSETS: AssetBinding;
+  readonly PREVIEW_RATE_LIMITER: RateLimitBinding;
+}
 
 export interface AppServices {
-  readonly sampleWorksheetService: SampleWorksheetService;
   readonly dailyPlanPreviewService: DailyPlanPreviewService;
+  readonly allowDevelopmentAssets?: boolean;
 }
 
-function readSampleQuery(url: string): Readonly<{
-  seed: string;
-  variant: WebWorksheetVariant;
-}> | null {
-  const search = new URL(url).searchParams;
-  const hasUnknownKey = [...search.keys()].some((key) => !allowedQueryKeys.has(key));
-  const hasDuplicateKey = [...allowedQueryKeys].some(
-    (key) => search.getAll(key).length > 1,
-  );
-  const seed = search.get("seed") ?? DEFAULT_SAMPLE_SEED;
-  const variant = search.get("variant") ?? "student";
-
-  if (
-    hasUnknownKey ||
-    hasDuplicateKey ||
-    !seedPattern.test(seed) ||
-    (variant !== "student" && variant !== "answer-key")
-  ) {
-    return null;
-  }
-
-  return { seed, variant };
-}
+type ExerciseBookWorkerEnvironment = {
+  Bindings: ExerciseBookWorkerBindings;
+};
+type ExerciseBookWorkerContext = Context<ExerciseBookWorkerEnvironment>;
 
 export function createApp(services: AppServices) {
-  const app = new Hono()
-    .use("/api/plans/preview", async (context, next) => {
-      context.header("Cache-Control", "no-store");
-      context.header("X-Content-Type-Options", "nosniff");
+  const app = new Hono<ExerciseBookWorkerEnvironment>()
+    .use("*", async (context, next) => {
+      applySecurityHeaders(context.header.bind(context));
       await next();
+      applySecurityHeaders(context.header.bind(context));
     })
-    .get("/api/health", (context) => {
+    .on("HEAD", "/", (context) => methodNotAllowed(context, "GET"))
+    .get("/", (context) => {
       context.header("Cache-Control", "no-store");
-      return context.json({
-        service: "exercisebook-web",
-        status: "ok",
-        version: "phase-1",
+      return context.redirect("/new", 302);
+    })
+    .all("/", (context) => methodNotAllowed(context, "GET"))
+    .on(["GET", "HEAD"], "/new", async (context) => {
+      context.header("Cache-Control", "no-store");
+      if (new URL(context.req.url).search !== "") {
+        return notFound(context);
+      }
+      const response = await fetchRequiredAsset(
+        context.env?.ASSETS,
+        new URL("/index.html", context.req.url),
+        context.req.method,
+      );
+      if (!response.ok) {
+        return notFound(context);
+      }
+      return cloneResponse(response, context.req.method === "HEAD", {
+        "Cache-Control": "no-store",
       });
     })
-    .get("/api/worksheets/sample", async (context) => {
-      const request = readSampleQuery(context.req.url);
-      if (request === null) {
+    .all("/new", (context) => methodNotAllowed(context, "GET, HEAD"))
+    .on(["GET", "HEAD"], "/assets/*", async (context) => {
+      const url = new URL(context.req.url);
+      if (url.search !== "" || !EMITTED_ASSET_PATH.test(url.pathname)) {
+        return notFound(context);
+      }
+      const response = await fetchRequiredAsset(
+        context.env?.ASSETS,
+        url,
+        context.req.method,
+      );
+      if (!response.ok) {
+        return notFound(context);
+      }
+      return cloneResponse(response, context.req.method === "HEAD");
+    })
+    .all("/assets/*", (context) => methodNotAllowed(context, "GET, HEAD"))
+    .on(["GET", "HEAD"], "/api/health", (context) => {
+      context.header("Cache-Control", "no-store");
+      const response = context.json({
+        service: "exercisebook-web",
+        status: "ok",
+        version: "learning-new-v1",
+      });
+      return context.req.method === "HEAD" ? cloneResponse(response, true) : response;
+    })
+    .all("/api/health", (context) => methodNotAllowed(context, "GET, HEAD"))
+    .post("/api/plans/preview", async (context) => {
+      context.header("Cache-Control", "no-store");
+      const limiter = context.env?.PREVIEW_RATE_LIMITER;
+      if (limiter === undefined || typeof limiter.limit !== "function") {
+        throw new TypeError("Preview rate limiter binding is unavailable");
+      }
+      const rateLimitResult = await limiter.limit({ key: PREVIEW_RATE_LIMIT_KEY });
+      if (
+        rateLimitResult === null ||
+        typeof rateLimitResult !== "object" ||
+        typeof rateLimitResult.success !== "boolean"
+      ) {
+        throw new TypeError("Preview rate limiter returned an invalid result");
+      }
+      if (!rateLimitResult.success) {
+        context.header("Retry-After", "60");
         return context.json(
           {
-            code: "invalid_query",
-            message:
-              "Use a 64-character lowercase hexadecimal seed and a supported variant.",
+            code: "rate_limited",
+            message: "Too many preview requests. Try again shortly.",
           },
-          400,
+          429,
         );
       }
 
-      const worksheet = await services.sampleWorksheetService.getSample(request);
-      if (worksheet.variant !== request.variant) {
-        throw new Error("Sample service returned the wrong projection variant.");
-      }
-
-      context.header("Cache-Control", "public, max-age=300, s-maxage=86400");
-      context.header(
-        "ETag",
-        `W/"${worksheet.instanceHash}-web-v1-${worksheet.variant}"`,
-      );
-      context.header("X-Content-Type-Options", "nosniff");
-      return context.json(worksheet);
-    })
-    .post("/api/plans/preview", async (context) => {
       const contentType = context.req.header("Content-Type");
       if (!isApplicationJson(contentType)) {
         return context.json(
@@ -166,21 +209,34 @@ export function createApp(services: AppServices) {
         );
       }
       return context.json(result.response);
+    })
+    .all("/api/plans/preview", (context) => methodNotAllowed(context, "POST"))
+    .on(["GET", "HEAD"], "*", async (context) => {
+      if (services.allowDevelopmentAssets !== true) {
+        return notFound(context);
+      }
+      const response = await fetchRequiredAsset(
+        context.env?.ASSETS,
+        new URL(context.req.url),
+        context.req.method,
+      );
+      return response.ok
+        ? cloneResponse(response, context.req.method === "HEAD")
+        : notFound(context);
     });
 
-  app.notFound((context) =>
-    context.json(
-      {
-        code: "not_found",
-        message: "API route not found.",
-      },
-      404,
-    ),
-  );
+  app.notFound((context) => notFound(context));
 
-  app.onError((_error, context) => {
+  app.onError((error, context) => {
+    console.error(
+      JSON.stringify({
+        event: "worker_unexpected_error",
+        route: classifyRoute(context.req.path),
+        method: context.req.method,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
     context.header("Cache-Control", "no-store");
-    context.header("X-Content-Type-Options", "nosniff");
     if (context.req.path === "/api/plans/preview") {
       return context.json(
         {
@@ -193,13 +249,95 @@ export function createApp(services: AppServices) {
     return context.json(
       {
         code: "internal_error",
-        message: "The worksheet could not be prepared.",
+        message: "The page could not be served.",
       },
       500,
     );
   });
 
   return app;
+}
+
+function applySecurityHeaders(
+  setHeader: (name: string, value: string, options?: { append?: boolean }) => void,
+): void {
+  setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  setHeader(
+    "Permissions-Policy",
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  );
+  setHeader("Referrer-Policy", "no-referrer");
+  setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  setHeader("X-Content-Type-Options", "nosniff");
+  setHeader("X-Frame-Options", "DENY");
+}
+
+async function fetchRequiredAsset(
+  binding: AssetBinding | undefined,
+  url: URL,
+  method: string,
+): Promise<Response> {
+  if (binding === undefined || typeof binding.fetch !== "function") {
+    throw new TypeError("Static asset binding is unavailable");
+  }
+  return binding.fetch(new Request(url, { method }));
+}
+
+function cloneResponse(
+  response: Response,
+  omitBody: boolean,
+  headers: HeadersInit = {},
+): Response {
+  const clonedHeaders = new Headers(response.headers);
+  for (const [name, value] of new Headers(headers)) {
+    clonedHeaders.set(name, value);
+  }
+  return new Response(omitBody ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: clonedHeaders,
+  });
+}
+
+function methodNotAllowed(context: ExerciseBookWorkerContext, allow: string) {
+  context.header("Allow", allow);
+  context.header("Cache-Control", "no-store");
+  return context.json(
+    {
+      code: "method_not_allowed",
+      message: "Method not allowed.",
+    },
+    405,
+  );
+}
+
+function notFound(context: ExerciseBookWorkerContext) {
+  context.header("Cache-Control", "no-store");
+  return context.json(
+    {
+      code: "not_found",
+      message: "Route not found.",
+    },
+    404,
+  );
+}
+
+function classifyRoute(pathname: string): string {
+  if (pathname === "/new") {
+    return "launch-page";
+  }
+  if (pathname === "/api/plans/preview") {
+    return "preview-api";
+  }
+  if (pathname === "/api/health") {
+    return "health-api";
+  }
+  if (pathname.startsWith("/assets/")) {
+    return "static-asset";
+  }
+  return "denied-route";
 }
 
 function isApplicationJson(contentType: string | undefined): boolean {

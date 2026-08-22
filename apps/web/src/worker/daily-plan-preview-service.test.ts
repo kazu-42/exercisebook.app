@@ -17,6 +17,8 @@ import {
 import { MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES } from "../shared/public-api-response-limits.js";
 import { parseStrictJson } from "../shared/strict-json.js";
 import { createDailyPlanPreviewService } from "./daily-plan-preview-service.js";
+import { LEARNING_NEW_LAUNCH_RELEASE_V1 } from "./launch-release-manifest.js";
+import { SAMPLE_CONTENT_DOCUMENT } from "./sample-content.js";
 import { projectStudentWorksheetForWeb } from "./web-worksheet-projector.js";
 
 function request(practiceMinutes: 8 | 12 | 20): DailyPlanPreviewRequestV1 {
@@ -106,6 +108,42 @@ describe("generator-backed Daily Plan Preview service", () => {
     }
   });
 
+  it("publishes only the owner-approved CC BY attribution without authority metadata", async () => {
+    const result = await createDailyPlanPreviewService().createPreview(request(8));
+    if (result.status !== "ready") {
+      throw new Error("Expected a ready preview");
+    }
+
+    expect(result.response.worksheet.attributions).toEqual([
+      {
+        label:
+          "Add fractions with unlike denominators © 2026 Exercise Book contributors. Licensed under CC BY 4.0.",
+        license: "CC-BY-4.0",
+      },
+    ]);
+    const serialized = JSON.stringify(result.response);
+    expect(serialized).not.toContain("repository-owner");
+    expect(serialized).not.toContain("learning-new-launch-2026-08-22");
+    expect(serialized).not.toContain("releaseManifest");
+  });
+
+  it("fails closed when the release authority is disabled or content is unapproved", async () => {
+    expect(() =>
+      createDailyPlanPreviewService({
+        releaseManifest: {
+          ...LEARNING_NEW_LAUNCH_RELEASE_V1,
+          enabled: false,
+        },
+      }),
+    ).toThrow(/disabled/iu);
+
+    await expect(
+      createDailyPlanPreviewService({
+        contentDocument: SAMPLE_CONTENT_DOCUMENT,
+      }).createPreview(request(8)),
+    ).rejects.toThrow(/content/iu);
+  });
+
   it("never lets the reviewed worked example reveal a generated practice answer", async () => {
     const result = await createDailyPlanPreviewService().createPreview({
       ...request(8),
@@ -169,7 +207,7 @@ describe("generator-backed Daily Plan Preview service", () => {
       MAX_DAILY_PLAN_PREVIEW_RESPONSE_BYTES,
     );
     expect({ maximumResponseBytes, maximumResponseDate }).toEqual({
-      maximumResponseBytes: 4_899,
+      maximumResponseBytes: 4_884,
       maximumResponseDate: "2026-01-01",
     });
   }, 60_000);

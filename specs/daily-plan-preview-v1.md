@@ -69,13 +69,13 @@ set with unreviewed generation.
 | request schema | `exercisebook.daily-plan-preview-request/v1` |
 | internal plan schema | `exercisebook.daily-plan-preview/v1` |
 | public response schema | `exercisebook.daily-plan-preview-response/v1` |
-| planner policy | `day-one-fraction-preview@2` |
+| planner policy | `day-one-fraction-preview@4` |
 | skill graph | `phase-1-math@1` |
 | evidence snapshot | `none@1` |
 | seed derivation | `exercisebook/public-plan-preview-seed/v1` |
 | public seed version | `public-preview-v1` |
 | generator | `fractions.add@1` |
-| content | `math.fractions.add-unlike-denominators@1` |
+| content | `math.fractions.add-unlike-denominators@3` |
 
 A change that can alter item selection, order, seed derivation, time accounting,
 or rationale requires the corresponding version to change. Historical fixed
@@ -90,6 +90,14 @@ makes the complete ordered tuple an explicit planner input instead of an
 unversioned service constant. This correction was made before policy-v2 release
 and fixed-vector lock. Version 1 remains a distinct historical contract; its
 vectors must not be silently reinterpreted as version 2 output.
+
+Version 4 is the public-launch successor. It preserves the reviewed budget,
+selection, worked-example reservation, and generator behavior of version 2,
+but selects the separately licensed content revision 3 authorized by the
+server-only `learning-new-launch-2026-08-22` manifest. Policy 2 and content
+revision 1 remain historical draft identities. Policy 3 and content revision 2
+belong to the unapproved V2 presentation prototype. The launch does not
+reinterpret any of those fixed identities as published V1 output.
 
 ## 5. Request contract
 
@@ -149,7 +157,7 @@ type DailyPlanPreviewV1 = Readonly<{
   requestedPracticeMinutes: 8 | 12 | 20;
   plannedPracticeMinutes: 8 | 12 | 16;
   evidence: { kind: "none"; version: 1 };
-  policy: { id: "day-one-fraction-preview"; version: 2 };
+  policy: { id: "day-one-fraction-preview"; version: 4 };
   skillGraph: { id: "phase-1-math"; revision: 1 };
   activities: readonly [
     {
@@ -157,7 +165,7 @@ type DailyPlanPreviewV1 = Readonly<{
       kind: "practice";
       skillId: "math.fractions.add-unlike";
       contentId: "math.fractions.add-unlike-denominators";
-      contentRevision: 1;
+      contentRevision: 3;
       generatorId: "fractions.add";
       generatorVersion: "1";
       itemCount: 4 | 6 | 8;
@@ -223,7 +231,7 @@ order, or mutable global state.
 
 ## 9. Selection policy
 
-The `day-one-fraction-preview@2` policy maps budget to the reviewed two-minute
+The `day-one-fraction-preview@4` policy maps budget to the reviewed two-minute
 slot model:
 
 | Requested | Item count | Planned |
@@ -278,7 +286,8 @@ The Web application service composes, in order:
 3. reviewed ContentDocument resolution;
 4. fraction generator materialization with explicit planner provenance;
 5. integrity-checked student projection;
-6. strict public response validation.
+6. trusted publication authorization and a re-sealed published instance;
+7. strict public response validation.
 
 The planner does not import Hono, React, Cloudflare, renderers, or storage. The
 generator does not choose learning activities. The renderer does not regenerate
@@ -332,7 +341,7 @@ type DailyPlanPreviewResponseV1 = Readonly<{
     requestedPracticeMinutes: 8 | 12 | 20;
     plannedPracticeMinutes: 8 | 12 | 16;
     itemCount: 4 | 6 | 8;
-    policy: { id: "day-one-fraction-preview"; version: 2 };
+    policy: { id: "day-one-fraction-preview"; version: 4 };
     skillGraph: { id: "phase-1-math"; revision: 1 };
     evidenceKind: "none";
     selectionReasons: readonly ["current-frontier"];
@@ -415,7 +424,7 @@ removed when the request settles.
 - [x] Disabling the policy, graph, content, or generator gives a typed
       unavailable result with no selected activity.
 - [x] The generator receives rather than invents plan/policy/graph/reason data.
-- [x] Policy v2 exposes exactly `[1/2, 1/3, 5/6]` as the plan activity's
+- [x] Policy v4 preserves policy v2's exact `[1/2, 1/3, 5/6]` plan-activity
       reviewed-example reservation; the example derives left/right/result from
       that tuple, and matching candidates retry deterministically with recorded
       provenance without changing shorter-budget prefixes.
@@ -454,7 +463,7 @@ removed when the request settles.
 
 ## 15. Rollback
 
-- Disable `day-one-fraction-preview@2` for new previews or revert the feature
+- Disable `day-one-fraction-preview@4` for new previews or revert the feature
   commit.
 - Keep `/worksheet/sample` as the fixed Phase 1 fallback.
 - Do not mutate or reinterpret previously materialized instances.
