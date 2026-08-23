@@ -82,6 +82,36 @@ alerts after two consecutive failures. It checks:
   BY 4.0 attribution;
 - representative prototype routes remain `404`.
 
+The implementation is
+[`learning-new-production-synthetic.yml`](../../.github/workflows/learning-new-production-synthetic.yml).
+Scheduled checks remain disabled until the repository variable
+`LEARNING_NEW_PRODUCTION_ENABLED` is exactly `true`. Before DNS promotion,
+dispatch the workflow manually against the two reviewed `workers.dev` preview
+origins. After both production custom domains pass external smoke, set the
+variable and dispatch it against the default production origins. A scheduled
+failure is retried once after 30 seconds; two failures open or update a durable
+GitHub issue mentioning the repository owner. The next scheduled recovery
+closes that issue.
+
+Enable scheduled checks only after the production action flow is green:
+
+```bash
+gh variable set LEARNING_NEW_PRODUCTION_ENABLED --body true
+gh workflow run learning-new-production-synthetic.yml
+```
+
+Read back the repository variable and the manually dispatched run before
+accepting monitoring as ready. Removing or setting the variable to any value
+other than exact `true` is the monitoring rollback.
+
+The dependency-free synthetic entrypoint is also runnable locally:
+
+```bash
+pnpm smoke:synthetic \
+  --primary https://exercisebook.app \
+  --action https://learning.new
+```
+
 Workers Observability is enabled for both Workers. Application error logs are
 limited to event name, route class, method, and error class. Request/response
 bodies, URLs, query strings, headers, IP addresses, seeds, answers, and stack

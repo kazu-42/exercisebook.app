@@ -30,6 +30,15 @@ separate states and require a bounded propagation wait plus repeated readback.
 Production DNS remained non-resolving, and DNSSEC delegation was not yet
 present at the 2026-08-22 readback.
 
+**Production synthetic**: The initial production monitor is a dependency-free
+Node 24 check scheduled by GitHub Actions every five minutes. Scheduling stays
+fail-closed behind the exact repository variable
+`LEARNING_NEW_PRODUCTION_ENABLED=true`; manual dispatch is used against preview
+before DNS promotion. Each run makes two bounded attempts, opens or updates a
+durable owner-mentioned GitHub issue after failure, and closes it after the
+next scheduled recovery. Do not enable the variable before both production
+custom domains pass external smoke.
+
 ## 2026-07-19 - TypeScript 7 baseline
 
 **Decision**: Use the stable `typescript@7.0.2` native toolchain as the
