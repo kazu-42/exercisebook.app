@@ -1,0 +1,115 @@
+name: learning.new production synthetic
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      primary:
+        description: Primary HTTPS origin
+        required: true
+        default: https://exercisebook.app
+        type: string
+      action:
+        description: Action-domain HTTPS origin
+        required: true
+        default: https://learning.new
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: learning-new-production-synthetic
+  cancel-in-progress: true
+
+jobs:
+  synthetic:
+    name: Anonymous unsaved flow
+    if:
+      github.event_name == 'workflow_dispatch' || vars.LEARNING_NEW_PRODUCTION_ENABLED
+      == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      PRIMARY_ORIGIN: ${{ github.event.inputs.primary || 'https://exercisebook.app' }}
+      ACTION_ORIGIN: ${{ github.event.inputs.action || 'https://learning.new' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+
+      - name: Run two bounded attempts
+        id: smoke
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if node --experimental-strip-types scripts/smoke-learning-new-synthetic.ts \
+              --primary "$PRIMARY_ORIGIN" \
+              --action "$ACTION_ORIGIN"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              sleep 30
+            fi
+          done
+          exit 1
+
+      - name: Open or update the production incident
+        if: steps.smoke.outcome == 'failure' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          alert_title="learning.new production synthetic is failing"
+          issue_number="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "$alert_title in:title" \
+            --json number,title \
+            --jq 'map(select(.title == "learning.new production synthetic is failing"))[0].number // empty')"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -z "$issue_number" ]; then
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$alert_title" \
+              --body "@${{ github.repository_owner }} Two consecutive production checks failed. Run: $run_url"
+          else
+            gh issue comment "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Two consecutive production checks failed again. Run: $run_url"
+          fi
+
+      - name: Close the incident after scheduled recovery
+        if: steps.smoke.outcome == 'success' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue_number="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search 'learning.new production synthetic is failing in:title' \
+            --json number,title \
+            --jq 'map(select(.title == "learning.new production synthetic is failing"))[0].number // empty')"
+          if [ -n "$issue_number" ]; then
+            gh issue close "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "The scheduled production synthetic recovered."
+          fi
+
+      - name: Fail after recording the incident
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
