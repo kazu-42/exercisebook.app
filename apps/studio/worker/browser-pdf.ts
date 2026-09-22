@@ -81,7 +81,12 @@ async function verifyActualFonts(page: Page): Promise<void> {
         for (const font of fonts) {
           if (!font.glyphCount) continue;
           usedGlyphs = true;
-          if (!font.isCustomFont || !font.postScriptName.startsWith("NotoSansJP-"))
+          // Linux Chromium names variable-font instances by weight; macOS uses
+          // the source face name. Both still require the exact verified bytes.
+          const pinnedName =
+            font.postScriptName.startsWith("NotoSansJP-") ||
+            /^NotoSansJP_(?:[1-8][0-9]{2}|900)wght$/.test(font.postScriptName);
+          if (!font.isCustomFont || !pinnedName)
             throw new Error(
               "PDF rendering used an unpinned font or an unsupported glyph.",
             );

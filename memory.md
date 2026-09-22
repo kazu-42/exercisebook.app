@@ -1,5 +1,19 @@
 # Project decision log
 
+## 2026-09-22 - Cloud Browser variable-font identity differs from macOS
+
+Remote Browser Run successfully loads the exact pinned Noto font but reports
+variable instances as `NotoSansJP_400wght` / `NotoSansJP_700wght`, whereas macOS
+Chromium reports `NotoSansJP-Thin_Regular` / `NotoSansJP-Thin_Bold`. Keep SHA-256,
+custom-font, network, and resource checks; accept only the verified legacy face
+prefix or the weight-instance form bounded to 100–900. Do not remove font
+validation or increase the production deadline to hide this compatibility
+failure. Twelve regression cases cover valid instances and invalid names.
+The corrected real adapter rendered an eight-question stored workbook on
+remote Browser Run in 7.424 seconds including launch and close. CI separately
+prepares Miniflare's browser outside the application request deadline and
+retains HTTP status and Worker logs on PDF smoke failures.
+
 ## 2026-08-22 - Authorize the minimum learning.new launch release
 
 **Context**: The `.new` policy deadline requires a useful action flow, while

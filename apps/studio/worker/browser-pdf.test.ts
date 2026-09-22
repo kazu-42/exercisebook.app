@@ -16,7 +16,7 @@ const html =
 const binding = { fetch: vi.fn() } as unknown as BrowserPdfBinding;
 const pdf = new TextEncoder().encode(`%PDF-1.7\n${"x".repeat(100)}`);
 
-function mockBrowser() {
+function mockBrowser(postScriptName = "NotoSansJP-Thin_Regular", isCustomFont = true) {
   const session = {
     send: vi.fn(async (method: string) => {
       if (method === "DOM.getDocument") return { root: { nodeId: 1 } };
@@ -26,8 +26,8 @@ function mockBrowser() {
           fonts: [
             {
               glyphCount: 10,
-              isCustomFont: true,
-              postScriptName: "NotoSansJP-Thin_Regular",
+              isCustomFont,
+              postScriptName,
             },
           ],
         };
@@ -93,6 +93,31 @@ describe("Cloudflare Browser Run PDF adapter", () => {
     damaged[100] = damaged[100]! ^ 1;
     await expect(renderBrowserPdf(binding, html, damaged)).rejects.toThrow(/font/i);
     expect(launch).not.toHaveBeenCalled();
+  });
+
+  it.each([100, 400, 500, 600, 700, 900])(
+    "accepts Cloud Browser's instanced Noto weight %i after checking the pinned bytes",
+    async (weight) => {
+      const { browser } = mockBrowser(`NotoSansJP_${weight}wght`);
+      launch.mockResolvedValue(browser);
+      await expect(renderBrowserPdf(binding, html, font)).resolves.toEqual(pdf);
+      expect(browser.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ["OtherFont_400wght", true],
+    ["NotoSansJP_400wght", false],
+    ["NotoSansJP_99wght", true],
+    ["NotoSansJP_901wght", true],
+    ["NotoSansJP_1000wght", true],
+    ["NotoSansJP_400wghtExtra", true],
+  ])("rejects an unapproved font identity %s / custom=%s", async (name, custom) => {
+    const { browser, page } = mockBrowser(name, custom);
+    launch.mockResolvedValue(browser);
+    await expect(renderBrowserPdf(binding, html, font)).rejects.toThrow(/font/i);
+    expect(page.pdf).not.toHaveBeenCalled();
+    expect(browser.close).toHaveBeenCalledOnce();
   });
 
   it("allows only the exact verified inline font when Chromium emits a data URL request", async () => {

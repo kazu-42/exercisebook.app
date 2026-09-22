@@ -126,3 +126,23 @@ The lower-level APIs are documented in the
 [Miniflare repository](https://github.com/cloudflare/workers-sdk/tree/main/packages/miniflare);
 the pinned package's exported declarations are the compatibility authority for
 this setup step.
+
+## Cloud and Linux variable-font names
+
+An isolated remote Worker confirmed that Cloud Browser reports the hash-pinned
+font as `NotoSansJP_400wght` and `NotoSansJP_700wght` with `isCustomFont: true`.
+macOS Chromium uses the `NotoSansJP-` face-name prefix. Rejecting the remote
+names caused the application PDF check to fail despite valid font bytes.
+The adapter now accepts the exact weight-instance shape from 100 through 900
+as well as the legacy prefix, while retaining the byte hash, custom-font check,
+network isolation, and thirty-second deadline. Twelve new cases cover both
+valid weights and unapproved identities. An actual eight-question worksheet
+completed through the corrected remote adapter in 7.424 seconds, including
+browser launch and close, producing 633,743 PDF bytes.
+
+CI run 35717475559 confirmed that the new independent browser preparation
+succeeds on fresh Linux. Its pre-fix application returned a visible 503 in
+1,303 ms, rather than timing out during installation. The next runtime release
+must include the font-name compatibility fix and pass the full UI PDF smoke.
+The ephemeral diagnostic Worker was stopped; no diagnostic endpoint was
+deployed, and no production storage was changed by that diagnostic.
