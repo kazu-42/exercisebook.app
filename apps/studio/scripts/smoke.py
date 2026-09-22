@@ -110,7 +110,27 @@ def main():
 
         for variant, label in (("student", "問題PDF"), ("answers", "解答PDF")):
             with page.expect_download(timeout=45000) as download_info:
-                page.get_by_role("button", name=label, exact=True).click()
+                with page.expect_response(
+                    lambda response: "/studio-api/workbooks/" in response.url
+                    and response.url.endswith("/pdf?variant=" + variant),
+                    timeout=45000,
+                ) as response_info:
+                    page.get_by_role("button", name=label, exact=True).click()
+                response = response_info.value
+                (output / (variant + "-response.json")).write_text(
+                    json.dumps(
+                        {
+                            "variant": variant,
+                            "status": response.status,
+                            "contentType": response.headers.get("content-type"),
+                            "cacheControl": response.headers.get("cache-control"),
+                        }
+                    )
+                    + "\n"
+                )
+                if response.status != 200:
+                    capture(page, output / (variant + "-failure.png"))
+                assert response.status == 200, f"{variant} PDF returned {response.status}"
             download = download_info.value
             target = output / (variant + ".pdf")
             download.save_as(target)

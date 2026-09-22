@@ -196,6 +196,67 @@ jobs:
       - name: Verify Worker deployment package without uploading
         run: pnpm studio:deploy:check
 
+      - name: Prepare Miniflare browser outside the PDF request deadline
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/studio-worker
+          timeout --kill-after=10s 240s node --input-type=module <<'NODE' 2>&1 | tee output/studio-worker/browser-preflight.log
+          import assert from 'node:assert/strict';
+          import { createRequire } from 'node:module';
+          import path from 'node:path';
+
+          const rootRequire = createRequire(path.resolve('package.json'));
+          const wranglerRequire = createRequire(rootRequire.resolve('wrangler/package.json'));
+          const { Miniflare, convertV4MiniflareOptions } = wranglerRequire('miniflare');
+          const { build } = wranglerRequire('esbuild');
+          const bundle = await build({
+            stdin: {
+              contents: `
+                import puppeteer from '@cloudflare/puppeteer';
+                export default {
+                  async fetch(request, env) {
+                    if (request.method !== 'POST') return new Response(null, { status: 405 });
+                    const browser = await puppeteer.launch(env.BROWSER, { keep_alive: 10000 });
+                    try { return new Response(await browser.version()); }
+                    finally { await browser.close(); }
+                  }
+                };
+              `,
+              resolveDir: path.resolve('apps/studio'),
+              sourcefile: 'browser-preflight.mjs',
+            },
+            bundle: true,
+            write: false,
+            format: 'esm',
+            platform: 'browser',
+            target: 'es2022',
+            external: ['node:*'],
+            conditions: ['workerd', 'worker', 'browser'],
+          });
+          const runtime = new Miniflare(convertV4MiniflareOptions({
+            host: '127.0.0.1',
+            cf: false,
+            name: 'studio-browser-preflight',
+            modules: true,
+            script: bundle.outputFiles[0].text,
+            compatibilityDate: '2026-07-14',
+            compatibilityFlags: ['nodejs_compat'],
+            browserRendering: { binding: 'BROWSER' },
+          }));
+          try {
+            console.log('Preparing the local Browser Run binding');
+            const response = await runtime.dispatchFetch('http://browser-preflight/', { method: 'POST' });
+            const version = await response.text();
+            assert.equal(response.status, 200, version);
+            assert.match(version, /^Chrome\//);
+            console.log(`Local browser ready: ${version}`);
+          } finally {
+            await runtime.dispose();
+          }
+          NODE
+
       - name: Exercise the built local Worker
         shell: bash
         run: |
@@ -203,15 +264,25 @@ jobs:
           pnpm exec wrangler d1 migrations apply STUDIO_DB --config apps/studio/wrangler.jsonc --local
           pnpm exec wrangler r2 object put exercisebook-studio-artifacts/fonts/c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f.ttf \
             --file apps/studio/assets/fonts/noto-sans-jp/NotoSansJP-wght.ttf --content-type font/ttf --local --config apps/studio/wrangler.jsonc
-          pnpm studio:worker > /tmp/exercisebook-studio-worker.log 2>&1 &
+          mkdir -p output/studio-worker
+          studio_worker_log=output/studio-worker/worker.log
+          pnpm studio:worker > "$studio_worker_log" 2>&1 &
           studio_worker_pid=$!
-          trap 'kill "$studio_worker_pid" 2>/dev/null || true' EXIT
+          cleanup_studio_worker() {
+            result=$?
+            trap - EXIT
+            if [ "$result" -ne 0 ]; then
+              cat "$studio_worker_log"
+            fi
+            kill "$studio_worker_pid" 2>/dev/null || true
+            exit "$result"
+          }
+          trap cleanup_studio_worker EXIT
           for attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:4180/api/health > /dev/null; then
               break
             fi
             if [ "$attempt" -eq 60 ]; then
-              cat /tmp/exercisebook-studio-worker.log
               exit 1
             fi
             sleep 1
