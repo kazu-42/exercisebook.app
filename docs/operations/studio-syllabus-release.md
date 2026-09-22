@@ -60,6 +60,12 @@ The first download is not part of the application's thirty-second render
 budget; prepare the local browser before accepting a smoke result. A timeout
 must remain a visible failed PDF request while the Web worksheet stays usable.
 
+The local PDF subprocess deliberately inherits no package-registry or CI
+credentials, including uv's custom cache setting. CI installs its pinned
+Playwright dependency with `env -u UV_CACHE_DIR` so the offline subprocess can
+read the same default cache. Installing only into setup-uv's temporary cache
+does not prepare the offline renderer.
+
 Run the local journey with the built Worker, then deploy the same checked bytes:
 
 ```sh

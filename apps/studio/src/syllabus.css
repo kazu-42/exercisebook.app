@@ -12,7 +12,7 @@
 .syllabus-eyebrow {
   display: block;
   margin-bottom: 14px;
-  color: #65745e;
+  color: #52644b;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -118,7 +118,7 @@
 }
 
 .syllabus-choice-index {
-  color: #65775c;
+  color: #52644b;
   font-family: Georgia, serif;
   font-size: 12px;
   display: block;
@@ -368,7 +368,7 @@
 .syllabus-session-number {
   display: block;
   padding-top: 2px;
-  color: #778369;
+  color: #52644b;
   text-align: center;
   font-family: Georgia, serif;
   font-size: 26px;

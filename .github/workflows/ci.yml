@@ -184,8 +184,8 @@ jobs:
 
       - name: Install pinned Chromium and system dependencies
         run:
-          uv run --no-project --with playwright==1.63.0 playwright install --with-deps
-          chromium
+          env -u UV_CACHE_DIR uv run --no-project --with playwright==1.63.0 playwright
+          install --with-deps chromium
 
       - name: Build and verify eighteen workbooks and thirty-six PDFs
         run: pnpm studio:release
