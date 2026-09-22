@@ -125,6 +125,21 @@ function firstEntry(): ReleasedWorkbook {
 }
 
 describe("release integrity", () => {
+  it.each(["/", "/new"])(
+    "prevents edge HTML injection on the public shell at %s",
+    async (pathname) => {
+      const response = await createStudioWorker(catalog).fetch(
+        new Request(ORIGIN + pathname),
+        bindings(),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe(
+        "private, no-store, no-transform",
+      );
+      expect(await response.text()).toBe('<html lang="ja"><body>学習</body></html>');
+    },
+  );
+
   it("validates all 18 finite selections and their canonical semantic identities", async () => {
     const checked = await validateReleaseCatalog(catalog);
     expect(checked).toEqual(catalog);

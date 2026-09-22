@@ -380,6 +380,12 @@ export async function runStudioSynthetic(
   const page = await get(`${origins.primary}/new`, "primary page");
   secure(page, "primary page");
   check(
+    (page.headers.get("cache-control") ?? "")
+      .split(",")
+      .some((value) => value.trim() === "no-transform"),
+    "primary page: missing no-transform",
+  );
+  check(
     page.headers.get("content-type")?.split(";", 1)[0] === "text/html",
     "primary page: expected HTML",
   );

@@ -1,5 +1,8 @@
 # Japanese syllabus and generated-workbook release
 
+The verified primary deployment and exact rollback identity are recorded in
+[the 2026-09-22 production record](studio-production-2026-09-22.md).
+
 This is the hosted evaluation authorized by the owner on 2026-09-22.
 [ADR-0005](../decisions/0005-syllabus-and-generated-workbooks.md) defines the
 new boundaries. The initial fixed build was deployed and passed a real browser

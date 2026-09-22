@@ -14,6 +14,11 @@ const headers = {
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 };
+const htmlHeaders = {
+  ...headers,
+  "cache-control": "private, no-store, no-transform",
+  "content-type": "text/html",
+};
 
 function plan() {
   return {
@@ -86,7 +91,7 @@ function contractFetch(
     } else if (url.pathname === "/new") {
       response = new Response(
         '<!doctype html><html lang="ja"><head><link rel="stylesheet" href="/assets/index-12345678.css"></head><body><div id="root"></div><script type="module" src="/assets/index-12345678.js"></script></body></html>',
-        { headers: { ...headers, "content-type": "text/html" } },
+        { headers: htmlHeaders },
       );
     } else if (url.pathname.startsWith("/assets/")) {
       response = new Response(
@@ -199,6 +204,7 @@ describe("studio production synthetic", () => {
     "redirect-query",
     "cookie",
     "csp",
+    "transform",
     "capabilities",
     "html-fallback",
     "oversized-body",
@@ -218,6 +224,8 @@ describe("studio production synthetic", () => {
             "content-security-policy",
             "default-src 'none'; script-src 'self' 'unsafe-inline'",
           );
+        if (failure === "transform" && url.pathname === "/new")
+          response.headers.set("cache-control", "private, no-store");
         if (failure === "capabilities" && url.pathname === "/api/health")
           return Response.json(
             { ...(await response.json()), capabilities: ["syllabus-planning-v1"] },
@@ -248,7 +256,7 @@ describe("studio production synthetic", () => {
         url.pathname === "/new"
           ? new Response(
               '<html lang="ja"><div id="root"></div><script src="https://third-party.example/private.js"></script></html>',
-              { headers: { ...headers, "content-type": "text/html" } },
+              { headers: htmlHeaders },
             )
           : response,
     });

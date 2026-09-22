@@ -289,9 +289,11 @@ async function asset(
       "Content-Type": contentType,
       "Content-Length": String(bytes.byteLength),
       "Cache-Control":
-        contentType === "text/html" || contentType === "application/pdf"
-          ? "private, no-store"
-          : "public, max-age=31536000, immutable",
+        contentType === "text/html"
+          ? "private, no-store, no-transform"
+          : contentType === "application/pdf"
+            ? "private, no-store"
+            : "public, max-age=31536000, immutable",
     },
   });
 }

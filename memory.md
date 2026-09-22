@@ -1,5 +1,29 @@
 # Project decision log
 
+## 2026-09-22 - Forbid edge transformations of the Japanese HTML shell
+
+The primary Cloudflare zone injected a Web Analytics script into browser HTML,
+although it was absent from the release and curl responses. CSP blocked its
+execution. HTML now uses `Cache-Control: private, no-store, no-transform` to
+opt out of intermediary injection while preserving JS/CSS compression. The
+readonly synthetic requires this header. Verify real-browser HTML bytes and
+absence of beacon attempts after deployment; a curl-only check missed this.
+No zone-wide RUM setting or OAuth permission was changed.
+
+## 2026-09-22 - Promote the Japanese syllabus application to the primary domain
+
+Owner-authorized production deployment now serves the Japanese syllabus and
+generated workbooks from `exercisebook.app`; `learning.new` remains the
+stateless redirect to `/new`. Primary version is
+`a6e263ab-2dc0-4314-9ec2-198be93778ed`, with prior rollback version
+`5892fa23-56f5-4e9e-a08e-0c9a925b75af`. The verified runtime is commit `bbc3c33`,
+release `studio-rc-b0f8ec5e8a42d425a34d348d46a15adcbc9d4bac50a5f3c1f29230fc20ce6db5`.
+Read the [production record](docs/operations/studio-production-2026-09-22.md)
+and [current runbook](docs/operations/studio-syllabus-release.md) before changing
+deployment or monitoring. The new readonly synthetic replaces the legacy
+English preview contract. D1/R2 contain reproducible original content, not
+learner identity, submitted answers, scores, or saved plans.
+
 ## 2026-09-22 - Cloud Browser variable-font identity differs from macOS
 
 Remote Browser Run successfully loads the exact pinned Noto font but reports
