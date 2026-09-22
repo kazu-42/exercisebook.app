@@ -247,3 +247,140 @@ variants. Existing generated worksheet, Web, and print bytes retain their
 versioned identities. A source whose projected answer-key prose exceeds the Web
 DTO bound now fails closed instead of returning an invalid object; the source
 and target text-bound reconciliation remains explicit follow-up work.
+
+## 2026-09-22 - Japanese workbook product prototype
+
+The owner confirmed a middle/high-school audience first, elementary school
+later, and daily incremental practice. Condition-matched workbooks, usable
+learning material and answers, and high-quality printable PDFs are mandatory.
+See `docs/product-direction-2026-09.md`.
+
+`apps/studio` is an isolated, local-only prototype based on production main
+`3de333b41c739bab52738e9bc06ff6ba9426916f`. It is not part of the deployed
+Worker surface and does not widen the fraction-only production contracts.
+It provides three original Japanese draft themes, two difficulty levels, and
+4/6/8-question selections; forty-eight arithmetic-checked problems form eighteen
+fixed workbooks. Creation, numeric grading, step-by-step feedback, and real A4
+problem/answer PDF downloads work. There is no account, persistence, learning
+history, or adaptive/mastery claim. Content still needs educational review.
+
+The browser receives no practice answer model before an explicit grading or
+answer request. Set identities bind fixed content; PDFs render that same set.
+The local renderer uses offline Playwright 1.63.0 through uv with bounded
+process input/output, time, and concurrency. Local Japanese fonts are embedded,
+but cross-host layout identity is not yet a production guarantee.
+
+Verification: `pnpm check` passed (38 test files / 577 tests), including existing
+release-bundle isolation and sample replay. The real browser journey passed at
+1440, 390, and 320 pixels, including keyboard operation, numeric input,
+grading, explanations, two PDF downloads, page-local resume, empty cookies/
+storage, and no third-party requests or JavaScript errors. Automated axe checks
+reported no creation-page violations after contrast improvements. Six 8-item
+PDFs across all three themes and both variants were verified as two A4 pages,
+with matching prompt order, embedded Japanese fonts, complete explanations,
+and inspected page images. A delayed PDF failure cannot corrupt a newly
+created workbook's UI state; this has a regression test and independent review.
+
+Run `pnpm studio:dev`, or `pnpm studio:build && pnpm studio:preview`, at
+http://127.0.0.1:4178. See `apps/studio/README.md` for explicit browser setup,
+verification, limits, and the next production-contract decisions. Do not expose
+this Vite prototype server publicly.
+
+## 2026-09-22 - Japanese studio release candidate and mathematical precision
+
+The owner accepted the UI and requested deployment quality with precise logical
+relations in worked solutions. Do not join transformations with an unqualified
+arrow or call the example generic "thinking hints". Explanation steps now
+distinguish equal-valued expressions, equivalent equations over the real
+numbers, substitution under an explicit value, and verification of a candidate.
+Equation operations state their reversible operation and nonzero divisor.
+Independent tests parse displayed arithmetic/equations; they do not merely call
+the same answer function used by the application.
+
+The local-only prototype above is now accompanied by a separate deployable
+Cloudflare Worker candidate. ADR-0004 records its scope: 18 fixed unsaved
+workbooks and 36 prebuilt PDFs. It does not claim durable assignments, learner
+history, adaptive mastery, or compatibility with the fraction-specific V1 AST.
+The source is constrained Markdown/YAML, compiled to a versioned lesson AST;
+original Japanese material retains an explicit review-only license pending a
+public-content decision. The existing English release approval does not apply.
+
+The candidate stores full frozen content privately in .release/catalog.json and
+only hashed HTML/JS/CSS/PDF artifacts in .release/public. Worker routes and
+release hashes are validated; raw catalog/source/artifact routes are closed.
+An explicit answer action delivers a public-study answer variant. No identity,
+answers, cookies, or learning evidence are stored. PDF problems and explanations
+share the same exact instance and typed print projection. Original source,
+grading implementation, policy, content, and explanations participate in
+identity. A stale tab cannot be rebound to newly interpreted questions.
+
+Rendering is a build-time adapter, with pinned Playwright 1.63.0 and a bundled
+OFL Noto Sans JP revision, hash, license, and provenance. It rejects missing or
+changed fonts, network access, OS-font fallback, and overflowing pages. All 36
+PDFs must pass semantic text/order, page count, embedded-font, variant, and
+byte-integrity verification before the active local release is replaced. A
+source/artifact checker runs before Wrangler to reject mixing a stale release
+with newly edited code. Exact candidate bytes are archived under output.
+
+The production English Worker and learning.new routing are unchanged. Use
+studio:release, studio:deploy:check (dry run), and studio:worker (127.0.0.1:4180).
+The new CI job builds and verifies this same path on Linux. Public activation
+still requires the precise Japanese content/license release decision described
+in the runbook; automated arithmetic checks are not a claim of human
+educational review.
+
+The readiness audit also found four pre-existing dependency advisories.
+Hono is now pinned to 4.13.5; a narrowly scoped miniflare>sharp 0.35.4 override
+removes the vulnerable image dependency while retaining the Cloudflare and
+TypeScript 7 toolchain. Remove that override when every Miniflare dependency
+path supplies a fixed sharp version. The refreshed audit reports no
+vulnerabilities, and the existing English Worker build and tests still pass.
+
+Verified candidate: studio-rc-64992f16e599460012f09af8aa15690a0e0175769dcb8aa1866525c3bf12bab4.
+The repository aggregate passed 43 files / 671 tests, typecheck, format, content
+and schema checks, builds, import boundaries, and the reviewed sample gate.
+After the final print-layout changes, the 20 relevant renderer/materialization
+tests and final type/format checks passed. All 36 final PDFs / 60 pages passed
+the release verifier; 12 representative pages and desktop/mobile screenshots
+were inspected. Final Wrangler dry-run and the local Worker journey at port
+4180 passed for this same release, including PDF/grade/create 503 recovery,
+1440/390/320 widths, keyboard input, two actual PDF downloads, no browser
+exceptions or third-party requests, empty cookies/browser storage, and zero
+creation-page axe violations. CI is configured but was not run remotely.
+
+The first actual Worker boot exposed an unsupported compatibility date that
+dry-run did not detect. The candidate now uses the established 2026-07-14 date.
+The release-source check demonstrably rejected the stale prior package after
+that config edit. Rebuilding and re-running the real Worker resolved it.
+# 2026-09-22: Hosted syllabus and dynamic workbooks
+
+The owner explicitly authorized deployment, superseding the Japanese draft's
+pending hosting decision. Initial fixed preview is live at
+https://exercisebook-studio-preview.ghive42.workers.dev with Cloudflare version
+c766a968-110d-4417-a822-9cf8a5be1c67 and release studio-rc-64992f16e599460012f09af8aa15690a0e0175769dcb8aa1866525c3bf12bab4.
+Hosted browser creation/grading/PDF and 320/390 px recovery checks passed.
+
+ADR-0005 adds an unsaved, deterministic syllabus (three goals, six skills,
+81 bounded conditions) and seeded workbook creation. The exact question/key
+snapshot commits to D1 before presentation, with hashed idempotency keys.
+Learner answers, scores, identities, and syllabus data are not persisted.
+Generated PDF creation is POST-only; a bounded Browser Run adapter projects the
+same snapshot, uses the verified Noto font, and writes immutable R2 bytes.
+D1 claim tokens and exact lease expiry fence stale workers. Dynamic failures
+never fall back to the eighteen static sample books.
+
+Resources created: exercisebook-studio D1 (4c33da0e-e0cf-4439-96f1-e0041203737c),
+private exercisebook-studio-artifacts R2, migration0001 applied remote/local,
+pinned font uploaded remote/local. Three standard-level Markdown lessons
+prevent multiplication/negative substitution practice from showing an unrelated
+foundation example. Original fixture vectors remain unchanged.
+
+The shared JSON reader keeps its existing 512-value default; only syllabus
+responses opt into4096, still bounded to64KiB. Actual largest plan is about34KiB.
+The generator source revision must accept the real git40hex+source64hex format.
+Reject bad method/origin/query/body and rate-limit before looking up a generated
+ID in D1. These two integration bugs have regression tests.
+
+Current entrypoint for deployment procedure:
+docs/operations/studio-syllabus-release.md. Final hosted dynamic release evidence
+must be recorded after executing the complete release journey.

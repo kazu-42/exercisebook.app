@@ -13,6 +13,7 @@ export const MAX_BOUNDED_JSON_RESPONSE_READS = 1_024;
 
 export type BoundedStrictJsonResponseOptions = Readonly<{
   maximumBytes: number;
+  maximumValues?: number;
   signal: AbortSignal;
 }>;
 
@@ -59,7 +60,7 @@ export async function readBoundedStrictJsonResponse(
   const bytes = await readBoundedBytes(response.body, maximumBytes, signal);
   throwIfAborted(signal);
   const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  return parseStrictJson(source);
+  return parseStrictJson(source, options);
 }
 
 function readMediaType(contentType: string | null): string | undefined {

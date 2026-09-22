@@ -3,6 +3,7 @@ import path from "node:path";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const protectedRoots = [
+  "apps/studio/domain",
   "packages/content-compiler/src",
   "packages/domain/src",
   "packages/generators/src",
@@ -19,13 +20,17 @@ const forbiddenImports = [
   "react-dom",
   "wrangler",
 ];
-const clientRoots = ["apps/web/src"];
+const clientRoots = ["apps/web/src", "apps/studio/src"];
 const forbiddenClientImports = ["@exercisebook/schemas/trusted-student-projection"];
 const forbiddenClientImportFragments = [
   "/worker/",
   "authorized-publication",
   "launch-release-manifest",
   "release-content",
+  "/server/",
+  "/.release/",
+  "/domain/generator",
+  "/domain/math-model",
 ];
 
 async function collectSourceFiles(directory) {
@@ -84,6 +89,7 @@ for (const relativeRoot of clientRoots) {
 
   for (const file of files) {
     const relativeFile = path.relative(repositoryRoot, file);
+    if (/\.(?:test|spec)\.tsx?$/.test(relativeFile)) continue;
     if (
       relativeFile.startsWith(
         `apps${path.sep}web${path.sep}src${path.sep}worker${path.sep}`,

@@ -1,6 +1,8 @@
 const MAX_JSON_NESTING = 64;
 const MAX_JSON_VALUES = 512;
 
+export type StrictJsonOptions = Readonly<{ maximumValues?: number }>;
+
 export class StrictJsonParseError extends SyntaxError {
   override readonly name = "StrictJsonParseError";
 }
@@ -11,17 +13,30 @@ export class StrictJsonParseError extends SyntaxError {
  * parsers may keep the first one instead. This bounded parser decodes property
  * names before duplicate comparison, so `schema` and `\u0073chema` conflict.
  */
-export function parseStrictJson(source: string): unknown {
-  return new StrictJsonParser(source).parse();
+export function parseStrictJson(
+  source: string,
+  options: StrictJsonOptions = {},
+): unknown {
+  const maximumValues = options.maximumValues ?? MAX_JSON_VALUES;
+  if (
+    !Number.isSafeInteger(maximumValues) ||
+    maximumValues < 1 ||
+    maximumValues > 4096
+  ) {
+    throw new RangeError("maximumValues must be an integer between 1 and 4096.");
+  }
+  return new StrictJsonParser(source, maximumValues).parse();
 }
 
 class StrictJsonParser {
   private readonly source: string;
+  private readonly maximumValues: number;
   private index = 0;
   private values = 0;
 
-  constructor(source: string) {
+  constructor(source: string, maximumValues: number) {
     this.source = source;
+    this.maximumValues = maximumValues;
   }
 
   parse(): unknown {
@@ -42,8 +57,8 @@ class StrictJsonParser {
       this.fail(`JSON nesting limit of ${MAX_JSON_NESTING} exceeded`);
     }
     this.values += 1;
-    if (this.values > MAX_JSON_VALUES) {
-      this.fail(`JSON value limit of ${MAX_JSON_VALUES} exceeded`);
+    if (this.values > this.maximumValues) {
+      this.fail(`JSON value limit of ${this.maximumValues} exceeded`);
     }
 
     const character = this.source[this.index];
