@@ -11,22 +11,24 @@ workbook generator under the hosted-evaluation decision in ADR-0005.
 | Primary origin | `https://exercisebook.app` |
 | Action origin | `https://learning.new` redirects to `https://exercisebook.app/new` |
 | Primary Worker | `exercisebook-app` |
-| Primary version | `a6e263ab-2dc0-4314-9ec2-198be93778ed` |
+| Primary version | `95e80df1-4680-42b6-9e92-3e4e52d7d4a6` |
 | Prior primary version | `5892fa23-56f5-4e9e-a08e-0c9a925b75af` |
-| Verified preview version | `af2a29f7-74cd-4447-a75f-e2e98b5a12b9` |
-| Release | `studio-rc-b0f8ec5e8a42d425a34d348d46a15adcbc9d4bac50a5f3c1f29230fc20ce6db5` |
-| Runtime source commit | `bbc3c3333dc9cd1e89761d0e447b4823e8b86850` |
-| Source inventory SHA-256 | `d9eebb1a05649701af977110a7e42bac639f3ccc1c23fa59c49092905f6405ca` |
+| Verified preview version | `ad91f915-b453-4d57-8cd8-4813637fd4c9` |
+| Release | `studio-rc-2585a4a4b1f925028944ab5687bdd24a00271d089f89da0c91a54c82c9540938` |
+| Runtime source commit | `3aa933dae5aad771f3818652d5fb38ac8a58ffbb` |
+| Source inventory SHA-256 | `65f18bd1080990080828a14c294d214b3f20b5fd3c06020f1899cf8af7405b73` |
 
-The primary deployment completed before 2026-09-22 10:55:56 UTC. It uses the
-same checked artifact package as the preview. Later documentation commits do
+The initial primary promotion completed before 2026-09-22 10:55:56 UTC as
+`a6e263ab-2dc0-4314-9ec2-198be93778ed`. The final HTML-protection update completed
+before 11:07:13 UTC. It uses the same checked artifact package as the preview.
+Later documentation commits do
 not change the recorded runtime source or regenerate released artifacts.
 The exact package is archived in `output/studio-releases/<releaseId>/`.
 
 ## Verification
 
-[CI run 35717888225](https://github.com/kazu-42/exercisebook.app/actions/runs/35717888225)
-passed all three jobs: 53 files / 821 tests, TypeScript 7, formatting, compiled
+[CI run 35719321632](https://github.com/kazu-42/exercisebook.app/actions/runs/35719321632)
+passed all three jobs: 53 files / 824 tests, TypeScript 7, formatting, compiled
 content, dependency boundaries, builds, dependency audit and eight ZIP patch
 regressions, preserved V1 artifacts, eighteen studio samples / thirty-six PDFs,
 and the local Worker browser journey. The generated-PDF gate independently
@@ -68,14 +70,21 @@ compression unchanged, and the synthetic requires this protection. Cloudflare
 documents [automatic-injection exclusion](https://developers.cloudflare.com/web-analytics/get-started/#sites-proxied-through-cloudflare)
 and [the general no-transform directive](https://developers.cloudflare.com/cache/concepts/cache-control/#other).
 The zone's RUM configuration was not changed; the current Wrangler OAuth lacks
-Account Settings Write. The deployment must be verified with a real browser,
-because curl responses did not reproduce the injection.
+Account Settings Write. The final real-browser check verified 529 HTML bytes and
+SHA-256 `333e153d625536aa00b74bb0d44e21d8cc747cba5899776ec233b2f32cb6c332`,
+exactly matching the release. There was no beacon in the raw HTML or live DOM,
+no external request attempt, and no browser console error. Both the full
+syllabus journey and workbook/PDF/recovery journey then passed on the final
+primary release. Keep real-browser verification: curl did not reproduce the
+original injection.
 
 The scheduled workflow now runs `scripts/smoke-studio-synthetic.ts`. It checks
 the action redirect, primary assets, health, catalog, and a bounded unsaved plan.
-It does not create durable workbooks or spend Browser Run time. During the
-contract transition, `LEARNING_NEW_PRODUCTION_ENABLED` is disabled; restore it
-after the new workflow is merged, then dispatch and verify the production run.
+It does not create durable workbooks or spend Browser Run time. For a contract
+transition, temporarily disable `LEARNING_NEW_PRODUCTION_ENABLED`, restore it
+after the matching workflow is merged, then dispatch and verify the production
+run. The updated checker passed directly against both production domains after
+the final deployment.
 
 Rollback restores the complete prior primary version with
 `pnpm exec wrangler rollback 5892fa23-56f5-4e9e-a08e-0c9a925b75af --config apps/studio/wrangler.production.jsonc`.

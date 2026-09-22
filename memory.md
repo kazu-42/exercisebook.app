@@ -8,6 +8,8 @@ execution. HTML now uses `Cache-Control: private, no-store, no-transform` to
 opt out of intermediary injection while preserving JS/CSS compression. The
 readonly synthetic requires this header. Verify real-browser HTML bytes and
 absence of beacon attempts after deployment; a curl-only check missed this.
+Final production browser verification found the exact 529-byte released HTML,
+matching SHA-256, no injected beacon, no external attempts, and no console errors.
 No zone-wide RUM setting or OAuth permission was changed.
 
 ## 2026-09-22 - Promote the Japanese syllabus application to the primary domain
@@ -15,9 +17,9 @@ No zone-wide RUM setting or OAuth permission was changed.
 Owner-authorized production deployment now serves the Japanese syllabus and
 generated workbooks from `exercisebook.app`; `learning.new` remains the
 stateless redirect to `/new`. Primary version is
-`a6e263ab-2dc0-4314-9ec2-198be93778ed`, with prior rollback version
-`5892fa23-56f5-4e9e-a08e-0c9a925b75af`. The verified runtime is commit `bbc3c33`,
-release `studio-rc-b0f8ec5e8a42d425a34d348d46a15adcbc9d4bac50a5f3c1f29230fc20ce6db5`.
+`95e80df1-4680-42b6-9e92-3e4e52d7d4a6`, with prior rollback version
+`5892fa23-56f5-4e9e-a08e-0c9a925b75af`. The verified runtime is commit `3aa933d`,
+release `studio-rc-2585a4a4b1f925028944ab5687bdd24a00271d089f89da0c91a54c82c9540938`.
 Read the [production record](docs/operations/studio-production-2026-09-22.md)
 and [current runbook](docs/operations/studio-syllabus-release.md) before changing
 deployment or monitoring. The new readonly synthetic replaces the legacy
