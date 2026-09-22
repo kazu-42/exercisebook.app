@@ -5,3 +5,5 @@ content/compiled/*.json
 **/coverage
 **/dist
 artifacts
+apps/studio/.release/
+apps/studio/.release-build-*/

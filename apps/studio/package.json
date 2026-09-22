@@ -1,0 +1,29 @@
+{
+  "name": "@exercisebook/studio",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --dir ../.. studio:worker",
+    "build": "vite build",
+    "preview": "pnpm --dir ../.. studio:worker"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "1.4.0",
+    "@exercisebook/domain": "workspace:*",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/jest-axe": "3.5.9",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "jest-axe": "10.0.0",
+    "jsdom": "30.0.1"
+  }
+}

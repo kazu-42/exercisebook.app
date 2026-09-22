@@ -1,0 +1,212 @@
+[
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "signed-numbers",
+      "number": "01",
+      "title": "正負の数",
+      "subtitle": "数の世界を、少し広げる。",
+      "description": "正の数と負の数の計算を、一つずつ確かめます。",
+      "prerequisite": "整数の四則計算",
+      "sample": "(−6) + (+11)"
+    },
+    "lesson": {
+      "title": "符号を確かめてから、計算しよう。",
+      "rule": "ひき算は、ひく数の符号を変えてたし算に直します。0 でない数どうしのかけ算・わり算では、同じ符号なら正、異なる符号なら負になります。0 は正の数でも負の数でもなく、0 でわることはできません。"
+    },
+    "exampleModel": {
+      "kind": "arithmetic",
+      "operation": "add",
+      "left": -15,
+      "right": 8
+    },
+    "provenance": {
+      "sourcePath": "content/studio/signed-numbers.md",
+      "sourceRevision": 1,
+      "sourceHash": "b265376a06bd47a1a205c6fe5e2cc47f76a3b4a90c7824aad9ae6a794c3b6aca",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  },
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "expressions",
+      "number": "02",
+      "title": "文字と式",
+      "subtitle": "文字を、わかる数に置きかえる。",
+      "description": "文字に値を代入し、式の値を求める練習です。",
+      "prerequisite": "正負の数の計算",
+      "sample": "x = 3 のとき、2x + 5"
+    },
+    "lesson": {
+      "title": "文字に数を入れて、計算しよう。",
+      "rule": "2x は 2 × x の意味です。与えられた x の値を代入してから、かけ算を先に計算します。負の数を代入するときは、かっこで囲みます。計算の途中の式は、同じ値をもつので = で結べます。"
+    },
+    "exampleModel": {
+      "kind": "expression",
+      "coefficient": 2,
+      "value": 9,
+      "constant": 5
+    },
+    "provenance": {
+      "sourcePath": "content/studio/expressions.md",
+      "sourceRevision": 1,
+      "sourceHash": "4e7c7c614f393bb4163986d038b9d7744b075ec6e41862e4edc4a9f498e03c2f",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  },
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "equations",
+      "number": "03",
+      "title": "一次方程式",
+      "subtitle": "解を変えずに、式を整える。",
+      "description": "等式の性質を使い、解を変えない変形で x の値を求めます。",
+      "prerequisite": "文字式の計算",
+      "sample": "2x + 3 = 11"
+    },
+    "lesson": {
+      "title": "解を変えない変形で、x を求めよう。",
+      "rule": "ここでは x を実数の範囲で考えます。両辺に同じ数をたす・ひく、両辺を同じ 0 でない数でわる操作は、逆の操作で戻せます。そのため変形の前後で解の集合は同じです。これを同値な変形といいます。"
+    },
+    "exampleModel": {
+      "kind": "equation",
+      "coefficient": 4,
+      "constant": 1,
+      "right": 37
+    },
+    "provenance": {
+      "sourcePath": "content/studio/equations.md",
+      "sourceRevision": 1,
+      "sourceHash": "c83535b11e11e102b4e395599d55c79faf711bdc832ed51a48321e8874707742",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  },
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "signed-numbers",
+      "number": "01",
+      "title": "正負の数",
+      "subtitle": "数の世界を、少し広げる。",
+      "description": "正の数と負の数の計算を、一つずつ確かめます。",
+      "prerequisite": "整数の四則計算",
+      "sample": "(−7) × (−6)"
+    },
+    "lesson": {
+      "title": "絶対値を計算し、符号を確かめよう。",
+      "rule": "0 でない数どうしのかけ算・わり算では、絶対値どうしを計算し、同じ符号なら正、異なる符号なら負の符号をつけます。どちらかが 0 のかけ算と、0 を 0 でない数でわる計算の答えは 0 です。0 でわることはできません。"
+    },
+    "exampleModel": {
+      "kind": "arithmetic",
+      "operation": "multiply",
+      "left": -7,
+      "right": -6
+    },
+    "provenance": {
+      "sourcePath": "content/studio/signed-numbers-standard.md",
+      "sourceRevision": 1,
+      "sourceHash": "3df16d7b7513cdf45dfc48de270a0fd29297c95039684bf2c780e5fb4092549b",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  },
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "expressions",
+      "number": "02",
+      "title": "文字と式",
+      "subtitle": "文字を、わかる数に置きかえる。",
+      "description": "文字に値を代入し、式の値を求める練習です。",
+      "prerequisite": "正負の数の計算",
+      "sample": "x = −4 のとき、−3x + 5"
+    },
+    "lesson": {
+      "title": "負の数はかっこに入れて代入しよう。",
+      "rule": "文字に負の数を代入するときは、かっこで囲みます。係数と代入した数のかけ算を先に計算し、符号を確かめます。代入してできる等式は、指定された文字の値で成り立つ等式です。その後の計算も同じ値の式を = で結びます。"
+    },
+    "exampleModel": {
+      "kind": "expression",
+      "coefficient": -3,
+      "value": -4,
+      "constant": 5
+    },
+    "provenance": {
+      "sourcePath": "content/studio/expressions-standard.md",
+      "sourceRevision": 1,
+      "sourceHash": "d4e79df603a1e4173b7ea516a032e8bd9fa5824328fdce0cfabe7e6b1de6a124",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  },
+  {
+    "schema": "exercisebook.studio-lesson/v1",
+    "compilerVersion": "studio-lesson-compiler@1",
+    "revision": 1,
+    "locale": "ja",
+    "topic": {
+      "id": "equations",
+      "number": "03",
+      "title": "一次方程式",
+      "subtitle": "解を変えずに、式を整える。",
+      "description": "等式の性質を使い、解を変えない変形で x の値を求めます。",
+      "prerequisite": "文字式の計算",
+      "sample": "−4x + 3 = 23"
+    },
+    "lesson": {
+      "title": "負の係数でも、解を変えずに変形しよう。",
+      "rule": "x は実数の範囲で考えます。両辺に同じ数をたす・ひく操作と、両辺を同じ 0 でない数でわる操作は逆の操作で戻せるため、解の集合は変わりません。負の数でわる場合も同値な変形です。最後に得られた値を元の方程式に代入して確かめます。"
+    },
+    "exampleModel": {
+      "kind": "equation",
+      "coefficient": -4,
+      "constant": 3,
+      "right": 23
+    },
+    "provenance": {
+      "sourcePath": "content/studio/equations-standard.md",
+      "sourceRevision": 1,
+      "sourceHash": "de73264912ca83064c5e710d7096f4d620a394c1bda37709b84cac10cd9bf007",
+      "origin": "original",
+      "authors": ["Exercise Book contributors (AI-assisted draft)"],
+      "attribution": "Exercise Book original review draft; all rights reserved pending owner licensing decision.",
+      "licenseId": "LicenseRef-ExerciseBook-Review-Only",
+      "status": "draft"
+    }
+  }
+]

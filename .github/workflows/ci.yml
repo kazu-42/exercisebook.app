@@ -44,7 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit dependencies
-        run: pnpm audit
+        run: pnpm audit:dependencies
 
       - name: Verify exact TypeScript baseline
         shell: bash
@@ -146,4 +146,161 @@ jobs:
         with:
           name: learning-new-v1-browser-smoke
           path: output/browser-smoke/
+          if-no-files-found: ignore
+
+  studio-release:
+    name: Japanese studio release candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.8.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Japanese lesson sources
+        run: pnpm studio:content:check
+
+      - name: Install pinned Chromium and system dependencies
+        run:
+          env -u UV_CACHE_DIR uv run --no-project --with playwright==1.63.0 playwright
+          install --with-deps chromium
+
+      - name: Build and verify eighteen workbooks and thirty-six PDFs
+        run: pnpm studio:release
+
+      - name: Verify generated workbook and answer PDFs across all levels
+        run: pnpm studio:pdf:samples
+
+      - name: Verify Worker deployment package without uploading
+        run: pnpm studio:deploy:check
+
+      - name: Prepare Miniflare browser outside the PDF request deadline
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/studio-worker
+          timeout --kill-after=10s 240s node --input-type=module <<'NODE' 2>&1 | tee output/studio-worker/browser-preflight.log
+          import assert from 'node:assert/strict';
+          import { createRequire } from 'node:module';
+          import path from 'node:path';
+
+          const rootRequire = createRequire(path.resolve('package.json'));
+          const wranglerRequire = createRequire(rootRequire.resolve('wrangler/package.json'));
+          const { Miniflare, convertV4MiniflareOptions } = wranglerRequire('miniflare');
+          const { build } = wranglerRequire('esbuild');
+          const bundle = await build({
+            stdin: {
+              contents: `
+                import puppeteer from '@cloudflare/puppeteer';
+                export default {
+                  async fetch(request, env) {
+                    if (request.method !== 'POST') return new Response(null, { status: 405 });
+                    const browser = await puppeteer.launch(env.BROWSER, { keep_alive: 10000 });
+                    try { return new Response(await browser.version()); }
+                    finally { await browser.close(); }
+                  }
+                };
+              `,
+              resolveDir: path.resolve('apps/studio'),
+              sourcefile: 'browser-preflight.mjs',
+            },
+            bundle: true,
+            write: false,
+            format: 'esm',
+            platform: 'browser',
+            target: 'es2022',
+            external: ['node:*'],
+            conditions: ['workerd', 'worker', 'browser'],
+          });
+          const runtime = new Miniflare(convertV4MiniflareOptions({
+            host: '127.0.0.1',
+            cf: false,
+            name: 'studio-browser-preflight',
+            modules: true,
+            script: bundle.outputFiles[0].text,
+            compatibilityDate: '2026-07-14',
+            compatibilityFlags: ['nodejs_compat'],
+            browserRendering: { binding: 'BROWSER' },
+          }));
+          try {
+            console.log('Preparing the local Browser Run binding');
+            const response = await runtime.dispatchFetch('http://browser-preflight/', { method: 'POST' });
+            const version = await response.text();
+            assert.equal(response.status, 200, version);
+            assert.match(version, /^Chrome\//);
+            console.log(`Local browser ready: ${version}`);
+          } finally {
+            await runtime.dispose();
+          }
+          NODE
+
+      - name: Exercise the built local Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler d1 migrations apply STUDIO_DB --config apps/studio/wrangler.jsonc --local
+          pnpm exec wrangler r2 object put exercisebook-studio-artifacts/fonts/c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f.ttf \
+            --file apps/studio/assets/fonts/noto-sans-jp/NotoSansJP-wght.ttf --content-type font/ttf --local --config apps/studio/wrangler.jsonc
+          mkdir -p output/studio-worker
+          studio_worker_log=output/studio-worker/worker.log
+          pnpm studio:worker > "$studio_worker_log" 2>&1 &
+          studio_worker_pid=$!
+          cleanup_studio_worker() {
+            result=$?
+            trap - EXIT
+            if [ "$result" -ne 0 ]; then
+              cat "$studio_worker_log"
+            fi
+            kill "$studio_worker_pid" 2>/dev/null || true
+            exit "$result"
+          }
+          trap cleanup_studio_worker EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4180/api/health > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          uv run --no-project --with playwright==1.63.0 python apps/studio/scripts/smoke.py \
+            --base-url http://127.0.0.1:4180 \
+            --output output/studio-worker
+
+      - name: Upload candidate verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: japanese-studio-release-candidate
+          include-hidden-files: true
+          path: |
+            output/studio-release/
+            output/studio-worker/
+            output/studio-generated-pdf/
+            apps/studio/.release/build-record.json
+            apps/studio/.release/public/artifacts/*.pdf
           if-no-files-found: ignore

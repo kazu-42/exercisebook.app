@@ -1,0 +1,57 @@
+name: Studio production synthetic
+
+# Deliberately manual until the Japanese production promotion is complete.
+# Activating a schedule and incident notifications is a separate operation.
+on:
+  workflow_dispatch:
+    inputs:
+      primary:
+        description: Primary HTTPS origin
+        required: true
+        default: https://exercisebook.app
+        type: string
+      action:
+        description: Action-domain HTTPS origin
+        required: true
+        default: https://learning.new
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-production-synthetic
+  cancel-in-progress: true
+
+jobs:
+  synthetic:
+    name: Japanese application and unsaved syllabus
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRIMARY_ORIGIN: ${{ inputs.primary }}
+      ACTION_ORIGIN: ${{ inputs.action }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+      - name: Run two bounded attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if node --experimental-strip-types scripts/smoke-studio-synthetic.ts \
+              --primary "$PRIMARY_ORIGIN" \
+              --action "$ACTION_ORIGIN"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              sleep 30
+            fi
+          done
+          exit 1

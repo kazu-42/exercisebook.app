@@ -36,6 +36,26 @@ function repeatedChunkStream(
 }
 
 describe("readBoundedStrictJsonResponse", () => {
+  it("opts into a bounded larger JSON value count while retaining the default", async () => {
+    const source = JSON.stringify(Array.from({ length: 600 }, () => null));
+    const options = { maximumBytes: 4096, signal: new AbortController().signal };
+    await expect(
+      readBoundedStrictJsonResponse(jsonResponse(source), options),
+    ).rejects.toThrow("value limit of 512");
+    await expect(
+      readBoundedStrictJsonResponse(jsonResponse(source), {
+        ...options,
+        maximumValues: 601,
+      }),
+    ).resolves.toHaveLength(600);
+    await expect(
+      readBoundedStrictJsonResponse(jsonResponse(source), {
+        ...options,
+        maximumValues: 600,
+      }),
+    ).rejects.toThrow("value limit of 600");
+  });
+
   it("reads an ordinary bounded response and permits JSON parameters", async () => {
     const controller = new AbortController();
     const source = '{"schema":"v1","items":[1,true,null]}';

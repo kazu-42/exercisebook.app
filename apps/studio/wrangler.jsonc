@@ -1,0 +1,49 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "exercisebook-studio-preview",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-07-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "STUDIO_DB",
+      "database_name": "exercisebook-studio",
+      "database_id": "4c33da0e-e0cf-4439-96f1-e0041203737c",
+      "migrations_dir": "./worker/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "STUDIO_ARTIFACTS",
+      "bucket_name": "exercisebook-studio-artifacts",
+    },
+  ],
+  "browser": { "binding": "BROWSER" },
+  "assets": {
+    "directory": "./.release/public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true,
+  },
+  "ratelimits": [
+    {
+      "name": "STUDIO_RATE_LIMITER",
+      "namespace_id": "321002",
+      "simple": { "limit": 120, "period": 60 },
+    },
+    {
+      "name": "STUDIO_CREATE_LIMITER",
+      "namespace_id": "321003",
+      "simple": { "limit": 20, "period": 60 },
+    },
+    {
+      "name": "STUDIO_RENDER_LIMITER",
+      "namespace_id": "321004",
+      "simple": { "limit": 4, "period": 60 },
+    },
+  ],
+  "observability": { "enabled": true },
+}

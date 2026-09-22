@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "family": "Noto Sans JP",
+  "file": "NotoSansJP-wght.ttf",
+  "format": "TrueType variable font, weight 100–900",
+  "sourceUrl": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+  "sourceRepository": "https://github.com/google/fonts",
+  "sourceRevision": "66a36c8c94b1a5d992ee4e7f392fccfe4945767c",
+  "upstreamRepository": "https://github.com/notofonts/noto-cjk",
+  "upstreamRevision": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+  "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "bytes": 9589900,
+  "author": "Adobe; Google (Google Fonts designer metadata)",
+  "attribution": "Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'",
+  "license": "OFL-1.1",
+  "licenseFile": "OFL.txt",
+  "licenseUrl": "https://github.com/google/fonts/blob/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/OFL.txt",
+  "licenseSha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
+  "modifications": "None. Font bytes are unchanged; the local filename omits brackets. Chromium may embed document-specific subsets in generated PDFs.",
+  "retrievedAt": "2026-09-22",
+  "runtimePolicy": "Verify the pinned font and license hashes before rendering; load font bytes offline. Never fall back to installed system fonts."
+}
